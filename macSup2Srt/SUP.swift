@@ -62,7 +62,7 @@ public class SupDecoder {
         var p1 = false
         var p2 = false
         while true {
-            /// Read the PGS header (10 bytes)
+            /// Read the PGS header (13 bytes)
             let headerData = fileHandle.readData(ofLength: 13)
             //print("Header Data Read: \(headerData.count) bytes, offset \(fileHandle.offsetInFile)")
             
@@ -157,13 +157,12 @@ public class SupDecoder {
         //   1 byte: Palette ID
         //   1 byte: Palette Version
         //   Followed by a series of palette entries:
-        //     Each entry is 5 bytes: (Y, Cr, Cb, Alpha, Index)
+        //       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
         
         var palette = [UInt32](repeating: 0, count: 256)
         
         // Start reading after the first 2 bytes (Palette ID and Version)
         var i = 2
-        
         while i + 4 < data.count {
             let index = data[i]
             let y = data[i + 1]
@@ -175,12 +174,12 @@ public class SupDecoder {
             let rgb = yCrCbToRGB(y: y, cr: cr, cb: cb)
             
             // Combine the RGB and alpha into a single 32-bit value
-            let rgba =
+            let argb =
             (UInt32(alpha) << 24) | (rgb.red << 16) | (rgb.green << 8)
             | rgb.blue
             
             // Store the result in the palette using the index as the key
-            palette[Int(index)] = rgba
+            palette[Int(index)] = argb
             
             // Move to the next palette entry
             i += 5
@@ -193,14 +192,14 @@ public class SupDecoder {
     private func yCrCbToRGB(y: UInt8, cr: UInt8, cb: UInt8) -> (
         red: UInt32, green: UInt32, blue: UInt32
     ) {
-        let y = Double(y)
-        let cr = 0.0  //Double(cr) - 128.0
-        let cb = 0.0  //Double(cb) - 128.0
+        let y = Double(y) //- 16.0
+        let cr = 0.0  // Double(cr) - 128.0
+        let cb = 0.0  // Double(cb) - 128.0
         
         let yCbCr = simd_double3(y, cb, cr)
-        let r1 = simd_double3(1, 0, 1.4)
-        let r2 = simd_double3(1, -0.343, -0.711)
-        let r3 = simd_double3(1, 1.765, 0)
+        let r1 = simd_double3(1.164, 0, 1.793)
+        let r2 = simd_double3(1.164, -0.213, -0.533)
+        let r3 = simd_double3(1.164, 2.112, 0)
         let matrix = simd_double3x3(r1, r2, r3)
         let rgb = yCbCr * matrix
         
