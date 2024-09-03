@@ -13,13 +13,13 @@ struct macSup2Srt: ParsableCommand {
     @Argument(help: "File to output the completed .srt file to")
     var srt: String
     @Option(help: "Output image files of subtitles to directory (optional)")
-    var imageDirectory: String
+    var imageDirectory: String?
     @Option(wrappedValue: "en", help: "The input image language(s)")
     var language: String
-    @Option(wrappedValue: false, help: "Enable fast mode (less accurate).")
-    var fastmode: Bool
-    @Option(wrappedValue: false, help: "Enable language correction.")
-    var languageCorrection: Bool
+    @Flag(help: "Enable fast mode (less accurate).")
+    var fastMode = false
+    @Flag(help: "Enable language correction.")
+    var languageCorrection = false
     
     mutating func run() throws {
         var REVISION: Int
@@ -34,7 +34,7 @@ struct macSup2Srt: ParsableCommand {
         for substring in substrings {
             languages.append(String(substring))
         }
-        if fastmode == true {
+        if fastMode == true {
             MODE = VNRequestTextRecognitionLevel.fast
         }
         
@@ -50,16 +50,16 @@ struct macSup2Srt: ParsableCommand {
         var srtFile: [SrtSubtitle] = []
         
         for subtitle in subtitles {
-            let outputDirectory = URL(fileURLWithPath: imageDirectory)
-            //            let pgmPath = outputDirectory.appendingPathComponent("subtitle_\(num).pgm")
-            let pngPath = outputDirectory.appendingPathComponent(
-                "subtitle_\(num).png")
-            
-            try supDecoder.saveSubtitleAsPNG(
-                imageData: subtitle.imageData, palette: subtitle.imagePalette,
-                width: subtitle.imageSize.width,
-                height: subtitle.imageSize.height, outputPath: pngPath)
-            //            try supDecoder.saveAsPGM(imageData: subtitle.imageData, width: subtitle.imageSize.width, height: subtitle.imageSize.height, outputPath: pgmPath)
+            if (imageDirectory != nil) {
+                let outputDirectory = URL(fileURLWithPath: imageDirectory!)
+                let pngPath = outputDirectory.appendingPathComponent(
+                    "subtitle_\(num).png")
+                
+                try supDecoder.saveSubtitleAsPNG(
+                    imageData: subtitle.imageData, palette: subtitle.imagePalette,
+                    width: subtitle.imageSize.width,
+                    height: subtitle.imageSize.height, outputPath: pngPath)
+            }
             
             let request = VNRecognizeTextRequest { (request, error) in
                 let observations =
