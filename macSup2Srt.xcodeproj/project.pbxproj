@@ -12,6 +12,8 @@
 		8A7F7F7A2C859DC300ADF827 /* SUP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7F7F772C859DC300ADF827 /* SUP.swift */; };
 		8A7F7F7B2C859DC300ADF827 /* RLE.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7F7F752C859DC300ADF827 /* RLE.swift */; };
 		8A7F7F7E2C859E2F00ADF827 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 8A7F7F7D2C859E2F00ADF827 /* ArgumentParser */; };
+		8A9A1FBB2C8C12DE00359E57 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A9A1FBA2C8C12DE00359E57 /* Palette.swift */; };
+		8A9A1FC72C8D3D0500359E57 /* Debug.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A9A1FC62C8D3D0000359E57 /* Debug.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -32,6 +34,11 @@
 		8A7F7F752C859DC300ADF827 /* RLE.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RLE.swift; sourceTree = "<group>"; };
 		8A7F7F762C859DC300ADF827 /* SRT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SRT.swift; sourceTree = "<group>"; };
 		8A7F7F772C859DC300ADF827 /* SUP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SUP.swift; sourceTree = "<group>"; };
+		8A9A1FBA2C8C12DE00359E57 /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
+		8A9A1FC02C8C30C400359E57 /* libavformat.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavformat.a; path = ../../../opt/homebrew/Cellar/ffmpeg/7.0.2/lib/libavformat.a; sourceTree = "<group>"; };
+		8A9A1FC22C8C312200359E57 /* libavutil.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavutil.a; path = ../../../opt/homebrew/Cellar/ffmpeg/7.0.2/lib/libavutil.a; sourceTree = "<group>"; };
+		8A9A1FC32C8C312200359E57 /* libavcodec.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavcodec.a; path = ../../../opt/homebrew/Cellar/ffmpeg/7.0.2/lib/libavcodec.a; sourceTree = "<group>"; };
+		8A9A1FC62C8D3D0000359E57 /* Debug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Debug.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -51,6 +58,7 @@
 			children = (
 				8A7F7F6C2C859D6800ADF827 /* macSup2Srt */,
 				8A7F7F6B2C859D6800ADF827 /* Products */,
+				8A9A1FBF2C8C30C400359E57 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -65,12 +73,24 @@
 		8A7F7F6C2C859D6800ADF827 /* macSup2Srt */ = {
 			isa = PBXGroup;
 			children = (
+				8A9A1FC62C8D3D0000359E57 /* Debug.swift */,
+				8A9A1FBA2C8C12DE00359E57 /* Palette.swift */,
 				8A7F7F742C859DC300ADF827 /* macSup2Srt.swift */,
 				8A7F7F752C859DC300ADF827 /* RLE.swift */,
 				8A7F7F762C859DC300ADF827 /* SRT.swift */,
 				8A7F7F772C859DC300ADF827 /* SUP.swift */,
 			);
 			path = macSup2Srt;
+			sourceTree = "<group>";
+		};
+		8A9A1FBF2C8C30C400359E57 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				8A9A1FC32C8C312200359E57 /* libavcodec.a */,
+				8A9A1FC22C8C312200359E57 /* libavutil.a */,
+				8A9A1FC02C8C30C400359E57 /* libavformat.a */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -139,7 +159,9 @@
 			files = (
 				8A7F7F782C859DC300ADF827 /* SRT.swift in Sources */,
 				8A7F7F792C859DC300ADF827 /* macSup2Srt.swift in Sources */,
+				8A9A1FBB2C8C12DE00359E57 /* Palette.swift in Sources */,
 				8A7F7F7A2C859DC300ADF827 /* SUP.swift in Sources */,
+				8A9A1FC72C8D3D0500359E57 /* Debug.swift in Sources */,
 				8A7F7F7B2C859DC300ADF827 /* RLE.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

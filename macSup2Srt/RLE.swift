@@ -1,77 +1,65 @@
+//
+//  RLE.swift
+//  macSup2Srt
+//
+//  Created by Ethan Dye on 9/1/2024.
+//  Copyright © 2024 Ethan Dye. All rights reserved.
+//
+
 import Foundation
 
-func isColor(byte: UInt8) -> Bool {
-    return byte >> 7 == 1
-}
+func decodeRLE(data: Data, width: Int, height: Int) throws -> Data {
+    let rleBitmapEnd = data.endIndex
+    var pixelCount = 0
+    var lineCount = 0
+    var buf = 0
 
-func isLong(byte: UInt8) -> Bool {
-    return (byte >> 6) & 0b1 == 1
-}
+    var image = Data()
 
-func decodeRLE<T: DataProtocol>(data: T) -> [UInt8] {
-    let data = Array(data)
-    let dataLen = UInt64(data.count)
-    var cursor = 0
-    var output: [UInt8] = []
-    
-    while cursor < dataLen {
-        if cursor >= dataLen {
-            break
+    while buf < rleBitmapEnd && lineCount < height {
+        var color: UInt8 = data[buf]
+        buf += 1
+        var run = 1
+
+        if color == 0x00 {
+            let flags = data[buf]
+            buf += 1
+            run = Int(flags & 0x3F)
+            if flags & 0x40 != 0 {
+                run = (run << 8) + Int(data[buf])
+                buf += 1
+            }
+            color = (flags & 0x80) != 0 ? data[buf] : 0
+            if (flags & 0x80) != 0 {
+                buf += 1
+            }
         }
-        
-        // check first byte color
-        switch data[cursor] {
-        case 0x00:
-            break
-        default:
-            output.append(1)
-            cursor += 1
-            continue
-        }
-        
-        // check second byte for length
-        let info = data[cursor + 1]
-        switch info {
-        case 0x00:
-            cursor += 2
-            continue
-        default:
-            break
-        }
-        
-        let isColor = isColor(byte: info)
-        let bigLen = isLong(byte: info)
-        
-        let lenU8 = info & 0b0011_1111
-        assert(lenU8 >> 6 == 0)
-        
-        let len: UInt16
-        if bigLen {
-            let len2U8 = data[cursor + 2]
-            let buf: [UInt8] = [lenU8, len2U8]
-            len = UInt16(
-                bigEndian: Data(buf).withUnsafeBytes {
-                    $0.load(as: UInt16.self)
-                })
-            cursor += 3
-        } else {
-            len = UInt16(lenU8)
-            cursor += 2
-        }
-        
-        let color: UInt8
-        if isColor {
-            color = data[cursor]
-            cursor += 1
-        } else {
-            // use preferred color
-            color = 0
-        }
-        
-        for _ in 0..<len {
-            output.append(color)
+
+        // Ensure run is valid and doesn't exceed pixel buffer
+        if run > 0 && pixelCount + run <= width * height {
+            // Fill the pixel data with the decoded color
+            image.append(contentsOf: repeatElement(color, count: run))
+            pixelCount += run
+        } else if run == 0 {
+            // New Line: Check if pixels align correctly
+            if pixelCount % width > 0 {
+                print("Error: Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.")
+                throw RLEDecodeError.invalidData
+            }
+            lineCount += 1
         }
     }
-    
-    return output
+
+    // Check if we decoded enough pixels
+    if pixelCount < width * height {
+        print("Error: Insufficient RLE data for subtitle.")
+        throw RLEDecodeError.insufficientData
+    }
+
+    return image
+}
+
+enum RLEDecodeError: Error {
+    case invalidData
+    case insufficientData
 }

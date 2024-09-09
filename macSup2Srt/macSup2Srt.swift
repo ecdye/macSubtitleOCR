@@ -1,148 +1,188 @@
+//
+//  macSup2Srt.swift
+//  macSup2Srt
+//
+//  Created by Ethan Dye on 9/1/2024.
+//  Copyright © 2024 Ethan Dye. All rights reserved.
+//
+
 import ArgumentParser
 import Cocoa
+import UniformTypeIdentifiers
 import Vision
 
-var MODE = VNRequestTextRecognitionLevel.accurate
-
+/// The main struct representing the macSup2Srt command-line tool.
 @main
 struct macSup2Srt: ParsableCommand {
+    // MARK: - Properties
+
     @Argument(help: "Input .sup subtitle file.")
     var sup: String
+
     @Argument(help: "File to output the OCR direct output in json to.")
     var json: String
+
     @Argument(help: "File to output the completed .srt file to")
     var srt: String
+
     @Option(help: "Output image files of subtitles to directory (optional)")
     var imageDirectory: String?
+
     @Option(wrappedValue: "en", help: "The input image language(s)")
     var language: String
+
     @Flag(help: "Enable fast mode (less accurate).")
     var fastMode = false
+
     @Flag(help: "Enable language correction.")
     var languageCorrection = false
-    
+
+    // MARK: - Methods
+
+    /// The main entry point of the command-line tool.
     mutating func run() throws {
-        var REVISION: Int
+        // Set the text recognition mode
+        var recognitionLevel = VNRequestTextRecognitionLevel.accurate
+        var subtitleDat: [Any] = []
+        var srtFile: [SrtSubtitle] = []
+        var subtitleIndex = 1
+
+        // Split the language string into an array of languages
+        let languages = language.split(separator: ",").map { String($0) }
+
+        // Set the fast mode if applicable
+        if fastMode {
+            recognitionLevel = .fast
+        }
+
+        // Set the text recognition revision
+        var revision: Int
         if #available(macOS 13, *) {
-            REVISION = VNRecognizeTextRequestRevision3
+            revision = VNRecognizeTextRequestRevision3
         } else {
-            REVISION = VNRecognizeTextRequestRevision2
+            revision = VNRecognizeTextRequestRevision2
         }
-        
-        let substrings = language.split(separator: ",")
-        var languages: [String] = []
-        for substring in substrings {
-            languages.append(String(substring))
-        }
-        if fastMode == true {
-            MODE = VNRequestTextRecognitionLevel.fast
-        }
-        
+
         // Initialize the decoder
         let supDecoder = SupDecoder()
-        let subtitles = try supDecoder.parseSup(
-            fromFileAt: URL(fileURLWithPath: sup))
-        
-        // Iterate through the subtitles and extract bitmap data
-        var num = 1
-        var data: [Any] = []
-        let decoder = SRT()
-        var srtFile: [SrtSubtitle] = []
-        
+        let subtitles = try supDecoder.parseSup(fromFileAt: URL(fileURLWithPath: sup))
+
         for subtitle in subtitles {
-            if (imageDirectory != nil) {
-                let outputDirectory = URL(fileURLWithPath: imageDirectory!)
-                let pngPath = outputDirectory.appendingPathComponent(
-                    "subtitle_\(num).png")
-                
-                try supDecoder.saveSubtitleAsPNG(
-                    imageData: subtitle.imageData, palette: subtitle.imagePalette,
-                    width: subtitle.imageSize.width,
-                    height: subtitle.imageSize.height, outputPath: pngPath)
+            if subtitle.imageWidth == 0 && subtitle.imageHeight == 0 {
+                continue // Ignore empty image
             }
-            
-            let request = VNRecognizeTextRequest { (request, error) in
-                let observations =
-                request.results as? [VNRecognizedTextObservation] ?? []
-                var dict: [String: Any] = [:]
-                var lines: [Any] = []
-                var allText = ""
+            guard let subImage = supDecoder.createImage(from: subtitle.imageData,
+                                                        palette: subtitle.imagePalette,
+                                                        width: subtitle.imageWidth,
+                                                        height: subtitle.imageHeight)
+            else {
+                print("Could not create image from decoded data for index \(subtitleIndex)! Skipping...")
+                continue
+            }
+
+            // Save subtitle image as PNG if imageDirectory is provided
+            if let imageDirectory = imageDirectory {
+//                    debugPrint("Beginning to save subtitle \(subtitleIndex)")
+                let outputDirectory = URL(fileURLWithPath: imageDirectory)
+                let manager = FileManager.default
+                do {
+                    try manager.createDirectory(at: outputDirectory,
+                                                withIntermediateDirectories: false,
+                                                attributes: nil)
+                } catch CocoaError.fileWriteFileExists {
+                    // Folder already existed
+                } catch {
+                    throw error
+                }
+                let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subtitleIndex).png")
+
+//                    debugPrint("Saving PNG")
+                try saveImageAsPNG(image: subImage, outputPath: pngPath)
+            }
+
+            // Perform text recognition
+            let request = VNRecognizeTextRequest { request, _ in
+                guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
+
+                var subtitleLines: [[String: Any]] = []
+                var subtitleText = ""
                 var index = 0
                 for observation in observations {
-                    // Find the top observation.
-                    var line: [String: Any] = [:]
                     let candidate = observation.topCandidates(1).first
-                    let string = candidate?.string
-                    let confidence = candidate?.confidence
-                    // Find the bounding-box observation for the string range.
-                    let stringRange = string!.startIndex..<string!.endIndex
-                    let boxObservation = try? candidate?.boundingBox(
-                        for: stringRange)
-                    
-                    // Get the normalized CGRect value.
+                    let string = candidate?.string ?? ""
+                    let confidence = candidate?.confidence ?? 0.0
+                    let stringRange = string.startIndex ..< string.endIndex
+                    let boxObservation = try? candidate?.boundingBox(for: stringRange)
                     let boundingBox = boxObservation?.boundingBox ?? .zero
-                    // Convert the rectangle from normalized coordinates to image coordinates.
-                    let rect = VNImageRectForNormalizedRect(
-                        boundingBox,
-                        subtitle.imageSize.width,
-                        subtitle.imageSize.height)
-                    
-                    line["text"] = string ?? ""
-                    line["confidence"] = confidence ?? ""
-                    line["x"] = Int(rect.minX)
-                    line["width"] = Int(rect.size.width)
-                    line["y"] = Int(
-                        CGFloat(subtitle.imageSize.height) - rect.minY
-                        - rect.size.height)
-                    line["height"] = Int(rect.size.height)
-                    lines.append(line)
-                    allText = allText + (string ?? "")
-                    index = index + 1
+                    let rect = VNImageRectForNormalizedRect(boundingBox,
+                                                            subtitle.imageWidth,
+                                                            subtitle.imageHeight)
+
+                    let line: [String: Any] = ["text": string,
+                                               "confidence": confidence,
+                                               "x": Int(rect.minX),
+                                               "width": Int(rect.size.width),
+                                               "y": Int(CGFloat(subtitle.imageHeight) - rect.minY - rect
+                                                   .size.height),
+                                               "height": Int(rect.size.height)]
+
+                    subtitleLines.append(line)
+                    subtitleText += string
+                    index += 1
                     if index != observations.count {
-                        allText = allText + "\n"
+                        subtitleText += "\n"
                     }
                 }
-                dict["image"] = num
-                dict["lines"] = lines
-                dict["text"] = allText
-                data.append(dict)
-                let newSubtitle = SrtSubtitle(
-                    index: num,
-                    startTime: subtitle.timestamp,
-                    endTime: subtitle.endTimestamp,
-                    text: allText)
+
+                let subtitleData: [String: Any] = ["image": subtitleIndex,
+                                                   "lines": subtitleLines,
+                                                   "text": subtitleText]
+
+                subtitleDat.append(subtitleData)
+
+                let newSubtitle = SrtSubtitle(index: subtitleIndex,
+                                              startTime: subtitle.timestamp,
+                                              endTime: subtitle.endTimestamp,
+                                              text: subtitleText)
+
                 srtFile.append(newSubtitle)
             }
-            request.recognitionLevel = MODE
+
+            request.recognitionLevel = recognitionLevel
             request.usesLanguageCorrection = languageCorrection
-            request.revision = REVISION
+            request.revision = revision
             request.recognitionLanguages = languages
-            //request.minimumTextHeight = 0
-            //request.customWords = [String]
-            try? VNImageRequestHandler(
-                cgImage: supDecoder.createImage(
-                    from: subtitle.imageData, palette: subtitle.imagePalette,
-                    width: subtitle.imageSize.width,
-                    height: subtitle.imageSize.height)!, options: [:]
-            ).perform([
-                request
-            ])
-            num += 1
+
+            try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
+
+            subtitleIndex += 1
         }
-        let out = try? JSONSerialization.data(
-            withJSONObject: data,
-            options: [
-                JSONSerialization.WritingOptions.prettyPrinted,
-                JSONSerialization.WritingOptions.sortedKeys,
-            ])
-        let jsonString =
-        String(
-            data: out!,
-            encoding: .utf8) ?? "[]"
-        try? jsonString.write(
-            to: URL(fileURLWithPath: json), atomically: true,
-            encoding: String.Encoding.utf8)
-        try decoder.encode(
-            subtitles: srtFile, toFileAt: URL(fileURLWithPath: srt))
+
+        // Convert subtitle data to JSON
+        let jsonData = try JSONSerialization.data(withJSONObject: subtitleDat,
+                                                  options: [.prettyPrinted, .sortedKeys])
+        let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
+
+        // Write JSON to file
+        try jsonString.write(to: URL(fileURLWithPath: json),
+                             atomically: true,
+                             encoding: .utf8)
+
+        // Encode subtitles to SRT file
+        try SRT().encode(subtitles: srtFile,
+                         toFileAt: URL(fileURLWithPath: srt))
+    }
+
+    func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
+        guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL,
+                                                                UTType.png.identifier as CFString, 1, nil)
+        else {
+            throw SupDecoderError.fileReadError
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+
+        if !CGImageDestinationFinalize(destination) {
+            throw SupDecoderError.fileReadError
+        }
     }
 }
