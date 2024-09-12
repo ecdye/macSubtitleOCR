@@ -9,29 +9,29 @@
 import Foundation
 import simd
 
-class Palette {
+public class PDS {
     private var id: UInt8 = 0
     private var version: UInt8 = 0
     private var palette = [UInt8](repeating: 0, count: 1024)
 
     init(_ data: Data) throws {
         guard data.count >= 8 else {
-            throw PaletteError.invalidFormat
+            throw PGSError.invalidFormat
         }
         id = data[0]
         version = data[1]
         try parsePDS(data)
     }
 
-    func getID() -> UInt8 {
+    public func getID() -> UInt8 {
         return id
     }
 
-    func getVersion() -> UInt8 {
+    public func getVersion() -> UInt8 {
         return version
     }
 
-    func getPalette() -> [UInt8] {
+    public func getPalette() -> [UInt8] {
         return palette
     }
 
@@ -46,7 +46,7 @@ class Palette {
         // Start reading after the first 2 bytes (Palette ID and Version)
         if (data.count - 2) % 5 != 0 {
             print("Invalid Palette Data Segment Length: \(data.count)")
-            throw PaletteError.invalidFormat
+            throw PGSError.invalidFormat
         }
 
         var i = 2
@@ -89,8 +89,4 @@ class Palette {
 
         return (red: red, green: green, blue: blue)
     }
-}
-
-public enum PaletteError: Error {
-    case invalidFormat
 }

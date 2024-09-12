@@ -14,7 +14,7 @@ import Vision
 /// The main struct representing the macSup2Srt command-line tool.
 @main
 struct macSup2Srt: ParsableCommand {
-    // MARK: - Properties
+    // MARK: - Arguments / Options
 
     @Argument(help: "Input .sup subtitle file.")
     var sup: String
@@ -40,7 +40,7 @@ struct macSup2Srt: ParsableCommand {
     // MARK: - Methods
 
     /// The main entry point of the command-line tool.
-    mutating func run() throws {
+    func run() throws {
         // Set the text recognition mode
         var recognitionLevel = VNRequestTextRecognitionLevel.accurate
         var subtitleDat: [Any] = []
@@ -64,14 +64,14 @@ struct macSup2Srt: ParsableCommand {
         }
 
         // Initialize the decoder
-        let supDecoder = SupDecoder()
-        let subtitles = try supDecoder.parseSup(fromFileAt: URL(fileURLWithPath: sup))
+        let PGS = PGS()
+        let subtitles = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: sup))
 
-        for subtitle in subtitles {
+        for var subtitle in subtitles {
             if subtitle.imageWidth == 0 && subtitle.imageHeight == 0 {
                 continue // Ignore empty image
             }
-            guard let subImage = supDecoder.createImage(from: subtitle.imageData,
+            guard let subImage = PGS.createImage(from: &subtitle.imageData,
                                                         palette: subtitle.imagePalette,
                                                         width: subtitle.imageWidth,
                                                         height: subtitle.imageHeight)
@@ -82,7 +82,6 @@ struct macSup2Srt: ParsableCommand {
 
             // Save subtitle image as PNG if imageDirectory is provided
             if let imageDirectory = imageDirectory {
-//                    debugPrint("Beginning to save subtitle \(subtitleIndex)")
                 let outputDirectory = URL(fileURLWithPath: imageDirectory)
                 let manager = FileManager.default
                 do {
@@ -95,9 +94,8 @@ struct macSup2Srt: ParsableCommand {
                     throw error
                 }
                 let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subtitleIndex).png")
-
-//                    debugPrint("Saving PNG")
-                try saveImageAsPNG(image: subImage, outputPath: pngPath)
+                
+                try PGS.saveImageAsPNG(image: subImage, outputPath: pngPath)
             }
 
             // Perform text recognition
@@ -173,16 +171,5 @@ struct macSup2Srt: ParsableCommand {
                          toFileAt: URL(fileURLWithPath: srt))
     }
 
-    func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
-        guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL,
-                                                                UTType.png.identifier as CFString, 1, nil)
-        else {
-            throw SupDecoderError.fileReadError
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-
-        if !CGImageDestinationFinalize(destination) {
-            throw SupDecoderError.fileReadError
-        }
-    }
+    
 }
