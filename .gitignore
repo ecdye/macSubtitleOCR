@@ -2,3 +2,6 @@
 macSup2Srt.xcodeproj/project.xcworkspace/xcuserdata
 macSup2Srt.xcodeproj/xcuserdata
 build
+tests/images
+tests/*.json
+tests/*.srt
