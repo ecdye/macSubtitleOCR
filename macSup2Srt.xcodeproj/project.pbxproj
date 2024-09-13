@@ -30,6 +30,11 @@
 		8A7F7F742C859DC300ADF827 /* macSup2Srt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = macSup2Srt.swift; sourceTree = "<group>"; };
 		8A7F7F762C859DC300ADF827 /* SRT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SRT.swift; sourceTree = "<group>"; };
 		8A9A1FC62C8D3D0000359E57 /* Debug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Debug.swift; sourceTree = "<group>"; };
+		8AE9B7352C9402BE00AB2BB5 /* .gitignore */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
+		8AE9B7362C9402BE00AB2BB5 /* .swiftformat */ = {isa = PBXFileReference; lastKnownFileType = text; path = .swiftformat; sourceTree = "<group>"; };
+		8AE9B7372C9402BE00AB2BB5 /* LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LICENSE.md; sourceTree = "<group>"; };
+		8AE9B7382C9402BE00AB2BB5 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		8AE9B7392C9408C200AB2BB5 /* CONTRIBUTING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CONTRIBUTING.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -51,6 +56,11 @@
 		8A7F7F612C859D6800ADF827 = {
 			isa = PBXGroup;
 			children = (
+				8AE9B7392C9408C200AB2BB5 /* CONTRIBUTING.md */,
+				8AE9B7352C9402BE00AB2BB5 /* .gitignore */,
+				8AE9B7362C9402BE00AB2BB5 /* .swiftformat */,
+				8AE9B7372C9402BE00AB2BB5 /* LICENSE.md */,
+				8AE9B7382C9402BE00AB2BB5 /* README.md */,
 				8A7F7F6C2C859D6800ADF827 /* macSup2Srt */,
 				8A7F7F6B2C859D6800ADF827 /* Products */,
 			);

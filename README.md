@@ -1,22 +1,45 @@
 # macSup2Srt
-
-macSup2Srt is a Swift-based tool designed to decode and convert SUP (PGS Subtitle) files into SRT (SubRip Subtitle) format. This project is currently in a very early state but is usable.
-
-## Features
-
-- Decode Run-Length Encoded (RLE) data from SUP files.
-- Use macOS built in OCR to convert SUP subtitles to SRT format.
-- Save images extracted from SUP files as PNG.
+[![License](https://img.shields.io/github/license/ecdye/macSup2Srt)](https://github.com/ecdye/macSup2Srt/blob/main/LICENSE.md)
 
 
-## Installation
+## Overview
 
-To get started with macSup2Srt, clone the repository and open the `macSup2Srt.xcodeproj` file in Xcode.
+macSup2Srt is used to covert a `.sup` containing PGS Subtitles to SubRip subtitles in a `.srt` file.
+It uses the built in OCR engine in macOS to perform the text recognition, which works really well.
+For more information on accuracy, see [Accuracy](#accuracy) below.
 
-``` bash
-git clone <repository-url>
+
+### Options
+
+- Ability to export images in the `.sup` file to compare and manually refine OCR output
+- Ability to export raw JSON output from OCR engine for inspection
+- Ability to use language recognition in the macOS OCR engine to improve OCR accuracy
+
+
+### Building
+
+To get started with macSup2Srt, clone the repository and then build the project with Xcode.
+
+``` shell
+git clone https://github.com/ecdye/macSup2Srt
 cd macSup2Srt
-open macSup2Srt.xcodeproj
+xcodebuild -scheme macSup2Srt build
 ```
 
-Then build and run!
+The completed build should be available in the build directory.
+
+### Accuracy
+
+In simple tests against the Tesseract OCR engine the accuracy of the macOS OCR engine has been significantly better.
+This improvement is especially noticable with words like 'I', especially when italicized.
+The binary image compare method used in projects like [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit) may be slightly more accurate, but it depends on the use case.
+
+## TODO
+
+- Implement complete testing and formal linting / style guidelines
+- Implement ability to read subtitles from `.mkv` stream
+- Implement ability to read `.sub` VobSub files
+
+## Reference
+
+<https://blog.thescorpius.com/index.php/2017/07/15/presentation-graphic-stream-sup-files-bluray-subtitle-format/>
