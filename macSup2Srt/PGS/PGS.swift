@@ -33,20 +33,20 @@ public class PGS {
         var subtitles = [PGSSubtitle]()
         let fileLength = try fileHandle.seekToEnd()
         fileHandle.seek(toFileOffset: 0) // Ensure the file handle is at the start
-//        var headerData = fileHandle.readData(ofLength: 13)
+        var headerData = fileHandle.readData(ofLength: 13)
         
         while fileHandle.offsetInFile < fileLength {
-            guard var subtitle = try parseNextSubtitle(fileHandle: fileHandle)//, headerData: headerData)
-            else { continue }
+            guard var subtitle = try parseNextSubtitle(fileHandle: fileHandle, headerData: &headerData)
+            else {
+                headerData = fileHandle.readData(ofLength: 13)
+                continue
+            }
 
             // Find the next timestamp to use as our end timestamp
-            let oldOffset = fileHandle.offsetInFile
             while subtitle.endTimestamp <= subtitle.timestamp {
-                let headerData = fileHandle.readData(ofLength: 13)
+                headerData = fileHandle.readData(ofLength: 13)
                 subtitle.endTimestamp = parseTimestamp(headerData)
-//                debugPrint("endTimestamp: \(subtitle.endTimestamp), offset: \(fileHandle.offsetInFile)")
             }
-            fileHandle.seek(toFileOffset: oldOffset)
             
             subtitles.append(subtitle)
         }
@@ -54,13 +54,11 @@ public class PGS {
         return subtitles
     }
 
-    private func parseNextSubtitle(fileHandle: FileHandle) throws -> PGSSubtitle? {
+    private func parseNextSubtitle(fileHandle: FileHandle, headerData: inout Data) throws -> PGSSubtitle? {
         var subtitle = PGSSubtitle()
         var p1 = false
         var p2 = false
         while true {
-            // Read the PGS header (13 bytes)
-            let headerData = fileHandle.readData(ofLength: 13)
             guard headerData.count == 13 else {
                 print("Failed to read PGS header correctly.")
                 return nil
@@ -97,13 +95,13 @@ public class PGS {
                 subtitle.imageHeight = ODS.getObjectHeight()
                 subtitle.imageData = ODS.getImageData()
                 p2 = true
-            case 0x16: // PCS (Presentation Composition Segment)
-                continue // PCS parsing not required for basic rendering
-            case 0x17: // WDS (Window Definition Segment)
-                continue // WDS parsing not required for basic rendering
+            case 0x16, 0x17: // PCS (Presentation Composition Segment), WDS (Window Definition Segment)
+                headerData = fileHandle.readData(ofLength: 13)
+                continue // PCS and WDS parsing not required for basic rendering
             default:
                 return nil
             }
+            headerData = fileHandle.readData(ofLength: 13)
             if p1, p2 {
                 p1 = false
                 p2 = false

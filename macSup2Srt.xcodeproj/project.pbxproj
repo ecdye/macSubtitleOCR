@@ -3,19 +3,14 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		8A7F7F782C859DC300ADF827 /* SRT.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7F7F762C859DC300ADF827 /* SRT.swift */; };
 		8A7F7F792C859DC300ADF827 /* macSup2Srt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7F7F742C859DC300ADF827 /* macSup2Srt.swift */; };
-		8A7F7F7B2C859DC300ADF827 /* RLE.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7F7F752C859DC300ADF827 /* RLE.swift */; };
 		8A7F7F7E2C859E2F00ADF827 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 8A7F7F7D2C859E2F00ADF827 /* ArgumentParser */; };
 		8A9A1FC72C8D3D0500359E57 /* Debug.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A9A1FC62C8D3D0000359E57 /* Debug.swift */; };
-		8AE9B71A2C93594100AB2BB5 /* PGS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE9B7192C93594100AB2BB5 /* PGS.swift */; };
-		8AE9B71D2C935ACB00AB2BB5 /* PDS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE9B71C2C935ACB00AB2BB5 /* PDS.swift */; };
-		8AE9B71F2C935BAD00AB2BB5 /* ODS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE9B71E2C935BAA00AB2BB5 /* ODS.swift */; };
-		8AE9B7212C935E0B00AB2BB5 /* PGSError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE9B7202C935E0600AB2BB5 /* PGSError.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -33,17 +28,13 @@
 /* Begin PBXFileReference section */
 		8A7F7F6A2C859D6800ADF827 /* macSup2Srt */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = macSup2Srt; sourceTree = BUILT_PRODUCTS_DIR; };
 		8A7F7F742C859DC300ADF827 /* macSup2Srt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = macSup2Srt.swift; sourceTree = "<group>"; };
-		8A7F7F752C859DC300ADF827 /* RLE.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RLE.swift; sourceTree = "<group>"; };
 		8A7F7F762C859DC300ADF827 /* SRT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SRT.swift; sourceTree = "<group>"; };
-		8A9A1FC02C8C30C400359E57 /* libavformat.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavformat.a; path = ../../../opt/homebrew/Cellar/ffmpeg/7.0.2/lib/libavformat.a; sourceTree = "<group>"; };
-		8A9A1FC22C8C312200359E57 /* libavutil.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavutil.a; path = ../../../opt/homebrew/Cellar/ffmpeg/7.0.2/lib/libavutil.a; sourceTree = "<group>"; };
-		8A9A1FC32C8C312200359E57 /* libavcodec.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavcodec.a; path = ../../../opt/homebrew/Cellar/ffmpeg/7.0.2/lib/libavcodec.a; sourceTree = "<group>"; };
 		8A9A1FC62C8D3D0000359E57 /* Debug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Debug.swift; sourceTree = "<group>"; };
-		8AE9B7192C93594100AB2BB5 /* PGS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PGS.swift; sourceTree = "<group>"; };
-		8AE9B71C2C935ACB00AB2BB5 /* PDS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDS.swift; sourceTree = "<group>"; };
-		8AE9B71E2C935BAA00AB2BB5 /* ODS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ODS.swift; sourceTree = "<group>"; };
-		8AE9B7202C935E0600AB2BB5 /* PGSError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PGSError.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		8AE9B72F2C9378CC00AB2BB5 /* PGS */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = PGS; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		8A7F7F672C859D6800ADF827 /* Frameworks */ = {
@@ -62,7 +53,6 @@
 			children = (
 				8A7F7F6C2C859D6800ADF827 /* macSup2Srt */,
 				8A7F7F6B2C859D6800ADF827 /* Products */,
-				8A9A1FBF2C8C30C400359E57 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -77,42 +67,12 @@
 		8A7F7F6C2C859D6800ADF827 /* macSup2Srt */ = {
 			isa = PBXGroup;
 			children = (
-				8AE9B7182C9358E700AB2BB5 /* PGS */,
+				8AE9B72F2C9378CC00AB2BB5 /* PGS */,
 				8A9A1FC62C8D3D0000359E57 /* Debug.swift */,
 				8A7F7F742C859DC300ADF827 /* macSup2Srt.swift */,
 				8A7F7F762C859DC300ADF827 /* SRT.swift */,
 			);
 			path = macSup2Srt;
-			sourceTree = "<group>";
-		};
-		8A9A1FBF2C8C30C400359E57 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				8A9A1FC32C8C312200359E57 /* libavcodec.a */,
-				8A9A1FC22C8C312200359E57 /* libavutil.a */,
-				8A9A1FC02C8C30C400359E57 /* libavformat.a */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		8AE9B7182C9358E700AB2BB5 /* PGS */ = {
-			isa = PBXGroup;
-			children = (
-				8AE9B7202C935E0600AB2BB5 /* PGSError.swift */,
-				8AE9B71B2C9359BA00AB2BB5 /* Parsers */,
-				8AE9B7192C93594100AB2BB5 /* PGS.swift */,
-			);
-			path = PGS;
-			sourceTree = "<group>";
-		};
-		8AE9B71B2C9359BA00AB2BB5 /* Parsers */ = {
-			isa = PBXGroup;
-			children = (
-				8AE9B71E2C935BAA00AB2BB5 /* ODS.swift */,
-				8A7F7F752C859DC300ADF827 /* RLE.swift */,
-				8AE9B71C2C935ACB00AB2BB5 /* PDS.swift */,
-			);
-			path = Parsers;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -129,6 +89,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				8AE9B72F2C9378CC00AB2BB5 /* PGS */,
 			);
 			name = macSup2Srt;
 			packageProductDependencies = (
@@ -180,13 +143,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				8A7F7F782C859DC300ADF827 /* SRT.swift in Sources */,
-				8AE9B71D2C935ACB00AB2BB5 /* PDS.swift in Sources */,
-				8AE9B71F2C935BAD00AB2BB5 /* ODS.swift in Sources */,
 				8A7F7F792C859DC300ADF827 /* macSup2Srt.swift in Sources */,
 				8A9A1FC72C8D3D0500359E57 /* Debug.swift in Sources */,
-				8AE9B7212C935E0B00AB2BB5 /* PGSError.swift in Sources */,
-				8AE9B71A2C93594100AB2BB5 /* PGS.swift in Sources */,
-				8A7F7F7B2C859DC300ADF827 /* RLE.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -200,48 +158,33 @@
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_OPTIMIZATION_LEVEL = 3;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
@@ -263,42 +206,27 @@
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
