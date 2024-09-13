@@ -133,9 +133,9 @@ public class PGS {
     }
 
     /// Converts the RGBA data to a CGImage
-    public func createImage(from imageData: inout Data, palette: [UInt8], width: Int, height: Int) -> CGImage? {
+    public func createImage(from subtitle: inout PGSSubtitle) -> CGImage? {
         // Convert the image data to RGBA format using the palette
-        let rgbaData = imageDataToRGBA(&imageData, palette: palette, width: width, height: height)
+        let rgbaData = imageDataToRGBA(&subtitle)
 
         let bitmapInfo = CGBitmapInfo.byteOrder32Big
             .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
@@ -145,11 +145,11 @@ public class PGS {
             return nil
         }
 
-        return CGImage(width: width,
-                       height: height,
+        return CGImage(width: subtitle.imageWidth,
+                       height: subtitle.imageHeight,
                        bitsPerComponent: 8,
                        bitsPerPixel: 32,
-                       bytesPerRow: width * 4,
+                       bytesPerRow: subtitle.imageWidth * 4,  // 4 bytes per pixel (RGBA)
                        space: colorSpace,
                        bitmapInfo: bitmapInfo,
                        provider: provider,
@@ -159,23 +159,23 @@ public class PGS {
     }
 
     /// Converts the image data to RGBA format using the palette
-    private func imageDataToRGBA(_ imageData: inout Data, palette: [UInt8], width: Int, height: Int) -> Data {
+    private func imageDataToRGBA(_ subtitle: inout PGSSubtitle) -> Data {
         let bytesPerPixel = 4
-        let numColors = 256 // There are only 256 possible palette entries in a PGS Subtitle
-        var rgbaData = Data(capacity: width * height * bytesPerPixel)
+        let numColors = 256  // There are only 256 possible palette entries in a PGS Subtitle
+        var rgbaData = Data(capacity: subtitle.imageWidth * subtitle.imageHeight * bytesPerPixel)
 
-        for y in 0 ..< height {
-            for x in 0 ..< width {
-                let index = Int(y) * width + Int(x)
-                let colorIndex = Int(imageData[index])
+        for y in 0 ..< subtitle.imageHeight {
+            for x in 0 ..< subtitle.imageWidth {
+                let index = Int(y) * subtitle.imageWidth + Int(x)
+                let colorIndex = Int(subtitle.imageData[index])
 
                 guard colorIndex < numColors else {
                     continue
                 }
 
                 let paletteOffset = colorIndex * 4
-                rgbaData.append(contentsOf: [palette[paletteOffset], palette[paletteOffset + 1],
-                                             palette[paletteOffset + 2], palette[paletteOffset + 3]])
+                rgbaData.append(contentsOf: [subtitle.imagePalette[paletteOffset], subtitle.imagePalette[paletteOffset + 1],
+                                             subtitle.imagePalette[paletteOffset + 2], subtitle.imagePalette[paletteOffset + 3]])
             }
         }
 

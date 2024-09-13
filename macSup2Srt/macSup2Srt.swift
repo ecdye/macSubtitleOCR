@@ -71,10 +71,7 @@ struct macSup2Srt: ParsableCommand {
             if subtitle.imageWidth == 0 && subtitle.imageHeight == 0 {
                 continue // Ignore empty image
             }
-            guard let subImage = PGS.createImage(from: &subtitle.imageData,
-                                                        palette: subtitle.imagePalette,
-                                                        width: subtitle.imageWidth,
-                                                        height: subtitle.imageHeight)
+            guard let subImage = PGS.createImage(from: &subtitle)
             else {
                 print("Could not create image from decoded data for index \(subtitleIndex)! Skipping...")
                 continue
