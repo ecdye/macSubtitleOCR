@@ -62,6 +62,21 @@ struct macSup2Srt: ParsableCommand {
         } else {
             revision = VNRecognizeTextRequestRevision2
         }
+        
+        // MARK: - Usage Example
+        
+        let mkvParser = MKVParser()
+        // let filePath = "/path/to/your/file.mkv" // Replace with your MKV file path
+        
+        if mkvParser.openFile(filePath: sup) {
+            print("Yay, we opened the MKV file!")
+            mkvParser.seekToFirstSubtitleTrack()
+            mkvParser.closeFile()
+        } else {
+            print("Failed to open the MKV file.")
+        }
+        
+        
 
         // Initialize the decoder
         let PGS = PGS()
