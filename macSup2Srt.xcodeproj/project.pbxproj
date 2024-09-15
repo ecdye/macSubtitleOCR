@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 73;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -31,18 +31,8 @@
 		8AE9B7392C9408C200AB2BB5 /* CONTRIBUTING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CONTRIBUTING.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		8A8EA6A82C95F85100487DBA /* PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = 8A7F7F662C859D6800ADF827 /* Sources */;
-			membershipExceptions = (
-				MKV/MKV.swift.bak,
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		8AEDFD062C9483D700BCEAB8 /* macSup2Srt */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (8A8EA6A82C95F85100487DBA /* PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = macSup2Srt; sourceTree = "<group>"; };
+		8AEDFD062C9483D700BCEAB8 /* macSup2Srt */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = macSup2Srt; sourceTree = "<group>"; };
 		8AEDFD0F2C94843F00BCEAB8 /* tests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = tests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
@@ -123,6 +113,7 @@
 				};
 			};
 			buildConfigurationList = 8A7F7F652C859D6800ADF827 /* Build configuration list for PBXProject "macSup2Srt" */;
+			compatibilityVersion = "Xcode 15.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -133,7 +124,6 @@
 			packageReferences = (
 				8A7F7F7C2C859E2F00ADF827 /* XCRemoteSwiftPackageReference "swift-argument-parser" */,
 			);
-			preferredProjectObjectVersion = 60;
 			productRefGroup = 8A7F7F6B2C859D6800ADF827 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";

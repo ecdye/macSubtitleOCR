@@ -29,6 +29,7 @@ enum EBML {
     static let cluster: UInt32 = 0x1F43B675    // EBML ID for Cluster
     static let simpleBlock: UInt32 = 0xA3      // EBML ID for SimpleBlock
     static let block: UInt32 = 0xA1            // EBML ID for Block
+    static let blockGroup: UInt32 = 0xA0       // EBML ID for BlockGroup
 }
 
 // MARK: - EBML Parsing Helper Functions
@@ -85,7 +86,7 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
 //            print(String(format:"AF: 0x%02X", value))
         }
     }
-    //print("value: \(value)")
+    print(String(format:"VINT: 0x%08X", value))
     return value
 }
 
