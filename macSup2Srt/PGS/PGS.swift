@@ -1,5 +1,5 @@
 //
-//  SUP.swift
+//  PGS.swift
 //  macSup2Srt
 //
 //  Created by Ethan Dye on 9/1/2024.
@@ -34,7 +34,7 @@ public class PGS {
         let fileLength = try fileHandle.seekToEnd()
         fileHandle.seek(toFileOffset: 0) // Ensure the file handle is at the start
         var headerData = fileHandle.readData(ofLength: 13)
-        
+
         while fileHandle.offsetInFile < fileLength {
             guard var subtitle = try parseNextSubtitle(fileHandle: fileHandle, headerData: &headerData)
             else {
@@ -47,7 +47,7 @@ public class PGS {
                 headerData = fileHandle.readData(ofLength: 13)
                 subtitle.endTimestamp = parseTimestamp(headerData)
             }
-            
+
             subtitles.append(subtitle)
         }
 
@@ -149,7 +149,7 @@ public class PGS {
                        height: subtitle.imageHeight,
                        bitsPerComponent: 8,
                        bitsPerPixel: 32,
-                       bytesPerRow: subtitle.imageWidth * 4,  // 4 bytes per pixel (RGBA)
+                       bytesPerRow: subtitle.imageWidth * 4, // 4 bytes per pixel (RGBA)
                        space: colorSpace,
                        bitmapInfo: bitmapInfo,
                        provider: provider,
@@ -161,7 +161,7 @@ public class PGS {
     /// Converts the image data to RGBA format using the palette
     private func imageDataToRGBA(_ subtitle: inout PGSSubtitle) -> Data {
         let bytesPerPixel = 4
-        let numColors = 256  // There are only 256 possible palette entries in a PGS Subtitle
+        let numColors = 256 // There are only 256 possible palette entries in a PGS Subtitle
         var rgbaData = Data(capacity: subtitle.imageWidth * subtitle.imageHeight * bytesPerPixel)
 
         for y in 0 ..< subtitle.imageHeight {
@@ -181,7 +181,7 @@ public class PGS {
 
         return rgbaData
     }
-    
+
     public func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
         guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL,
                                                                 UTType.png.identifier as CFString, 1, nil)

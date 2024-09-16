@@ -1,5 +1,5 @@
 //
-//  Palette.swift
+//  PDS.swift
 //  macSup2Srt
 //
 //  Created by Ethan Dye on 9/7/2024.

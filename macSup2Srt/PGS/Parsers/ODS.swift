@@ -15,47 +15,47 @@ public class ODS {
     private var objectDataLength: Int = 0
     private var objectWidth: Int = 0
     private var objectHeight: Int = 0
-    private var imageData: Data = Data()
-    
+    private var imageData: Data = .init()
+
     init(_ data: Data) throws {
-        (self.objectWidth, self.objectHeight, self.imageData) = try parseODS(data)
-        self.objectID = 0
-        self.version = 0
-        self.sequenceFlag = 0
+        (objectWidth, objectHeight, imageData) = try parseODS(data)
+        objectID = 0
+        version = 0
+        sequenceFlag = 0
     }
-    
+
     // MARK: - Getters
-    
+
     public func getObjectID() -> Int {
         return objectID
     }
-    
+
     public func getVersion() -> Int {
         return version
     }
-    
+
     public func getSequenceFlag() -> Int {
         return sequenceFlag
     }
-    
+
     public func getObjectDataLength() -> Int {
         return objectDataLength
     }
-    
+
     public func getObjectWidth() -> Int {
         return objectWidth
     }
-    
+
     public func getObjectHeight() -> Int {
         return objectHeight
     }
-    
+
     public func getImageData() -> Data {
         return imageData
     }
-    
+
     // MARK: - Parser
-    
+
     /// Parses the Object Definition Segment (ODS) to extract the subtitle image bitmap.
     /// ODS structure (simplified):
     ///   0x17: Segment Type; already checked by the caller

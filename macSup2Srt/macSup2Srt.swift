@@ -91,7 +91,7 @@ struct macSup2Srt: ParsableCommand {
                     throw error
                 }
                 let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subtitleIndex).png")
-                
+
                 try PGS.saveImageAsPNG(image: subImage, outputPath: pngPath)
             }
 
@@ -167,6 +167,4 @@ struct macSup2Srt: ParsableCommand {
         try SRT().encode(subtitles: srtFile,
                          toFileAt: URL(fileURLWithPath: srt))
     }
-
-    
 }
