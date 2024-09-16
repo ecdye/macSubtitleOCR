@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8A7F7F7E2C859E2F00ADF827 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 8A7F7F7D2C859E2F00ADF827 /* ArgumentParser */; };
+		8A7F7F7E2C859E2F00ADF827 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 8A7F7F7D2C859E2F00ADF827 /* ArgumentParser */; settings = {ATTRIBUTES = (Required, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -218,8 +218,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-argument-parser.git";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.5.0;
+				kind = exactVersion;
+				version = 1.5.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
