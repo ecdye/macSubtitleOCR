@@ -4,7 +4,8 @@
 
 ## Overview
 
-macSup2Srt is used to covert a `.sup` containing PGS Subtitles to SubRip subtitles in a `.srt` file.
+macSup2Srt is used to covert a file containing a PGS Subtitle stream to SubRip subtitles using OCR.
+Currently the supported input file types are `.mkv` and `.sup`.
 It uses the built in OCR engine in macOS to perform the text recognition, which works really well.
 For more information on accuracy, see [Accuracy](#accuracy) below.
 
@@ -34,11 +35,12 @@ In simple tests against the Tesseract OCR engine the accuracy of the macOS OCR e
 This improvement is especially noticable with words like 'I', especially when italicized.
 The binary image compare method used in projects like [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit) may be slightly more accurate, but it depends on the use case.
 
-## TODO
+## TODO (not necessarily in order)
 
 - Implement complete testing and formal linting / style guidelines
-- Implement ability to read subtitles from `.mkv` stream
-- Implement ability to read `.sub` VobSub files
+- Implement an option to not output the `.sup` file when parsing from `.mkv` files (ie. perform the operation completely in memory)
+- Add additional test cases
+- Implement the ability to read `.sub` VobSub files and VobSub streams from `.mkv` files
 
 ## Reference
 

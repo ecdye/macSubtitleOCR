@@ -65,16 +65,16 @@ class MKVParser {
     }
 
     func getSubtitleTrackData(trackNumber: Int, outPath: String) {
-            if let trackData = extractTrackData(trackNumber: trackNumber) {
+        if let trackData = extractTrackData(trackNumber: trackNumber) {
 //                print("Found track data for track number \(trackNumber): \(trackData)")
-                do {
-                    try (trackData as NSData).write(to: URL(fileURLWithPath: outPath).deletingPathExtension().appendingPathExtension("sup"))
-                } catch {
-                    print("Failed to write subtitle data to file: \(error.localizedDescription).")
-                }
-            } else {
-                print("Failed to find track data for track number \(trackNumber).")
+            do {
+                try (trackData as NSData).write(to: URL(fileURLWithPath: outPath).deletingPathExtension().appendingPathExtension("sup"))
+            } catch {
+                print("Failed to write subtitle data to file: \(error.localizedDescription).")
             }
+        } else {
+            print("Failed to find track data for track number \(trackNumber).")
+        }
     }
 
     // Function to seek to the track bytestream for a specific track number and extract all blocks
@@ -164,7 +164,7 @@ class MKVParser {
     // Extract the cluster timestamp
     func extractClusterTimestamp() -> Int64? {
         guard let fileHandle = fileHandle else { return nil }
-        
+
         if let (timestampElementSize, _) = findElement(withID: EBML.timestamp) as? (UInt64, UInt32) {
             return readFixedLengthNumber(fileHandle: fileHandle, length: Int(timestampElementSize))
         }
@@ -180,7 +180,7 @@ class MKVParser {
             if fileHandle.offsetInFile >= eof! {
                 return (nil, nil)
             }
-            
+
             // If, by chance, we find a different scale, update it from the default
             if elementID == EBML.timestampScale {
                 timestampScale = Double(readFixedLengthNumber(fileHandle: fileHandle, length: Int(elementSize)))

@@ -84,7 +84,6 @@ struct macSup2Srt: ParsableCommand {
             }
         }
 
-
         // Initialize the decoder
         let PGS = PGS()
         subtitles = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: sup).deletingPathExtension().appendingPathExtension("sup")) // Make sure we get the .sup file if we are doing an MKV
