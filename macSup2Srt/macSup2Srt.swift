@@ -16,14 +16,14 @@ import Vision
 struct macSup2Srt: ParsableCommand {
     // MARK: - Arguments / Options
 
-    @Argument(help: "Input .sup subtitle file.")
+    @Argument(help: "Input .sup subtitle file")
     var sup: String
-
-    @Argument(help: "File to output the OCR direct output in json to.")
-    var json: String
 
     @Argument(help: "File to output the completed .srt file to")
     var srt: String
+
+    @Option(help: "File to output the OCR direct output in json to (optional)")
+    var json: String?
 
     @Option(help: "Output image files of subtitles to directory (optional)")
     var imageDirectory: String?
@@ -31,10 +31,10 @@ struct macSup2Srt: ParsableCommand {
     @Option(wrappedValue: "en", help: "The input image language(s)")
     var language: String
 
-    @Flag(help: "Enable fast mode (less accurate).")
+    @Flag(help: "Enable fast mode (less accurate)")
     var fastMode = false
 
-    @Flag(help: "Enable language correction.")
+    @Flag(help: "Enable language correction")
     var languageCorrection = false
 
     // MARK: - Methods
@@ -153,15 +153,17 @@ struct macSup2Srt: ParsableCommand {
             subtitleIndex += 1
         }
 
-        // Convert subtitle data to JSON
-        let jsonData = try JSONSerialization.data(withJSONObject: subtitleDat,
-                                                  options: [.prettyPrinted, .sortedKeys])
-        let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
+        if let json = json {
+            // Convert subtitle data to JSON
+            let jsonData = try JSONSerialization.data(withJSONObject: subtitleDat,
+                                                      options: [.prettyPrinted, .sortedKeys])
+            let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
 
-        // Write JSON to file
-        try jsonString.write(to: URL(fileURLWithPath: json),
-                             atomically: true,
-                             encoding: .utf8)
+            // Write JSON to file
+            try jsonString.write(to: URL(fileURLWithPath: json),
+                                 atomically: true,
+                                 encoding: .utf8)
+        }
 
         // Encode subtitles to SRT file
         try SRT().encode(subtitles: srtFile,
