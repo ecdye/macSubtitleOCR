@@ -25,6 +25,9 @@ struct macSup2Srt: ParsableCommand {
     @Option(help: "File to output the OCR direct output in json to (optional)")
     var json: String?
 
+    @Option(help: "File to output the OCR direct output in json to (optional)")
+    var json: String?
+
     @Option(help: "Output image files of subtitles to directory (optional)")
     var imageDirectory: String?
 
@@ -46,6 +49,7 @@ struct macSup2Srt: ParsableCommand {
         var subtitleDat: [Any] = []
         var srtFile: [SrtSubtitle] = []
         var subtitleIndex = 1
+        var subtitles: [PGSSubtitle]
 
         // Split the language string into an array of languages
         let languages = language.split(separator: ",").map { String($0) }
@@ -62,25 +66,31 @@ struct macSup2Srt: ParsableCommand {
         } else {
             revision = VNRecognizeTextRequestRevision2
         }
-        
-        // MARK: - Usage Example
-        
-        let mkvParser = MKVParser()
-        // let filePath = "/path/to/your/file.mkv" // Replace with your MKV file path
-        
-        if mkvParser.openFile(filePath: sup) {
-            print("Yay, we opened the MKV file!")
-            mkvParser.seekToFirstSubtitleTrack()
-            mkvParser.closeFile()
-        } else {
-            print("Failed to open the MKV file.")
+
+        if sup.hasSuffix(".mkv") {
+            let mkvParser = MKVParser()
+
+            if mkvParser.openFile(filePath: sup) {
+                var trackNumber: Int?
+                guard let tracks = mkvParser.parseTracks() else { throw PGSError.invalidFormat } // TODO: Use relevant error
+                for track in tracks {
+                    print("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
+                    if track.codecId == "S_HDMV/PGS" {
+                        trackNumber = track.trackNumber
+                        break // TODO: Implement ability to extract all PGS tracks in file
+                    }
+                }
+                mkvParser.getSubtitleTrackData(trackNumber: trackNumber!, outPath: sup)
+                mkvParser.closeFile()
+            } else {
+                print("Failed to open the MKV file.")
+            }
         }
-        
-        
+
 
         // Initialize the decoder
         let PGS = PGS()
-        let subtitles = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: sup))
+        subtitles = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: sup).deletingPathExtension().appendingPathExtension("sup")) // Make sure we get the .sup file if we are doing an MKV
 
         for var subtitle in subtitles {
             if subtitle.imageWidth == 0 && subtitle.imageHeight == 0 {
