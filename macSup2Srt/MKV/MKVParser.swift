@@ -24,7 +24,6 @@ class MKVParser {
             fileHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
             eof = fileHandle!.seekToEndOfFile()
             fileHandle!.seek(toFileOffset: 0)
-            print("MKV file opened successfully")
             return true
         } catch {
             print("Error opening file: \(error)")
@@ -67,7 +66,7 @@ class MKVParser {
 
     func getSubtitleTrackData(trackNumber: Int, outPath: String) {
             if let trackData = extractTrackData(trackNumber: trackNumber) {
-                print("Found track data for track number \(trackNumber): \(trackData)")
+//                print("Found track data for track number \(trackNumber): \(trackData)")
                 do {
                     try (trackData as NSData).write(to: URL(fileURLWithPath: outPath).deletingPathExtension().appendingPathExtension("sup"))
                 } catch {
@@ -86,14 +85,14 @@ class MKVParser {
         // Step 1: Locate the Segment element
         if let (segmentSize, _) = findElement(withID: EBML.segmentID) as? (UInt64, UInt32) {
             let segmentEndOffset = fileHandle.offsetInFile + segmentSize
-            print("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset), EOF: \(eof?.description ?? "Nil")\n")
+//            print("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset), EOF: \(eof?.description ?? "Nil")\n")
             var trackData = Data()
 
             // Step 2: Parse Clusters within the Segment
             while fileHandle.offsetInFile < segmentEndOffset {
                 if let (clusterSize, _) = findElement(withID: EBML.cluster, avoidCluster: false) as? (UInt64, UInt32) {
                     let clusterEndOffset = fileHandle.offsetInFile + clusterSize
-                    print("Found Cluster, Size: \(clusterSize), End Offset: \(clusterEndOffset)\n")
+//                    print("Found Cluster, Size: \(clusterSize), End Offset: \(clusterEndOffset)\n")
 
                     // Step 3: Extract the cluster timestamp
                     guard let clusterTimestamp = extractClusterTimestamp() else {
@@ -101,11 +100,11 @@ class MKVParser {
                         continue
                     }
 
-                    print("Cluster Timestamp: \(clusterTimestamp)")
+//                    print("Cluster Timestamp: \(clusterTimestamp)")
 
                     // Step 4: Parse Blocks (SimpleBlock or Block) within each Cluster
                     while fileHandle.offsetInFile < clusterEndOffset {
-                        print("Looking for Block at Offset: \(fileHandle.offsetInFile)/\(clusterEndOffset)")
+//                        print("Looking for Block at Offset: \(fileHandle.offsetInFile)/\(clusterEndOffset)")
                         if let (blockSize, blockType) = findElement(withID: EBML.simpleBlock, EBML.blockGroup) as? (UInt64, UInt32) {
                             var blockStartOffset = fileHandle.offsetInFile
                             var blockSize = blockSize
@@ -122,7 +121,7 @@ class MKVParser {
                                     // Step 6: Calculate and encode the timestamp as 4 bytes in big-endian (PGS format)
                                     let absPTS = calcAbsPTSForPGS(clusterTimestamp, blockTimestamp, timestampScale)
                                     let pgsPTS = encodePTSForPGS(absPTS)
-                                    print("Encoded Timestamp: \(pgsPTS)")
+//                                    print("Encoded Timestamp: \(pgsPTS)")
 
                                     // Step 7: Read the block data and add needed PGS headers and timestamps
                                     let pgsHeader = Data([0x50, 0x47] + pgsPTS + [0x00, 0x00, 0x00, 0x00])
@@ -131,9 +130,8 @@ class MKVParser {
                                     var offset = 0
                                     while (offset + 3) <= raw.count {
                                         let segmentSize = min(Int(getUInt16BE(buffer: raw, offset: offset + 1) + 3), raw.count - offset)
-                                        let type = raw[offset]
-
-                                        print("Segment size \(segmentSize) at \(offset) type 0x\(String(format: "%02x", type))")
+//                                        let type = raw[offset]
+//                                        print("Segment size \(segmentSize) at \(offset) type 0x\(String(format: "%02x", type))")
 
                                         blockData.append(pgsHeader)
                                         blockData.append(raw.subdata(in: offset ..< segmentSize + offset))
@@ -143,8 +141,8 @@ class MKVParser {
                                     trackData.append(blockData)
                                 } else {
                                     // Skip this block if it's for a different track
-                                    print("Skipping Block at Offset: \(fileHandle.offsetInFile)/\(clusterEndOffset)")
-                                    print("Got Track Number: \(blockTrackNumber) looking for: \(trackNumber)\n")
+//                                    print("Skipping Block at Offset: \(fileHandle.offsetInFile)/\(clusterEndOffset)")
+//                                    print("Got Track Number: \(blockTrackNumber) looking for: \(trackNumber)\n")
                                     fileHandle.seek(toFileOffset: blockStartOffset + blockSize)
                                 }
                             }
@@ -190,20 +188,13 @@ class MKVParser {
 
             // If a Cluster header is encountered, seek back to the start of the Cluster
             if elementID == EBML.cluster && avoidCluster {
-                print("Encountered Cluster: seeking back to before the cluster header\n")
+//                print("Encountered Cluster: seeking back to before the cluster header\n")
                 fileHandle.seek(toFileOffset: elementOffset) // Seek back to before the Cluster header
                 return (nil, nil)
             }
 
             // If the element matches the target ID (or secondary ID), return its size
             if elementID == targetID || (tgtID2 != nil && elementID == tgtID2!) {
-                if elementID == EBML.simpleBlock {
-                    print("Got SimpleBlock")
-                } else if elementID == EBML.block {
-                    print("Got Block")
-                } else if elementID == EBML.blockGroup {
-                    print("Got BlockGroup")
-                }
                 return (elementSize, elementID)
             } else {
                 // Skip over the element's data by seeking to its end
@@ -245,9 +236,7 @@ class MKVParser {
 
     /// Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
     func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
-        print("Reading track Number")
-        let (trackNumber, lacing, timestamp) = parseBlockHeader(from: fileHandle)!
-        if lacing != nil, lacing != 0x00 { print("Lacing is not supported") }
+        let (trackNumber, _, timestamp) = parseBlockHeader(from: fileHandle)!
         return (trackNumber, timestamp)
     }
 
@@ -257,9 +246,9 @@ class MKVParser {
         let suffix = fileHandle.readData(ofLength: 1)
 
         let lacingFlag = (suffix[0] >> 1) & 0x03 // Bits 1 and 2 are the lacing type
-        print("Track number: \(trackNumber), Lacing type: \(lacingFlag)")
+//        print("Track number: \(trackNumber), Lacing type: \(lacingFlag)")
         if lacingFlag != 0x00 {
-            // Lacing is present, return the lacing type (1 for Xiph, 2 for Fixed, 3 for EBML lacing)
+            // Lacing is present, return the lacing type (1 for Xiph, 2 for Fixed, 3 for EBML lacing), currently unused
             return (trackNumber, lacingFlag, timestamp)
         } else {
             // No lacing

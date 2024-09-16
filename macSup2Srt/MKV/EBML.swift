@@ -36,52 +36,6 @@ enum EBML {
 
 // MARK: - EBML Parsing Helper Functions
 
-// Helper method to read a VINT (Variable Integer) from the file
-func readVINT2(from fileHandle: FileHandle) -> UInt64? {
-    // Read the first byte to determine the length of the VINT
-    guard let firstByte = fileHandle.readData(ofLength: 1).first else { return nil }
-
-    // Determine how many bytes are in the VINT based on the first byte
-    var value: UInt64 = 0
-    var length = 0
-    var mask: UInt8 = 0x80
-
-    // Determine the length of the VINT based on the number of leading zeros in the first byte
-    for i in 0 ..< 8 {
-        if firstByte & mask != 0 {
-            length = i + 1
-            break
-        }
-        mask >>= 1
-    }
-
-    // If length is still zero, the data is invalid
-    if length == 0 { return nil }
-
-    // Read the rest of the VINT based on the length
-    var vintBytes = [UInt8](repeating: 0, count: length)
-    vintBytes[0] = firstByte
-
-    // Read the remaining bytes (if any)
-    if length > 1 {
-        let remainingBytes = fileHandle.readData(ofLength: length - 1)
-        guard remainingBytes.count == length - 1 else { return nil }
-        for i in 0 ..< remainingBytes.count {
-            vintBytes[i + 1] = remainingBytes[i]
-        }
-    }
-
-    // Decode the VINT by combining the bytes
-    for i in 0 ..< length {
-        value = (value << 8) | UInt64(vintBytes[i])
-    }
-
-    // Remove the VINT length marker from the first byte
-    value -= (1 << (7 * length)) - 1
-
-    return value
-}
-
 //// Helper function to read variable-length integers (VINT) from MKV (up to 8 bytes)
 func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
     guard let firstByte = fileHandle.readData(ofLength: 1).first else {
@@ -95,10 +49,10 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
         length += 1
         mask >>= 1
     }
-    print("length: \(length)")
+//    print("length: \(length)")
 
-    // Extract the value'
-    print(String(format: "mask: 0x%08X", mask))
+    // Extract the value
+//    print(String(format: "mask: 0x%08X", mask))
     if mask - 1 == 0x0F {
         mask = 0xFF
     } else if (length == 1) && !unmodified {
@@ -106,24 +60,18 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
     } else {
         mask = mask - 1
     }
-    print(String(format: "Byte: 0x%08X", firstByte))
-    print(String(format: "Res: 0x%08X", firstByte & mask))
+//    print(String(format: "Byte: 0x%08X", firstByte))
+//    print(String(format: "Res: 0x%08X", firstByte & mask))
     var value = UInt64(firstByte & mask)
 
     if length > 1 {
         let data = fileHandle.readData(ofLength: Int(length - 1))
         for byte in data {
-//            print(String(format:"B4: 0x%02X", value))
-            // if value != 0 {
             value <<= 8
             value |= UInt64(byte)
-            // } else {
-            //       value = UInt64(byte)
-            // }
-//            print(String(format:"AF: 0x%02X", value))
         }
     }
-    print(String(format: "VINT: 0x%08X", value))
+//    print(String(format: "VINT: 0x%08X", value))
     return value
 }
 
@@ -136,28 +84,6 @@ func readBytes(from fileHandle: FileHandle, length: Int) -> Data? {
 func readEBMLElement(from fileHandle: FileHandle, unmodified: Bool = false) -> (elementID: UInt32, elementSize: UInt64) {
     let elementID = readVINT(from: fileHandle, unmodified: unmodified) // Read element ID
     let elementSize = readVINT(from: fileHandle, unmodified: true) // Read element size
-    print(String(format: "elementID: 0x%08X, elementSize: \(elementSize)", elementID))
+//    print(String(format: "elementID: 0x%08X, elementSize: \(elementSize)", elementID))
     return (UInt32(elementID), elementSize)
-//    if elementID ==  EBML.language || elementID == EBML.defaultDuration {
-//        let elementSize = readVINT(from: fileHandle, unmodified: true) // Read element size
-//        print(String(format:"elementID: 0x%08X, elementSize: \(elementSize)", elementID))
-//        return (UInt32(elementID), elementSize)
-//    } else {
-//        let elementSize = readVINT(from: fileHandle) // Read element size
-//        print(String(format:"elementID: 0x%08X, elementSize: \(elementSize)", elementID))
-//        return (UInt32(elementID), elementSize)
-//    }
 }
-
-// MARK: - Usage Example
-
-//
-// let mkvParser = MKVParser()
-// let filePath = "/path/to/your/file.mkv" // Replace with your MKV file path
-//
-// if mkvParser.openFile(filePath: filePath) {
-//    mkvParser.seekToFirstSubtitleTrack()
-//    mkvParser.closeFile()
-// } else {
-//    print("Failed to open the MKV file.")
-// }

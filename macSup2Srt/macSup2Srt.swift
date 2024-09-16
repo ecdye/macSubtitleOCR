@@ -25,9 +25,6 @@ struct macSup2Srt: ParsableCommand {
     @Option(help: "File to output the OCR direct output in json to (optional)")
     var json: String?
 
-    @Option(help: "File to output the OCR direct output in json to (optional)")
-    var json: String?
-
     @Option(help: "Output image files of subtitles to directory (optional)")
     var imageDirectory: String?
 
@@ -74,7 +71,7 @@ struct macSup2Srt: ParsableCommand {
                 var trackNumber: Int?
                 guard let tracks = mkvParser.parseTracks() else { throw PGSError.invalidFormat } // TODO: Use relevant error
                 for track in tracks {
-                    print("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
+//                    print("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
                     if track.codecId == "S_HDMV/PGS" {
                         trackNumber = track.trackNumber
                         break // TODO: Implement ability to extract all PGS tracks in file
