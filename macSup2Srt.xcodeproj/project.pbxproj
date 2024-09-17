@@ -113,7 +113,7 @@
 				};
 			};
 			buildConfigurationList = 8A7F7F652C859D6800ADF827 /* Build configuration list for PBXProject "macSup2Srt" */;
-			compatibilityVersion = "Xcode 15.0";
+			compatibilityVersion = "Xcode 13.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
