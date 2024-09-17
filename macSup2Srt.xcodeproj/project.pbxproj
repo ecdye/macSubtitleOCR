@@ -32,6 +32,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		8ABD3DC12C994974004A1509 /* .github */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = .github; sourceTree = "<group>"; };
 		8AEDFD062C9483D700BCEAB8 /* macSup2Srt */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = macSup2Srt; sourceTree = "<group>"; };
 		8AEDFD0F2C94843F00BCEAB8 /* tests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = tests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -51,6 +52,7 @@
 		8A7F7F612C859D6800ADF827 = {
 			isa = PBXGroup;
 			children = (
+				8ABD3DC12C994974004A1509 /* .github */,
 				8AEDFD062C9483D700BCEAB8 /* macSup2Srt */,
 				8AEDFD0F2C94843F00BCEAB8 /* tests */,
 				8AE9B7392C9408C200AB2BB5 /* CONTRIBUTING.md */,
@@ -86,6 +88,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				8ABD3DC12C994974004A1509 /* .github */,
 				8AEDFD062C9483D700BCEAB8 /* macSup2Srt */,
 				8AEDFD0F2C94843F00BCEAB8 /* tests */,
 			);
