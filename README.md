@@ -45,3 +45,4 @@ The binary image compare method used in projects like [SubtitleEdit](https://git
 ## Reference
 
 <https://blog.thescorpius.com/index.php/2017/07/15/presentation-graphic-stream-sup-files-bluray-subtitle-format/>
+<https://www.matroska.org/technical/elements.html>
