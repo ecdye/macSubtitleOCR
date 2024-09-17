@@ -1,9 +1,9 @@
 //
-//  RLE.swift
-//  macSup2Srt
+// RLE.swift
+// macSup2Srt
 //
-//  Created by Ethan Dye on 9/1/2024.
-//  Copyright © 2024 Ethan Dye. All rights reserved.
+// Created by Ethan Dye on 9/2/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
 import Foundation

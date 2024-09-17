@@ -21,6 +21,7 @@ Test your changes for clarity, concision, and correctness.
 
 Always write clean, modular and testable code.
 We use [SwiftFormat](https://github.com/nicklockwood/SwiftFormat) as a linter for our code, and as our coding guidelines.
+Run `swiftformat --lint .` to lint, `swiftformat .` to format.
 
 Pull requests descriptions should be as clear as possible and include a reference to all the issues that they address.
 

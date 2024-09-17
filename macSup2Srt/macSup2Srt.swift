@@ -1,20 +1,21 @@
 //
-//  macSup2Srt.swift
-//  macSup2Srt
+// macSup2Srt.swift
+// macSup2Srt
 //
-//  Created by Ethan Dye on 9/1/2024.
-//  Copyright © 2024 Ethan Dye. All rights reserved.
+// Created by Ethan Dye on 9/2/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
 import ArgumentParser
 import Cocoa
+import os
 import UniformTypeIdentifiers
 import Vision
 
-/// The main struct representing the macSup2Srt command-line tool.
+// The main struct representing the macSup2Srt command-line tool.
 @main
 struct macSup2Srt: ParsableCommand {
-    // MARK: - Arguments / Options
+    // MARK: - Properties
 
     @Argument(help: "Input .sup subtitle file")
     var sup: String
@@ -37,81 +38,70 @@ struct macSup2Srt: ParsableCommand {
     @Flag(help: "Enable language correction")
     var languageCorrection = false
 
-    // MARK: - Methods
+    @Flag(help: "Save extracted `.sup` file to disk (MKV input only)")
+    var saveSup: Bool = false
 
-    /// The main entry point of the command-line tool.
-    func run() throws {
-        // Set the text recognition mode
-        var recognitionLevel = VNRequestTextRecognitionLevel.accurate
-        var subtitleDat: [Any] = []
-        var srtFile: [SrtSubtitle] = []
-        var subtitleIndex = 1
-        var subtitles: [PGSSubtitle]
+    // MARK: - Entrypoint
 
-        // Split the language string into an array of languages
-        let languages = language.split(separator: ",").map { String($0) }
+    mutating func run() throws {
+        // Setup utilities
+        let logger = Logger(subsystem: "github.ecdye.macSup2Srt", category: "main")
+        let manager = FileManager.default
 
-        // Set the fast mode if applicable
-        if fastMode {
-            recognitionLevel = .fast
-        }
+        // Setup options
+        let inFile = self.sup
+        let revision = self.setOCRRevision()
+        let recognitionLevel = self.setOCRMode()
+        let languages = self.language.split(separator: ",").map { String($0) }
 
-        // Set the text recognition revision
-        var revision: Int
-        if #available(macOS 13, *) {
-            revision = VNRecognizeTextRequestRevision3
-        } else {
-            revision = VNRecognizeTextRequestRevision2
-        }
+        // Setup data variables
+        var subIndex = 1
+        var jsonStream: [Any] = []
+        var inSubStream: [PGSSubtitle]
+        var outSubStream: [SrtSubtitle] = []
 
-        if sup.hasSuffix(".mkv") {
-            let mkvParser = MKVParser()
-
-            if mkvParser.openFile(filePath: sup) {
-                var trackNumber: Int?
-                guard let tracks = mkvParser.parseTracks() else { throw PGSError.invalidFormat } // TODO: Use relevant error
-                for track in tracks {
-//                    print("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
-                    if track.codecId == "S_HDMV/PGS" {
-                        trackNumber = track.trackNumber
-                        break // TODO: Implement ability to extract all PGS tracks in file
-                    }
+        if self.sup.hasSuffix(".mkv") {
+            let mkvParser = try MKVParser(filePath: sup)
+            var trackNumber: Int?
+            guard let tracks = mkvParser.parseTracks() else { throw macSup2SrtError.invalidFormat }
+            for track in tracks {
+                logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
+                if track.codecId == "S_HDMV/PGS" {
+                    trackNumber = track.trackNumber
+                    break // TODO: Implement ability to extract all PGS tracks in file
                 }
-                mkvParser.getSubtitleTrackData(trackNumber: trackNumber!, outPath: sup)
-                mkvParser.closeFile()
-            } else {
-                print("Failed to open the MKV file.")
             }
+            self.sup = try mkvParser.getSubtitleTrackData(trackNumber: trackNumber!, outPath: self.sup)!
+            mkvParser.closeFile()
         }
 
         // Initialize the decoder
         let PGS = PGS()
-        subtitles = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: sup).deletingPathExtension().appendingPathExtension("sup")) // Make sure we get the .sup file if we are doing an MKV
+        inSubStream = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: self.sup))
 
-        for var subtitle in subtitles {
+        for var subtitle in inSubStream {
             if subtitle.imageWidth == 0 && subtitle.imageHeight == 0 {
-                continue // Ignore empty image
+                logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
+                continue
             }
+
             guard let subImage = PGS.createImage(from: &subtitle)
             else {
-                print("Could not create image from decoded data for index \(subtitleIndex)! Skipping...")
+                logger.info("Could not create image from decoded data for index \(subIndex)! Skipping...")
                 continue
             }
 
             // Save subtitle image as PNG if imageDirectory is provided
             if let imageDirectory = imageDirectory {
                 let outputDirectory = URL(fileURLWithPath: imageDirectory)
-                let manager = FileManager.default
                 do {
                     try manager.createDirectory(at: outputDirectory,
                                                 withIntermediateDirectories: false,
                                                 attributes: nil)
                 } catch CocoaError.fileWriteFileExists {
                     // Folder already existed
-                } catch {
-                    throw error
                 }
-                let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subtitleIndex).png")
+                let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subIndex).png")
 
                 try PGS.saveImageAsPNG(image: subImage, outputPath: pngPath)
             }
@@ -150,33 +140,33 @@ struct macSup2Srt: ParsableCommand {
                     }
                 }
 
-                let subtitleData: [String: Any] = ["image": subtitleIndex,
+                let subtitleData: [String: Any] = ["image": subIndex,
                                                    "lines": subtitleLines,
                                                    "text": subtitleText]
 
-                subtitleDat.append(subtitleData)
+                jsonStream.append(subtitleData)
 
-                let newSubtitle = SrtSubtitle(index: subtitleIndex,
+                let newSubtitle = SrtSubtitle(index: subIndex,
                                               startTime: subtitle.timestamp,
                                               endTime: subtitle.endTimestamp,
                                               text: subtitleText)
 
-                srtFile.append(newSubtitle)
+                outSubStream.append(newSubtitle)
             }
 
             request.recognitionLevel = recognitionLevel
-            request.usesLanguageCorrection = languageCorrection
+            request.usesLanguageCorrection = self.languageCorrection
             request.revision = revision
             request.recognitionLanguages = languages
 
             try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
 
-            subtitleIndex += 1
+            subIndex += 1
         }
 
         if let json = json {
             // Convert subtitle data to JSON
-            let jsonData = try JSONSerialization.data(withJSONObject: subtitleDat,
+            let jsonData = try JSONSerialization.data(withJSONObject: jsonStream,
                                                       options: [.prettyPrinted, .sortedKeys])
             let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
 
@@ -186,8 +176,33 @@ struct macSup2Srt: ParsableCommand {
                                  encoding: .utf8)
         }
 
+        if self.saveSup, inFile.hasSuffix(".mkv") {
+            try manager.moveItem(
+                at: URL(fileURLWithPath: self.sup),
+                to: URL(fileURLWithPath: inFile).deletingPathExtension().appendingPathExtension("sup")
+            )
+        }
+
         // Encode subtitles to SRT file
-        try SRT().encode(subtitles: srtFile,
-                         toFileAt: URL(fileURLWithPath: srt))
+        try SRT().encode(subtitles: outSubStream,
+                         toFileAt: URL(fileURLWithPath: self.srt))
+    }
+
+    // MARK: - Methods
+
+    private func setOCRMode() -> VNRequestTextRecognitionLevel {
+        if self.fastMode {
+            return VNRequestTextRecognitionLevel.fast
+        } else {
+            return VNRequestTextRecognitionLevel.accurate
+        }
+    }
+
+    private func setOCRRevision() -> Int {
+        if #available(macOS 13, *) {
+            return VNRecognizeTextRequestRevision3
+        } else {
+            return VNRecognizeTextRequestRevision2
+        }
     }
 }

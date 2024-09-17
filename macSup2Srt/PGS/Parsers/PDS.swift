@@ -1,52 +1,60 @@
 //
-//  PDS.swift
-//  macSup2Srt
+// PDS.swift
+// macSup2Srt
 //
-//  Created by Ethan Dye on 9/7/2024.
-//  Copyright © 2024 Ethan Dye. All rights reserved.
+// Created by Ethan Dye on 9/8/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
 import Foundation
 import simd
 
 public class PDS {
+    // MARK: - Properties
+
     private var id: UInt8 = 0
     private var version: UInt8 = 0
     private var palette = [UInt8](repeating: 0, count: 1024)
 
+    // MARK: - Lifecycle
+
     init(_ data: Data) throws {
         guard data.count >= 8 else {
-            throw PGSError.invalidFormat
+            throw macSup2SrtError.invalidFormat
         }
-        id = data[0]
-        version = data[1]
-        try parsePDS(data)
+        self.id = data[0]
+        self.version = data[1]
+        try self.parsePDS(data)
     }
 
+    // MARK: - Getters
+
     public func getID() -> UInt8 {
-        return id
+        return self.id
     }
 
     public func getVersion() -> UInt8 {
-        return version
+        return self.version
     }
 
     public func getPalette() -> [UInt8] {
-        return palette
+        return self.palette
     }
 
-    /// Parses the Palette Definition Segment (PDS) to extract the RGBA palette.
-    /// PDS structure:
-    ///   1 byte: Segment Type (0x16); already checked by the caller
-    ///   1 byte: Palette ID
-    ///   1 byte: Palette Version
-    ///   Followed by a series of palette entries:
-    ///       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
+    // MARK: - Parser
+
+    // Parses the Palette Definition Segment (PDS) to extract the RGBA palette.
+    // PDS structure:
+    //   1 byte: Segment Type (0x16); already checked by the caller
+    //   1 byte: Palette ID
+    //   1 byte: Palette Version
+    //   Followed by a series of palette entries:
+    //       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
     private func parsePDS(_ data: Data) throws {
         // Start reading after the first 2 bytes (Palette ID and Version)
         if (data.count - 2) % 5 != 0 {
             print("Invalid Palette Data Segment Length: \(data.count)")
-            throw PGSError.invalidFormat
+            throw macSup2SrtError.invalidFormat
         }
 
         var i = 2
@@ -58,13 +66,13 @@ public class PDS {
             let alpha = data[i + 4]
 
             // Convert YCrCb to RGB
-            let rgb = yCrCbToRGB(y: y, cr: cr, cb: cb)
+            let rgb = self.yCrCbToRGB(y: y, cr: cr, cb: cb)
 
             // Store RGBA values to palette table
-            palette[Int(index) * 4 + 0] = rgb.red
-            palette[Int(index) * 4 + 1] = rgb.green
-            palette[Int(index) * 4 + 2] = rgb.blue
-            palette[Int(index) * 4 + 3] = alpha
+            self.palette[Int(index) * 4 + 0] = rgb.red
+            self.palette[Int(index) * 4 + 1] = rgb.green
+            self.palette[Int(index) * 4 + 2] = rgb.blue
+            self.palette[Int(index) * 4 + 3] = alpha
             i += 5
         }
     }

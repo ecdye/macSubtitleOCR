@@ -57,15 +57,15 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "tests/test.sup"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "tests/test.json"
+            argument = "tests/testFiles/test.mkv"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "tests/test.srt"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "--json tests/test.json"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
