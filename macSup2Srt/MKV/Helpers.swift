@@ -1,9 +1,9 @@
 //
-//  Helpers.swift
-//  macSup2Srt
+// Helpers.swift
+// macSup2Srt
 //
-//  Created by Ethan Dye on 9/15/24.
-//  Copyright © 2024 Ethan Dye. All rights reserved.
+// Copyright (c) 2024 Ethan Dye
+// Created by Ethan Dye on 9/16/24.
 //
 
 import Foundation
@@ -12,7 +12,7 @@ public func getUInt16BE(buffer: Data, offset: Int) -> UInt16 {
     return (UInt16(buffer[offset]) << 8) | UInt16(buffer[offset + 1])
 }
 
-/// Function to read a fixed length number of bytes and convert in into a (Un)signed integer
+// Function to read a fixed length number of bytes and convert in into a (Un)signed integer
 public func readFixedLengthNumber(fileHandle: FileHandle, length: Int, signed: Bool = false) -> Int64 {
     let data = fileHandle.readData(ofLength: length)
     let pos = 0
@@ -32,7 +32,7 @@ public func readFixedLengthNumber(fileHandle: FileHandle, length: Int, signed: B
     return result
 }
 
-/// Encode the absolute timestamp as 4 bytes in big-endian format for PGS
+// Encode the absolute timestamp as 4 bytes in big-endian format for PGS
 public func encodePTSForPGS(_ timestamp: Int64) -> [UInt8] {
     let timestamp = UInt32(timestamp) // Convert to unsigned 32-bit value
     return [
@@ -43,8 +43,8 @@ public func encodePTSForPGS(_ timestamp: Int64) -> [UInt8] {
     ]
 }
 
-/// Calculate the absolute timestamp with 90 kHz accuracy for PGS format
+// Calculate the absolute timestamp with 90 kHz accuracy for PGS format
 public func calcAbsPTSForPGS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64, _ timestampScale: Double) -> Int64 {
     // The block timestamp is relative, so we add it to the cluster timestamp
-    return Int64(((Double(clusterTimestamp) + Double(blockTimestamp)) / timestampScale) * 90_000_000)
+    return Int64(((Double(clusterTimestamp) + Double(blockTimestamp)) / timestampScale) * 90000000)
 }

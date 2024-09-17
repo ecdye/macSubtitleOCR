@@ -1,26 +1,21 @@
 //
-//  SRT.swift
-//  macSup2Srt
+// SRT.swift
+// macSup2Srt
 //
-//  Created by Ethan Dye on 9/1/2024.
-//  Copyright © 2024 Ethan Dye. All rights reserved.
+// Copyright (c) 2024 Ethan Dye
+// Created by Ethan Dye on 9/2/24.
 //
 
 import Foundation
 
-public struct SrtSubtitle {
-    public var index: Int
-    public var startTime: TimeInterval
-    public var endTime: TimeInterval
-    public var text: String
-}
-
 public class SRT {
     public init() {}
 
+    // MARK: Functions
+
     // MARK: - Decoding
 
-    /// Decodes subtitles from a string containing the SRT content
+    // Decodes subtitles from a string containing the SRT content
     public func decode(from content: String) throws -> [SrtSubtitle] {
         var subtitles = [SrtSubtitle]()
 
@@ -62,13 +57,13 @@ public class SRT {
         return subtitles
     }
 
-    /// Decodes subtitles from an SRT file at the given URL
+    // Decodes subtitles from an SRT file at the given URL
     public func decode(fromFileAt url: URL) throws -> [SrtSubtitle] {
         do {
             // Read the file content into a string
             let content = try String(contentsOf: url, encoding: .utf8)
             // Decode the content into subtitles
-            return try decode(from: content)
+            return try self.decode(from: content)
         } catch {
             throw SRTError.fileReadError
         }
@@ -76,13 +71,13 @@ public class SRT {
 
     // MARK: - Re-Encoding
 
-    /// Re-encodes an array of `Subtitle` objects into SRT format and returns it as a string
+    // Re-encodes an array of `Subtitle` objects into SRT format and returns it as a string
     public func encode(subtitles: [SrtSubtitle]) -> String {
         var srtContent = ""
 
         for subtitle in subtitles {
-            let startTime = formatTime(subtitle.startTime)
-            let endTime = formatTime(subtitle.endTime)
+            let startTime = self.formatTime(subtitle.startTime)
+            let endTime = self.formatTime(subtitle.endTime)
 
             srtContent += "\(subtitle.index)\n"
             srtContent += "\(startTime) --> \(endTime)\n"
@@ -92,9 +87,9 @@ public class SRT {
         return srtContent
     }
 
-    /// Re-encodes an array of `Subtitle` objects into SRT format and writes it to a file at the given URL
+    // Re-encodes an array of `Subtitle` objects into SRT format and writes it to a file at the given URL
     public func encode(subtitles: [SrtSubtitle], toFileAt url: URL) throws {
-        let srtContent = encode(subtitles: subtitles)
+        let srtContent = self.encode(subtitles: subtitles)
 
         do {
             try srtContent.write(to: url, atomically: true, encoding: .utf8)

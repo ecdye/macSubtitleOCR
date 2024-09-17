@@ -32,6 +32,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		8A125CE42C99321200A772A9 /* .github */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = .github; sourceTree = "<group>"; };
 		8AEDFD062C9483D700BCEAB8 /* macSup2Srt */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = macSup2Srt; sourceTree = "<group>"; };
 		8AEDFD0F2C94843F00BCEAB8 /* tests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = tests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -51,6 +52,7 @@
 		8A7F7F612C859D6800ADF827 = {
 			isa = PBXGroup;
 			children = (
+				8A125CE42C99321200A772A9 /* .github */,
 				8AEDFD062C9483D700BCEAB8 /* macSup2Srt */,
 				8AEDFD0F2C94843F00BCEAB8 /* tests */,
 				8AE9B7392C9408C200AB2BB5 /* CONTRIBUTING.md */,
@@ -86,6 +88,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				8A125CE42C99321200A772A9 /* .github */,
 				8AEDFD062C9483D700BCEAB8 /* macSup2Srt */,
 				8AEDFD0F2C94843F00BCEAB8 /* tests */,
 			);
@@ -149,10 +152,10 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
@@ -161,10 +164,10 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 6.0;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
@@ -172,8 +175,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				ENABLE_TESTABILITY = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ecdye.macSup2Srt;
+				PRODUCT_BUNDLE_IDENTIFIER = github.ecdye.macSup2Srt;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 			};
@@ -183,8 +187,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
+				ENABLE_TESTABILITY = NO;
 				MACOSX_DEPLOYMENT_TARGET = 13.5;
-				PRODUCT_BUNDLE_IDENTIFIER = com.ecdye.macSup2Srt;
+				PRODUCT_BUNDLE_IDENTIFIER = github.ecdye.macSup2Srt;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 			};

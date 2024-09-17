@@ -1,9 +1,9 @@
 //
-//  PGS.swift
-//  macSup2Srt
+// PGS.swift
+// macSup2Srt
 //
-//  Created by Ethan Dye on 9/1/2024.
-//  Copyright © 2024 Ethan Dye. All rights reserved.
+// Copyright (c) 2024 Ethan Dye
+// Created by Ethan Dye on 9/2/24.
 //
 
 import CoreGraphics
@@ -11,21 +11,14 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-public struct PGSSubtitle {
-    public var timestamp: TimeInterval = 0
-    public var imageWidth: Int = 0
-    public var imageHeight: Int = 0
-    public var imageData: Data = .init()
-    public var imagePalette: [UInt8] = []
-    public var endTimestamp: TimeInterval = 0
-}
-
 public class PGS {
+    // MARK: - Lifecycle
+
     public init() {}
 
-    // MARK: - Decoding .sup File
+    // MARK: - Functions
 
-    /// Parses a `.sup` file and returns an array of `PGSSubtitle` objects
+    // Parses a `.sup` file and returns an array of `PGSSubtitle` objects
     public func parseSupFile(fromFileAt url: URL) throws -> [PGSSubtitle] {
         let fileHandle = try FileHandle(forReadingFrom: url)
         defer { fileHandle.closeFile() }
@@ -45,13 +38,98 @@ public class PGS {
             // Find the next timestamp to use as our end timestamp
             while subtitle.endTimestamp <= subtitle.timestamp {
                 headerData = fileHandle.readData(ofLength: 13)
-                subtitle.endTimestamp = parseTimestamp(headerData)
+                subtitle.endTimestamp = self.parseTimestamp(headerData)
             }
 
             subtitles.append(subtitle)
         }
 
         return subtitles
+    }
+
+    // Converts the RGBA data to a CGImage
+    public func createImage(from subtitle: inout PGSSubtitle) -> CGImage? {
+        // Convert the image data to RGBA format using the palette
+        let rgbaData = self.imageDataToRGBA(&subtitle)
+
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big
+            .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        guard let provider = CGDataProvider(data: rgbaData as CFData) else {
+            return nil
+        }
+
+        return CGImage(width: subtitle.imageWidth,
+                       height: subtitle.imageHeight,
+                       bitsPerComponent: 8,
+                       bitsPerPixel: 32,
+                       bytesPerRow: subtitle.imageWidth * 4, // 4 bytes per pixel (RGBA)
+                       space: colorSpace,
+                       bitmapInfo: bitmapInfo,
+                       provider: provider,
+                       decode: nil,
+                       shouldInterpolate: false,
+                       intent: .defaultIntent)
+    }
+
+    public func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
+        guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL, UTType.png.identifier as CFString, 1, nil)
+        else {
+            throw macSup2SrtError.fileReadError
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+
+        if !CGImageDestinationFinalize(destination) {
+            throw macSup2SrtError.fileReadError
+        }
+    }
+
+    // MARK: - Methods
+
+    private func parseTimestamp(_ data: Data) -> TimeInterval {
+        let pts = (Int(data[2]) << 24 | Int(data[3]) << 16 | Int(data[4]) << 8 | Int(data[5]))
+        return TimeInterval(pts) / 90000.0 // 90 kHz clock
+    }
+
+    // Parses the Presentation Composition Segment (PCS) to extract the height and width of the video.
+    // PCS structure (simplified):
+    //   0x14: Segment Type; already checked by the caller
+    //   2 bytes: Width
+    //   2 bytes: Height
+    private func parsePCS(_ data: Data) -> (width: Int, height: Int) {
+        let width = Int(data[0]) << 8 | Int(data[1])
+        let height = Int(data[2]) << 8 | Int(data[3])
+
+        return (width: width, height: height)
+    }
+
+    // Converts the image data to RGBA format using the palette
+    private func imageDataToRGBA(_ subtitle: inout PGSSubtitle) -> Data {
+        let bytesPerPixel = 4
+        let numColors = 256 // There are only 256 possible palette entries in a PGS Subtitle
+        var rgbaData = Data(capacity: subtitle.imageWidth * subtitle.imageHeight * bytesPerPixel)
+
+        for y in 0 ..< subtitle.imageHeight {
+            for x in 0 ..< subtitle.imageWidth {
+                let index = Int(y) * subtitle.imageWidth + Int(x)
+                let colorIndex = Int(subtitle.imageData[index])
+
+                guard colorIndex < numColors else {
+                    continue
+                }
+
+                let paletteOffset = colorIndex * 4
+                rgbaData.append(contentsOf: [
+                    subtitle.imagePalette[paletteOffset],
+                    subtitle.imagePalette[paletteOffset + 1],
+                    subtitle.imagePalette[paletteOffset + 2],
+                    subtitle.imagePalette[paletteOffset + 3],
+                ])
+            }
+        }
+
+        return rgbaData
     }
 
     private func parseNextSubtitle(fileHandle: FileHandle, headerData: inout Data) throws -> PGSSubtitle? {
@@ -105,93 +183,9 @@ public class PGS {
             if p1, p2 {
                 p1 = false
                 p2 = false
-                subtitle.timestamp = parseTimestamp(headerData)
+                subtitle.timestamp = self.parseTimestamp(headerData)
                 return subtitle
             }
-        }
-    }
-
-    private func parseTimestamp(_ data: Data) -> TimeInterval {
-        let pts =
-            (Int(data[2]) << 24 | Int(data[3]) << 16 | Int(data[4]) << 8
-                | Int(data[5]))
-        return TimeInterval(pts) / 90000.0 // 90 kHz clock
-    }
-
-    // MARK: - Segment Parsers
-
-    /// Parses the Presentation Composition Segment (PCS) to extract the height and width of the video.
-    /// PCS structure (simplified):
-    ///   0x14: Segment Type; already checked by the caller
-    ///   2 bytes: Width
-    ///   2 bytes: Height
-    private func parsePCS(_ data: Data) -> (width: Int, height: Int) {
-        let width = Int(data[0]) << 8 | Int(data[1])
-        let height = Int(data[2]) << 8 | Int(data[3])
-
-        return (width: width, height: height)
-    }
-
-    /// Converts the RGBA data to a CGImage
-    public func createImage(from subtitle: inout PGSSubtitle) -> CGImage? {
-        // Convert the image data to RGBA format using the palette
-        let rgbaData = imageDataToRGBA(&subtitle)
-
-        let bitmapInfo = CGBitmapInfo.byteOrder32Big
-            .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-
-        guard let provider = CGDataProvider(data: rgbaData as CFData) else {
-            return nil
-        }
-
-        return CGImage(width: subtitle.imageWidth,
-                       height: subtitle.imageHeight,
-                       bitsPerComponent: 8,
-                       bitsPerPixel: 32,
-                       bytesPerRow: subtitle.imageWidth * 4, // 4 bytes per pixel (RGBA)
-                       space: colorSpace,
-                       bitmapInfo: bitmapInfo,
-                       provider: provider,
-                       decode: nil,
-                       shouldInterpolate: false,
-                       intent: .defaultIntent)
-    }
-
-    /// Converts the image data to RGBA format using the palette
-    private func imageDataToRGBA(_ subtitle: inout PGSSubtitle) -> Data {
-        let bytesPerPixel = 4
-        let numColors = 256 // There are only 256 possible palette entries in a PGS Subtitle
-        var rgbaData = Data(capacity: subtitle.imageWidth * subtitle.imageHeight * bytesPerPixel)
-
-        for y in 0 ..< subtitle.imageHeight {
-            for x in 0 ..< subtitle.imageWidth {
-                let index = Int(y) * subtitle.imageWidth + Int(x)
-                let colorIndex = Int(subtitle.imageData[index])
-
-                guard colorIndex < numColors else {
-                    continue
-                }
-
-                let paletteOffset = colorIndex * 4
-                rgbaData.append(contentsOf: [subtitle.imagePalette[paletteOffset], subtitle.imagePalette[paletteOffset + 1],
-                                             subtitle.imagePalette[paletteOffset + 2], subtitle.imagePalette[paletteOffset + 3]])
-            }
-        }
-
-        return rgbaData
-    }
-
-    public func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
-        guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL,
-                                                                UTType.png.identifier as CFString, 1, nil)
-        else {
-            throw PGSError.fileReadError
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-
-        if !CGImageDestinationFinalize(destination) {
-            throw PGSError.fileReadError
         }
     }
 }
