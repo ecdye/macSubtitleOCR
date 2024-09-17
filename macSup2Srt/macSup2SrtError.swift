@@ -2,8 +2,8 @@
 // macSup2SrtError.swift
 // macSup2Srt
 //
-// Copyright (c) 2024 Ethan Dye
-// Created by Ethan Dye on 9/12/24.
+// Created by Ethan Dye on 9/16/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
 public enum macSup2SrtError: Error {

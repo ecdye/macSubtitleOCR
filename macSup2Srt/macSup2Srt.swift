@@ -2,8 +2,8 @@
 // macSup2Srt.swift
 // macSup2Srt
 //
-// Copyright (c) 2024 Ethan Dye
 // Created by Ethan Dye on 9/2/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
 import ArgumentParser

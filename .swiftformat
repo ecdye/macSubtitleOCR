@@ -36,7 +36,7 @@
 --generictypes 
 --groupedextension "MARK: %c"
 --guardelse auto
---header "\n{file}\nmacSup2Srt\n\nCopyright (c) {year} {author.name}\nCreated by {author.name} on {created}.\n"
+--header "\n{file}\nmacSup2Srt\n\nCreated by {author.name} on {created}.\nCopyright © {year} {author.name}. All rights reserved.\n"
 --hexgrouping 4,8
 --hexliteralcase uppercase
 --ifdef indent
