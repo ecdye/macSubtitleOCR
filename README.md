@@ -19,6 +19,9 @@ For more information on accuracy, see [Accuracy](#accuracy) below.
 
 ### Building
 
+> [!IMPORTANT]
+> This project requires Xcode 16 to work properly due to breaking changes in the project format.
+
 To get started with macSup2Srt, clone the repository and then build the project with Xcode.
 
 ``` shell

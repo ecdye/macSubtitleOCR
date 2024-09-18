@@ -27,7 +27,7 @@ jobs:
     #   - https://gh.io/supported-runners-and-hardware-resources
     #   - https://gh.io/using-larger-runners (GitHub.com only)
     # Consider using larger runners or machines with greater resources for possible analysis time improvements.
-    runs-on: 'macos-latest'
+    runs-on: macos-latest
     permissions:
       security-events: write
       packages: read
@@ -49,9 +49,14 @@ jobs:
         # For more details on CodeQL's query packs, refer to: https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
         # queries: security-extended,security-and-quality
     - name: Build with Xcode
-      shell: bash
-      run: |
-        xcodebuild -scheme macSup2Srt build
+      uses: mxcl/xcodebuild@v3
+      with:
+        xcode: 16.0
+        platform: macOS
+        arch: arm64
+        action: build
+        scheme: macSup2Srt
+        configuration: release
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
