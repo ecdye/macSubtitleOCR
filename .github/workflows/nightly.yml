@@ -24,7 +24,7 @@ jobs:
         configuration: release
 
     - name: Archive
-      run: tar cvJf ~/macSup2Srt.tar.xz -C build/macSup2Srt/Build/Products/Release/macSup2Srt
+      run: tar cvJf ~/macSup2Srt.tar.xz -C build/macSup2Srt/Build/Products/Release macSup2Srt
 
     - name: Publish
       uses: softprops/action-gh-release@v2
