@@ -1,5 +1,6 @@
 # macSup2Srt
 [![License](https://img.shields.io/github/license/ecdye/macSup2Srt)](https://github.com/ecdye/macSup2Srt/blob/main/LICENSE.md)
+[![CodeQL](https://github.com/ecdye/macSup2Srt/actions/workflows/codeql.yml/badge.svg)](https://github.com/ecdye/macSup2Srt/actions/workflows/codeql.yml)
 
 
 ## Overview

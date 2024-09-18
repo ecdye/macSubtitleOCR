@@ -1,0 +1,37 @@
+name: Nightly Build
+on:
+  workflow_dispatch: # Allows manual trigger
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Build with Xcode
+      uses: mxcl/xcodebuild@v3
+      with:
+        xcode: 16.0
+        platform: macOS
+        arch: arm64
+        action: build
+        scheme: macSup2Srt
+        configuration: release
+
+    - name: Archive
+      run: tar cvJf ~/macSup2Srt.tar.xz -C build/macSup2Srt/Build/Products/Release/macSup2Srt
+
+    - name: Publish
+      uses: softprops/action-gh-release@v2
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        name: nightly
+        tag_name: nightly
+        files: ~/macSup2Srt.tar.xz
+        prerelease: true
