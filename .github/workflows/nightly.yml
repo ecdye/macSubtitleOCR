@@ -25,7 +25,7 @@ jobs:
         configuration: release
 
     - name: Archive
-      run: tar cvJf ~/macSup2Srt.tar.xz -C /Users/runner/Library/Developer/Xcode/DerivedData/macSup2Srt-clehdloglthcnmakvqindwnlospi/Build/Products/Release macSup2Srt
+      run: tar cvJf ~/macSup2Srt.tar.xz -C /Users/runner/Library/Developer/Xcode/DerivedData/macSup2Srt-ceucuocfsoahbsgjtnfgwrlnyxsv/Build/Products/Release macSup2Srt
 
     - name: Publish
       uses: softprops/action-gh-release@v2
