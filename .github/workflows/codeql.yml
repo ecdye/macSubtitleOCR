@@ -51,9 +51,12 @@ jobs:
     - name: Build with Xcode
       uses: mxcl/xcodebuild@v3
       with:
-        xcode: 16
+        xcode: 16.0
         platform: macOS
+        arch: arm64
         action: build
+        scheme: macSup2Srt
+        configuration: release
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
