@@ -168,7 +168,6 @@
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				SYMROOT = "";
 			};
 			name = Debug;
 		};
@@ -181,7 +180,6 @@
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
-				SYMROOT = "";
 			};
 			name = Release;
 		};
