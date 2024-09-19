@@ -31,7 +31,9 @@ jobs:
       run: xcrun swift test
 
     - name: Periphery
-      run: periphery scan --skip-build --index-store-path .build/debug/index/store
+      run: |
+        brew install peripheryapp/periphery/periphery
+        periphery scan --skip-build --index-store-path .build/debug/index/store
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4
