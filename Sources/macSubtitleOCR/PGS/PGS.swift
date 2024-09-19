@@ -12,10 +12,6 @@ import ImageIO
 import UniformTypeIdentifiers
 
 public class PGS {
-    // MARK: - Lifecycle
-
-    public init() {}
-
     // MARK: - Functions
 
     // Parses a `.sup` file and returns an array of `PGSSubtitle` objects
@@ -38,7 +34,7 @@ public class PGS {
             // Find the next timestamp to use as our end timestamp
             while subtitle.endTimestamp <= subtitle.timestamp {
                 headerData = fileHandle.readData(ofLength: 13)
-                subtitle.endTimestamp = self.parseTimestamp(headerData)
+                subtitle.endTimestamp = parseTimestamp(headerData)
             }
 
             subtitles.append(subtitle)
@@ -50,7 +46,7 @@ public class PGS {
     // Converts the RGBA data to a CGImage
     public func createImage(from subtitle: inout PGSSubtitle) -> CGImage? {
         // Convert the image data to RGBA format using the palette
-        let rgbaData = self.imageDataToRGBA(&subtitle)
+        let rgbaData = imageDataToRGBA(&subtitle)
 
         let bitmapInfo = CGBitmapInfo.byteOrder32Big
             .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
@@ -183,7 +179,7 @@ public class PGS {
             if p1, p2 {
                 p1 = false
                 p2 = false
-                subtitle.timestamp = self.parseTimestamp(headerData)
+                subtitle.timestamp = parseTimestamp(headerData)
                 return subtitle
             }
         }

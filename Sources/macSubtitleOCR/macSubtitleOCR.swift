@@ -49,10 +49,10 @@ struct macSubtitleOCR: ParsableCommand {
         let manager = FileManager.default
 
         // Setup options
-        let inFile = self.sup
-        let revision = self.setOCRRevision()
-        let recognitionLevel = self.setOCRMode()
-        let languages = self.language.split(separator: ",").map { String($0) }
+        let inFile = sup
+        let revision = setOCRRevision()
+        let recognitionLevel = setOCRMode()
+        let languages = language.split(separator: ",").map { String($0) }
 
         // Setup data variables
         var subIndex = 1
@@ -60,7 +60,7 @@ struct macSubtitleOCR: ParsableCommand {
         var inSubStream: [PGSSubtitle]
         var outSubStream: [SrtSubtitle] = []
 
-        if self.sup.hasSuffix(".mkv") {
+        if sup.hasSuffix(".mkv") {
             let mkvParser = try MKVParser(filePath: sup)
             var trackNumber: Int?
             guard let tracks = mkvParser.parseTracks() else { throw macSubtitleOCRError.invalidFormat }
@@ -71,16 +71,16 @@ struct macSubtitleOCR: ParsableCommand {
                     break // TODO: Implement ability to extract all PGS tracks in file
                 }
             }
-            self.sup = try mkvParser.getSubtitleTrackData(trackNumber: trackNumber!, outPath: self.sup)!
+            sup = try mkvParser.getSubtitleTrackData(trackNumber: trackNumber!, outPath: sup)!
             mkvParser.closeFile()
         }
 
         // Initialize the decoder
         let PGS = PGS()
-        inSubStream = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: self.sup))
+        inSubStream = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: sup))
 
         for var subtitle in inSubStream {
-            if subtitle.imageWidth == 0 && subtitle.imageHeight == 0 {
+            if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
                 logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
                 continue
             }
@@ -92,7 +92,7 @@ struct macSubtitleOCR: ParsableCommand {
             }
 
             // Save subtitle image as PNG if imageDirectory is provided
-            if let imageDirectory = imageDirectory {
+            if let imageDirectory {
                 let outputDirectory = URL(fileURLWithPath: imageDirectory)
                 do {
                     try manager.createDirectory(at: outputDirectory,
@@ -124,13 +124,14 @@ struct macSubtitleOCR: ParsableCommand {
                                                             subtitle.imageWidth,
                                                             subtitle.imageHeight)
 
-                    let line: [String: Any] = ["text": string,
-                                               "confidence": confidence,
-                                               "x": Int(rect.minX),
-                                               "width": Int(rect.size.width),
-                                               "y": Int(CGFloat(subtitle.imageHeight) - rect.minY - rect
-                                                   .size.height),
-                                               "height": Int(rect.size.height)]
+                    let line: [String: Any] = [
+                        "text": string,
+                        "confidence": confidence,
+                        "x": Int(rect.minX),
+                        "width": Int(rect.size.width),
+                        "y": Int(CGFloat(subtitle.imageHeight) - rect.minY - rect.size.height),
+                        "height": Int(rect.size.height),
+                    ]
 
                     subtitleLines.append(line)
                     subtitleText += string
@@ -140,9 +141,11 @@ struct macSubtitleOCR: ParsableCommand {
                     }
                 }
 
-                let subtitleData: [String: Any] = ["image": subIndex,
-                                                   "lines": subtitleLines,
-                                                   "text": subtitleText]
+                let subtitleData: [String: Any] = [
+                    "image": subIndex,
+                    "lines": subtitleLines,
+                    "text": subtitleText,
+                ]
 
                 jsonStream.append(subtitleData)
 
@@ -155,7 +158,7 @@ struct macSubtitleOCR: ParsableCommand {
             }
 
             request.recognitionLevel = recognitionLevel
-            request.usesLanguageCorrection = self.languageCorrection
+            request.usesLanguageCorrection = languageCorrection
             request.revision = revision
             request.recognitionLanguages = languages
 
@@ -164,10 +167,9 @@ struct macSubtitleOCR: ParsableCommand {
             subIndex += 1
         }
 
-        if let json = json {
+        if let json {
             // Convert subtitle data to JSON
-            let jsonData = try JSONSerialization.data(withJSONObject: jsonStream,
-                                                      options: [.prettyPrinted, .sortedKeys])
+            let jsonData = try JSONSerialization.data(withJSONObject: jsonStream, options: [.prettyPrinted, .sortedKeys])
             let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
 
             // Write JSON to file
@@ -176,33 +178,32 @@ struct macSubtitleOCR: ParsableCommand {
                                  encoding: .utf8)
         }
 
-        if self.saveSup, inFile.hasSuffix(".mkv") {
+        if saveSup, inFile.hasSuffix(".mkv") {
             try manager.moveItem(
-                at: URL(fileURLWithPath: self.sup),
-                to: URL(fileURLWithPath: inFile).deletingPathExtension().appendingPathExtension("sup")
-            )
+                at: URL(fileURLWithPath: sup),
+                to: URL(fileURLWithPath: inFile).deletingPathExtension().appendingPathExtension("sup"))
         }
 
         // Encode subtitles to SRT file
         try SRT().encode(subtitles: outSubStream,
-                         toFileAt: URL(fileURLWithPath: self.srt))
+                         toFileAt: URL(fileURLWithPath: srt))
     }
 
     // MARK: - Methods
 
     private func setOCRMode() -> VNRequestTextRecognitionLevel {
-        if self.fastMode {
-            return VNRequestTextRecognitionLevel.fast
+        if fastMode {
+            VNRequestTextRecognitionLevel.fast
         } else {
-            return VNRequestTextRecognitionLevel.accurate
+            VNRequestTextRecognitionLevel.accurate
         }
     }
 
     private func setOCRRevision() -> Int {
         if #available(macOS 13, *) {
-            return VNRecognizeTextRequestRevision3
+            VNRecognizeTextRequestRevision3
         } else {
-            return VNRecognizeTextRequestRevision2
+            VNRecognizeTextRequestRevision2
         }
     }
 }

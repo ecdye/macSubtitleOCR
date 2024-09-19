@@ -11,14 +11,13 @@
 --callsiteparen default
 --categorymark "MARK: %c"
 --classthreshold 0
---closingparen balanced
+--closingparen same-line
 --closurevoid remove
 --commas always
 --complexattrs preserve
 --computedvarattrs preserve
 --condassignment after-property
 --conflictmarkers reject
---dateformat system
 --decimalgrouping none
 --doccomments before-declarations
 --elseposition same-line
@@ -57,7 +56,6 @@
 --nilinit remove
 --noncomplexattrs
 --nospaceoperators
---nowrapoperators
 --octalgrouping none
 --onelineforeach ignore
 --operatorfunc spaced
@@ -66,8 +64,6 @@
 --patternlet hoist
 --ranges spaced
 --redundanttype infer-locals-only
---self insert
---selfrequired
 --semicolons never
 --shortoptionals except-properties
 --smarttabs enabled
@@ -75,10 +71,9 @@
 --storedvarattrs preserve
 --stripunusedargs always
 --structthreshold 0
---swiftversion 5
+--swiftversion 6
 --tabwidth unspecified
 --throwcapturing
---timezone system
 --trailingclosures
 --trimwhitespace always
 --typeattributes preserve
@@ -86,14 +81,9 @@
 --typedelimiter space-after
 --typemark "MARK: - %t"
 --voidtype void
---wraparguments preserve
---wrapcollections preserve
---wrapconditions preserve
---wrapeffects preserve
 --wrapenumcases always
 --wrapparameters after-first
---wrapreturntype preserve
+--wrapcollections before-first
 --wrapternary default
 --wraptypealiases preserve
---xcodeindentation disabled
 --yodaswap always

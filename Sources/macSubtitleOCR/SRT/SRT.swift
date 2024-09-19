@@ -9,11 +9,7 @@
 import Foundation
 
 public class SRT {
-    public init() {}
-
-    // MARK: Functions
-
-    // MARK: - Decoding
+    // MARK: - Functions
 
     // Decodes subtitles from a string containing the SRT content
     public func decode(from content: String) throws -> [SrtSubtitle] {
@@ -63,7 +59,7 @@ public class SRT {
             // Read the file content into a string
             let content = try String(contentsOf: url, encoding: .utf8)
             // Decode the content into subtitles
-            return try self.decode(from: content)
+            return try decode(from: content)
         } catch {
             throw SRTError.fileReadError
         }
@@ -76,8 +72,8 @@ public class SRT {
         var srtContent = ""
 
         for subtitle in subtitles {
-            let startTime = self.formatTime(subtitle.startTime)
-            let endTime = self.formatTime(subtitle.endTime)
+            let startTime = formatTime(subtitle.startTime)
+            let endTime = formatTime(subtitle.endTime)
 
             srtContent += "\(subtitle.index)\n"
             srtContent += "\(startTime) --> \(endTime)\n"
@@ -89,7 +85,7 @@ public class SRT {
 
     // Re-encodes an array of `Subtitle` objects into SRT format and writes it to a file at the given URL
     public func encode(subtitles: [SrtSubtitle], toFileAt url: URL) throws {
-        let srtContent = self.encode(subtitles: subtitles)
+        let srtContent = encode(subtitles: subtitles)
 
         do {
             try srtContent.write(to: url, atomically: true, encoding: .utf8)

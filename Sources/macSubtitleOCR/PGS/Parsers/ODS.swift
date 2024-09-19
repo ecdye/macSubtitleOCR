@@ -22,40 +22,40 @@ public class ODS {
     // MARK: - Lifecycle
 
     init(_ data: Data) throws {
-        (self.objectWidth, self.objectHeight, self.imageData) = try self.parseODS(data)
-        self.objectID = 0
-        self.version = 0
-        self.sequenceFlag = 0
+        (objectWidth, objectHeight, imageData) = try parseODS(data)
+        objectID = 0
+        version = 0
+        sequenceFlag = 0
     }
 
     // MARK: - Getters
 
     public func getObjectID() -> Int {
-        return self.objectID
+        objectID
     }
 
     public func getVersion() -> Int {
-        return self.version
+        version
     }
 
     public func getSequenceFlag() -> Int {
-        return self.sequenceFlag
+        sequenceFlag
     }
 
     public func getObjectDataLength() -> Int {
-        return self.objectDataLength
+        objectDataLength
     }
 
     public func getObjectWidth() -> Int {
-        return self.objectWidth
+        objectWidth
     }
 
     public func getObjectHeight() -> Int {
-        return self.objectHeight
+        objectHeight
     }
 
     public func getImageData() -> Data {
-        return self.imageData
+        imageData
     }
 
     // MARK: - Parser
@@ -82,9 +82,8 @@ public class ODS {
 
         let width = Int(data[7]) << 8 | Int(data[8])
         let height = Int(data[9]) << 8 | Int(data[10])
-        var imageData = data.subdata(in: 11 ..< data.endIndex)
-
-        imageData = try decodeRLE(data: imageData, width: width, height: height)
+        let rleImageData = RLEData(data: data.subdata(in: 11 ..< data.endIndex), width: width, height: height)
+        let imageData = try rleImageData.decode()
 
         return (width: width, height: height, imageData: imageData)
     }

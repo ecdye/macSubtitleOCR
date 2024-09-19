@@ -65,7 +65,6 @@ import Testing
         #expect(jsonMatch >= 90.0)
     }
 
-
     // Function to compute the Levenshtein Distance between two strings
     func levenshteinDistance(_ lhs: String, _ rhs: String) -> Int {
         let lhsChars = Array(lhs)
@@ -76,20 +75,20 @@ import Testing
         var distanceMatrix = [[Int]](repeating: [Int](repeating: 0, count: rhsLength + 1), count: lhsLength + 1)
 
         // Initialize the matrix
-        for i in 0...lhsLength {
+        for i in 0 ... lhsLength {
             distanceMatrix[i][0] = i
         }
-        for j in 0...rhsLength {
+        for j in 0 ... rhsLength {
             distanceMatrix[0][j] = j
         }
 
         // Compute the distance
-        for i in 1...lhsLength {
-            for j in 1...rhsLength {
+        for i in 1 ... lhsLength {
+            for j in 1 ... rhsLength {
                 let cost = lhsChars[i - 1] == rhsChars[j - 1] ? 0 : 1
                 distanceMatrix[i][j] = min(
-                    distanceMatrix[i - 1][j] + 1,      // Deletion
-                    distanceMatrix[i][j - 1] + 1,      // Insertion
+                    distanceMatrix[i - 1][j] + 1, // Deletion
+                    distanceMatrix[i][j - 1] + 1, // Insertion
                     distanceMatrix[i - 1][j - 1] + cost // Substitution
                 )
             }

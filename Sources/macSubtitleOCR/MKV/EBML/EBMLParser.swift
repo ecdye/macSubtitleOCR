@@ -7,6 +7,9 @@
 //
 
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
 
 // Helper function to read variable-length integers (VINT) from MKV (up to 8 bytes)
 func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
@@ -21,19 +24,19 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
         length += 1
         mask >>= 1
     }
-//    print("length: \(length)")
 
     // Extract the value
-//    print(String(format: "mask: 0x%08X", mask))
+    logger.debug("Length: \(length), Mask: 0x\(String(format: "%08X", mask))")
     if mask - 1 == 0x0F {
-        mask = 0xFF
-    } else if (length == 1) && !unmodified {
+        mask = 0xFF // Hacky workaround that I still don't understand why is needed
+    } else if length == 1, !unmodified {
         mask = firstByte
     } else {
         mask = mask - 1
     }
-//    print(String(format: "Byte: 0x%08X", firstByte))
-//    print(String(format: "Res: 0x%08X", firstByte & mask))
+    logger.debug("Byte before: 0x\(String(format: "%08X", firstByte))")
+    logger.debug("Byte after: 0x\(String(format: "%08X", firstByte & mask))")
+
     var value = UInt64(firstByte & mask)
 
     if length > 1 {
@@ -43,21 +46,20 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
             value |= UInt64(byte)
         }
     }
-//    print(String(format: "VINT: 0x%08X", value))
+    logger.debug("VINT: 0x\(String(format: "%08X", value))")
+
     return value
 }
 
 // Helper function to read a specified number of bytes
 func readBytes(from fileHandle: FileHandle, length: Int) -> Data? {
-    return fileHandle.readData(ofLength: length)
+    fileHandle.readData(ofLength: length)
 }
 
 // Helper function to read an EBML element's ID and size
-func readEBMLElement(from fileHandle: FileHandle,
-                     unmodified: Bool = false) -> (elementID: UInt32, elementSize: UInt64)
-{
-    let elementID = readVINT(from: fileHandle, unmodified: unmodified) // Read element ID
-    let elementSize = readVINT(from: fileHandle, unmodified: true) // Read element size
-//    print(String(format: "elementID: 0x%08X, elementSize: \(elementSize)", elementID))
+func readEBMLElement(from fileHandle: FileHandle, unmodified: Bool = false) -> (elementID: UInt32, elementSize: UInt64) {
+    let elementID = readVINT(from: fileHandle, unmodified: unmodified)
+    let elementSize = readVINT(from: fileHandle, unmodified: true)
+    logger.debug("elementID: 0x\(String(format: "%08X", elementID)), elementSize: \(elementSize)")
     return (UInt32(elementID), elementSize)
 }

@@ -1,6 +1,7 @@
 .DS_Store
 /.build/
 /.swiftpm/
+/.vscode/
 tests/images
 tests/*.json
 tests/*.srt

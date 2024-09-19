@@ -9,7 +9,7 @@
 import Foundation
 
 public func getUInt16BE(buffer: Data, offset: Int) -> UInt16 {
-    return (UInt16(buffer[offset]) << 8) | UInt16(buffer[offset + 1])
+    (UInt16(buffer[offset]) << 8) | UInt16(buffer[offset + 1])
 }
 
 // Function to read a fixed length number of bytes and convert in into a (Un)signed integer
@@ -46,5 +46,5 @@ public func encodePTSForPGS(_ timestamp: Int64) -> [UInt8] {
 // Calculate the absolute timestamp with 90 kHz accuracy for PGS format
 public func calcAbsPTSForPGS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64, _ timestampScale: Double) -> Int64 {
     // The block timestamp is relative, so we add it to the cluster timestamp
-    return Int64(((Double(clusterTimestamp) + Double(blockTimestamp)) / timestampScale) * 90000000)
+    Int64(((Double(clusterTimestamp) + Double(blockTimestamp)) / timestampScale) * 90000000)
 }
