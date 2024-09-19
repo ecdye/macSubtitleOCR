@@ -9,17 +9,59 @@
 import CoreGraphics
 import Foundation
 import ImageIO
-import UniformTypeIdentifiers
 
 public class PGS {
+    // MARK: - Properties
+
+    private var subtitles = [PGSSubtitle]()
+
+    // MARK: - Lifecycle
+
+    init(_ url: URL) throws {
+        try parseSupFile(fromFileAt: url)
+    }
+
+    // MARK: - Getters
+
+    public func getSubtitles() -> [PGSSubtitle] {
+        subtitles
+    }
+
     // MARK: - Functions
 
-    // Parses a `.sup` file and returns an array of `PGSSubtitle` objects
-    public func parseSupFile(fromFileAt url: URL) throws -> [PGSSubtitle] {
+    // Converts the RGBA data to a CGImage
+    public func createImage(index: Int) -> CGImage? {
+        // Convert the image data to RGBA format using the palette
+        let rgbaData = imageDataToRGBA(&subtitles[index])
+
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big
+            .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        guard let provider = CGDataProvider(data: rgbaData as CFData) else {
+            return nil
+        }
+
+        return CGImage(width: subtitles[index].imageWidth,
+                       height: subtitles[index].imageHeight,
+                       bitsPerComponent: 8,
+                       bitsPerPixel: 32,
+                       bytesPerRow: subtitles[index].imageWidth * 4, // 4 bytes per pixel (RGBA)
+                       space: colorSpace,
+                       bitmapInfo: bitmapInfo,
+                       provider: provider,
+                       decode: nil,
+                       shouldInterpolate: false,
+                       intent: .defaultIntent)
+    }
+
+    // MARK: - Methods
+
+    // Parses a `.sup` file and populates the subtitles array
+    private func parseSupFile(fromFileAt url: URL) throws {
         let fileHandle = try FileHandle(forReadingFrom: url)
         defer { fileHandle.closeFile() }
 
-        var subtitles = [PGSSubtitle]()
         let fileLength = try fileHandle.seekToEnd()
         fileHandle.seek(toFileOffset: 0) // Ensure the file handle is at the start
         var headerData = fileHandle.readData(ofLength: 13)
@@ -39,49 +81,7 @@ public class PGS {
 
             subtitles.append(subtitle)
         }
-
-        return subtitles
     }
-
-    // Converts the RGBA data to a CGImage
-    public func createImage(from subtitle: inout PGSSubtitle) -> CGImage? {
-        // Convert the image data to RGBA format using the palette
-        let rgbaData = imageDataToRGBA(&subtitle)
-
-        let bitmapInfo = CGBitmapInfo.byteOrder32Big
-            .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-
-        guard let provider = CGDataProvider(data: rgbaData as CFData) else {
-            return nil
-        }
-
-        return CGImage(width: subtitle.imageWidth,
-                       height: subtitle.imageHeight,
-                       bitsPerComponent: 8,
-                       bitsPerPixel: 32,
-                       bytesPerRow: subtitle.imageWidth * 4, // 4 bytes per pixel (RGBA)
-                       space: colorSpace,
-                       bitmapInfo: bitmapInfo,
-                       provider: provider,
-                       decode: nil,
-                       shouldInterpolate: false,
-                       intent: .defaultIntent)
-    }
-
-    public func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
-        guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL, UTType.png.identifier as CFString, 1, nil)
-        else {
-            throw macSubtitleOCRError.fileReadError
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-
-        if !CGImageDestinationFinalize(destination) {
-            throw macSubtitleOCRError.fileReadError
-        }
-    }
-
-    // MARK: - Methods
 
     private func parseTimestamp(_ data: Data) -> TimeInterval {
         let pts = (Int(data[2]) << 24 | Int(data[3]) << 16 | Int(data[4]) << 8 | Int(data[5]))

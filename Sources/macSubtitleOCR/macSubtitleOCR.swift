@@ -57,8 +57,7 @@ struct macSubtitleOCR: ParsableCommand {
         // Setup data variables
         var subIndex = 1
         var jsonStream: [Any] = []
-        var inSubStream: [PGSSubtitle]
-        var outSubStream: [SrtSubtitle] = []
+        let srtStream = SRT()
 
         if sup.hasSuffix(".mkv") {
             let mkvParser = try MKVParser(filePath: sup)
@@ -75,19 +74,18 @@ struct macSubtitleOCR: ParsableCommand {
             mkvParser.closeFile()
         }
 
-        // Initialize the decoder
-        let PGS = PGS()
-        inSubStream = try PGS.parseSupFile(fromFileAt: URL(fileURLWithPath: sup))
+        // Open the PGS data stream
+        let PGS = try PGS(URL(fileURLWithPath: sup))
 
-        for var subtitle in inSubStream {
+        for subtitle in PGS.getSubtitles() {
             if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
                 logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
                 continue
             }
 
-            guard let subImage = PGS.createImage(from: &subtitle)
+            guard let subImage = PGS.createImage(index: subIndex - 1)
             else {
-                logger.info("Could not create image from decoded data for index \(subIndex)! Skipping...")
+                logger.info("Could not create image for index \(subIndex)! Skipping...")
                 continue
             }
 
@@ -95,15 +93,13 @@ struct macSubtitleOCR: ParsableCommand {
             if let imageDirectory {
                 let outputDirectory = URL(fileURLWithPath: imageDirectory)
                 do {
-                    try manager.createDirectory(at: outputDirectory,
-                                                withIntermediateDirectories: false,
-                                                attributes: nil)
+                    try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: false, attributes: nil)
                 } catch CocoaError.fileWriteFileExists {
                     // Folder already existed
                 }
                 let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subIndex).png")
 
-                try PGS.saveImageAsPNG(image: subImage, outputPath: pngPath)
+                try saveImageAsPNG(image: subImage, outputPath: pngPath)
             }
 
             // Perform text recognition
@@ -120,9 +116,7 @@ struct macSubtitleOCR: ParsableCommand {
                     let stringRange = string.startIndex ..< string.endIndex
                     let boxObservation = try? candidate?.boundingBox(for: stringRange)
                     let boundingBox = boxObservation?.boundingBox ?? .zero
-                    let rect = VNImageRectForNormalizedRect(boundingBox,
-                                                            subtitle.imageWidth,
-                                                            subtitle.imageHeight)
+                    let rect = VNImageRectForNormalizedRect(boundingBox, subtitle.imageWidth, subtitle.imageHeight)
 
                     let line: [String: Any] = [
                         "text": string,
@@ -149,12 +143,11 @@ struct macSubtitleOCR: ParsableCommand {
 
                 jsonStream.append(subtitleData)
 
-                let newSubtitle = SrtSubtitle(index: subIndex,
-                                              startTime: subtitle.timestamp,
-                                              endTime: subtitle.endTimestamp,
-                                              text: subtitleText)
-
-                outSubStream.append(newSubtitle)
+                // Append subtitle to SRT stream
+                srtStream.appendSubtitle(SRTSubtitle(index: subIndex,
+                                                     startTime: subtitle.timestamp,
+                                                     endTime: subtitle.endTimestamp,
+                                                     text: subtitleText))
             }
 
             request.recognitionLevel = recognitionLevel
@@ -184,9 +177,7 @@ struct macSubtitleOCR: ParsableCommand {
                 to: URL(fileURLWithPath: inFile).deletingPathExtension().appendingPathExtension("sup"))
         }
 
-        // Encode subtitles to SRT file
-        try SRT().encode(subtitles: outSubStream,
-                         toFileAt: URL(fileURLWithPath: srt))
+        try srtStream.write(toFileAt: URL(fileURLWithPath: srt))
     }
 
     // MARK: - Methods
@@ -204,6 +195,18 @@ struct macSubtitleOCR: ParsableCommand {
             VNRecognizeTextRequestRevision3
         } else {
             VNRecognizeTextRequestRevision2
+        }
+    }
+
+    private func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
+        guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL, UTType.png.identifier as CFString, 1, nil)
+        else {
+            throw macSubtitleOCRError.fileCreationError
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+
+        if !CGImageDestinationFinalize(destination) {
+            throw macSubtitleOCRError.fileWriteError
         }
     }
 }

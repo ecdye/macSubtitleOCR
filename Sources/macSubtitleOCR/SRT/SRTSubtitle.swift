@@ -1,5 +1,5 @@
 //
-// SrtSubtitle.swift
+// SRTSubtitle.swift
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/16/24.
@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct SrtSubtitle {
+public struct SRTSubtitle {
     public var index: Int
     public var startTime: TimeInterval
     public var endTime: TimeInterval
