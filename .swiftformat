@@ -1,24 +1,23 @@
---exclude /Volumes/Developer/macSup2Srt/build
+--exclude .build
 --minversion 0
 --symlinks ignore
 --acronyms ID,URL,UUID
 --allman false
 --anonymousforeach convert
 --assetliterals visual-width
---asynccapturing 
---beforemarks 
+--asynccapturing
+--beforemarks
 --binarygrouping none
 --callsiteparen default
 --categorymark "MARK: %c"
 --classthreshold 0
---closingparen balanced
+--closingparen same-line
 --closurevoid remove
 --commas always
 --complexattrs preserve
 --computedvarattrs preserve
 --condassignment after-property
 --conflictmarkers reject
---dateformat system
 --decimalgrouping none
 --doccomments before-declarations
 --elseposition same-line
@@ -33,10 +32,10 @@
 --fractiongrouping disabled
 --fragment false
 --funcattributes preserve
---generictypes 
+--generictypes
 --groupedextension "MARK: %c"
 --guardelse auto
---header "\n{file}\nmacSup2Srt\n\nCreated by {author.name} on {created}.\nCopyright © {year} {author.name}. All rights reserved.\n"
+--header "\n{file}\nmacSubtitleOCR\n\nCreated by {author.name} on {created}.\nCopyright © {year} {author.name}. All rights reserved.\n"
 --hexgrouping 4,8
 --hexliteralcase uppercase
 --ifdef indent
@@ -45,19 +44,18 @@
 --indentcase false
 --indentstrings false
 --initcodernil false
---lifecycle 
+--lifecycle
 --lineaftermarks true
 --linebreaks lf
 --markcategories true
 --markextensions always
 --marktypes always
 --maxwidth none
---modifierorder 
---nevertrailing 
+--modifierorder
+--nevertrailing
 --nilinit remove
---noncomplexattrs 
---nospaceoperators 
---nowrapoperators 
+--noncomplexattrs
+--nospaceoperators
 --octalgrouping none
 --onelineforeach ignore
 --operatorfunc spaced
@@ -66,8 +64,6 @@
 --patternlet hoist
 --ranges spaced
 --redundanttype infer-locals-only
---self insert
---selfrequired 
 --semicolons never
 --shortoptionals except-properties
 --smarttabs enabled
@@ -75,25 +71,19 @@
 --storedvarattrs preserve
 --stripunusedargs always
 --structthreshold 0
---swiftversion 5
+--swiftversion 6
 --tabwidth unspecified
---throwcapturing 
---timezone system
---trailingclosures 
+--throwcapturing
+--trailingclosures
 --trimwhitespace always
 --typeattributes preserve
 --typeblanklines remove
 --typedelimiter space-after
 --typemark "MARK: - %t"
 --voidtype void
---wraparguments preserve
---wrapcollections preserve
---wrapconditions preserve
---wrapeffects preserve
 --wrapenumcases always
 --wrapparameters after-first
---wrapreturntype preserve
+--wrapcollections before-first
 --wrapternary default
 --wraptypealiases preserve
---xcodeindentation disabled
 --yodaswap always

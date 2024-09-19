@@ -3,8 +3,12 @@ name: Build
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - '**/*.swift'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - '**/*.swift'
 
 jobs:
   build:
@@ -15,22 +19,28 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Build with Xcode
+    - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
         xcode: 16.0
-        platform: macOS
-        arch: arm64
-        action: build
-        scheme: macSup2Srt
-        verbosity: verbose
-        configuration: release
+        swift: 6.0
+        action: none
 
-    - name: Archive
-      run: tar cvJf ~/macSup2Srt.tar.xz -C /Users/runner/Library/Developer/Xcode/DerivedData/macSup2Srt-ceucuocfsoahbsgjtnfgwrlnyxsv/Build/Products/Release macSup2Srt
+    - name: Build
+      run: |
+        xcrun swift build --configuration release --arch arm64 --arch x86_64
+        tar -cvJf macSubtitleOCR.tar.xz -C .build/apple/Products/Release macSubtitleOCR
+
+    - name: Test
+      run: xcrun swift test
+
+    - name: Periphery
+      run: |
+        brew install peripheryapp/periphery/periphery
+        periphery scan --skip-build --index-store-path .build/debug/index/store
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: macSup2Srt
-        path: ~/macSup2Srt.tar.xz
+        name: macSubtitleOCR.tar.xz
+        path: macSubtitleOCR.tar.xz

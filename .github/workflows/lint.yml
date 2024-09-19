@@ -1,0 +1,20 @@
+name: Lint
+on:
+  push:
+    paths:
+      - '**/*.swift'
+  pull_request:
+    paths:
+      - '**/*.swift'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: SwiftFormat
+      run: swiftformat --lint . --reporter github-actions-log --disable fileHeader # seems to be broken currently in Actions env
