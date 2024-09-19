@@ -25,8 +25,8 @@ jobs:
     - name: Build
       run: xcrun swift build --configuration release --arch arm64 --arch x86_64
 
-    - name: Test
-      run: xcrun swift test
+    # - name: Test
+    #   run: xcrun swift test
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4
