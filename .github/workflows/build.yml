@@ -3,8 +3,12 @@ name: Build
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - '**/*.swift'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - '**/*.swift'
 
 jobs:
   build:
