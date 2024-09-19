@@ -21,7 +21,7 @@ For more information on accuracy, see [Accuracy](#accuracy) below.
 ### Building
 
 > [!IMPORTANT]
-> This project requires at least Xcode 16 to work properly due to breaking changes, made by Apple, to the Xcode project format.
+> This project requires Swift 6 work properly!
 
 To get started with macSubtitleOCR, clone the repository and then build the project with Swift.
 
@@ -32,6 +32,15 @@ swift build
 ```
 
 The completed build should be available in the `.build/debug` directory.
+
+### Testing
+
+Tests compare the output to a know good output.
+We target a match of at least 90% as different machines will produce different output.
+
+``` shell
+swift test
+```
 
 ### Accuracy
 

@@ -8,6 +8,8 @@ jobs:
   build:
     name: Build
     runs-on: macos-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout repository
@@ -21,7 +23,9 @@ jobs:
         action: none
 
     - name: Build
-      run: xcrun swift build --configuration release --arch arm64 --arch x86_64
+      run: |
+        xcrun swift build --configuration release --arch arm64 --arch x86_64
+        tar -cvJf macSubtitleOCR.tar.xz -C .build/apple/Products/Release macSubtitleOCR
 
     - name: Publish
       uses: softprops/action-gh-release@v2
@@ -30,5 +34,5 @@ jobs:
       with:
         name: nightly
         tag_name: nightly
-        files: .build/apple/Products/Release/macSubtitleOCR
+        files: macSubtitleOCR.tar.xz
         prerelease: true

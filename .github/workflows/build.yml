@@ -23,13 +23,15 @@ jobs:
         action: none
 
     - name: Build
-      run: xcrun swift build --configuration release --arch arm64 --arch x86_64
+      run: |
+        xcrun swift build --configuration release --arch arm64 --arch x86_64
+        tar -cvJf macSubtitleOCR.tar.xz -C .build/apple/Products/Release macSubtitleOCR
 
-    # - name: Test
-    #   run: xcrun swift test
+    - name: Test
+      run: xcrun swift test
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: macSubtitleOCR
-        path: .build/apple/Products/Release/macSubtitleOCR
+        name: macSubtitleOCR.tar.xz
+        path: macSubtitleOCR.tar.xz
