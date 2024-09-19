@@ -10,5 +10,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Set timezone
+      uses: szenius/set-timezone@v2.0
+      with:
+        timezoneMacos: "America/Denver"
+
     - name: SwiftFormat
       run: swiftformat --lint . --reporter github-actions-log
