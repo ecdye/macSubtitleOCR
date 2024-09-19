@@ -14,7 +14,7 @@ import Vision
 
 // The main struct representing the macSup2Srt command-line tool.
 @main
-struct macSup2Srt: ParsableCommand {
+struct macSubtitleOCR: ParsableCommand {
     // MARK: - Properties
 
     @Argument(help: "Input .sup subtitle file")
@@ -42,7 +42,11 @@ struct macSup2Srt: ParsableCommand {
     var saveSup: Bool = false
 
     // MARK: - Entrypoint
-
+    func validate() throws {
+                if sup.isEmpty {
+                    throw ValidationError("Please provide at least one value to calculate the \(sup).")
+                }
+            }
     mutating func run() throws {
         // Setup utilities
         let logger = Logger(subsystem: "github.ecdye.macSup2Srt", category: "main")
