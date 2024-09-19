@@ -42,11 +42,7 @@ struct macSubtitleOCR: ParsableCommand {
     var saveSup: Bool = false
 
     // MARK: - Entrypoint
-    func validate() throws {
-                if sup.isEmpty {
-                    throw ValidationError("Please provide at least one value to calculate the \(sup).")
-                }
-            }
+
     mutating func run() throws {
         // Setup utilities
         let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")

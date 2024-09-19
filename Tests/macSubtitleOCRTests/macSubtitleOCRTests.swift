@@ -1,6 +1,14 @@
-import Testing
+//
+// macSubtitleOCRTests.swift
+// macSubtitleOCR
+//
+// Created by Ethan Dye on 9/18/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
+//
+
 import Foundation
 @testable import macSubtitleOCR
+import Testing
 
 @Suite struct macSubtitleOCRTests {
     @Test func testMKV() throws {
@@ -11,12 +19,12 @@ import Foundation
         let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.absoluteString.replacing("file://", with: "")
         let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString.replacing("file://", with: "")
         let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
-        
+
         // Run tests
         let options = [mkvPath, srtPath, "--language-correction", "--json", jsonPath]
         var runner = try macSubtitleOCR.parseAsRoot(options)
         try runner.run()
-        
+
         // Compare output
         let expectedOCROutput = try String(contentsOfFile: goodSRTPath, encoding: .utf8)
         let actualOCROutput = try String(contentsOfFile: srtPath, encoding: .utf8)
@@ -26,4 +34,3 @@ import Foundation
         #expect(expectedJSONOutput == actualJSONOutput)
     }
 }
-
