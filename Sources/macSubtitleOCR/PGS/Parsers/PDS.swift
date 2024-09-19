@@ -1,6 +1,6 @@
 //
 // PDS.swift
-// macSup2Srt
+// macSubtitleOCR
 //
 // Created by Ethan Dye on 9/8/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
@@ -20,7 +20,7 @@ public class PDS {
 
     init(_ data: Data) throws {
         guard data.count >= 8 else {
-            throw macSup2SrtError.invalidFormat
+            throw macSubtitleOCRError.invalidFormat
         }
         self.id = data[0]
         self.version = data[1]
@@ -54,7 +54,7 @@ public class PDS {
         // Start reading after the first 2 bytes (Palette ID and Version)
         if (data.count - 2) % 5 != 0 {
             print("Invalid Palette Data Segment Length: \(data.count)")
-            throw macSup2SrtError.invalidFormat
+            throw macSubtitleOCRError.invalidFormat
         }
 
         var i = 2

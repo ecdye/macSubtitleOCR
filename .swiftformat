@@ -1,12 +1,12 @@
---exclude /Volumes/Developer/macSup2Srt/build
+--exclude .build
 --minversion 0
 --symlinks ignore
 --acronyms ID,URL,UUID
 --allman false
 --anonymousforeach convert
 --assetliterals visual-width
---asynccapturing 
---beforemarks 
+--asynccapturing
+--beforemarks
 --binarygrouping none
 --callsiteparen default
 --categorymark "MARK: %c"
@@ -33,10 +33,10 @@
 --fractiongrouping disabled
 --fragment false
 --funcattributes preserve
---generictypes 
+--generictypes
 --groupedextension "MARK: %c"
 --guardelse auto
---header "\n{file}\nmacSup2Srt\n\nCreated by {author.name} on {created}.\nCopyright © {year} {author.name}. All rights reserved.\n"
+--header "\n{file}\nmacSubtitleOCR\n\nCreated by {author.name} on {created}.\nCopyright © {year} {author.name}. All rights reserved.\n"
 --hexgrouping 4,8
 --hexliteralcase uppercase
 --ifdef indent
@@ -45,19 +45,19 @@
 --indentcase false
 --indentstrings false
 --initcodernil false
---lifecycle 
+--lifecycle
 --lineaftermarks true
 --linebreaks lf
 --markcategories true
 --markextensions always
 --marktypes always
 --maxwidth none
---modifierorder 
---nevertrailing 
+--modifierorder
+--nevertrailing
 --nilinit remove
---noncomplexattrs 
---nospaceoperators 
---nowrapoperators 
+--noncomplexattrs
+--nospaceoperators
+--nowrapoperators
 --octalgrouping none
 --onelineforeach ignore
 --operatorfunc spaced
@@ -67,7 +67,7 @@
 --ranges spaced
 --redundanttype infer-locals-only
 --self insert
---selfrequired 
+--selfrequired
 --semicolons never
 --shortoptionals except-properties
 --smarttabs enabled
@@ -77,9 +77,9 @@
 --structthreshold 0
 --swiftversion 5
 --tabwidth unspecified
---throwcapturing 
+--throwcapturing
 --timezone system
---trailingclosures 
+--trailingclosures
 --trimwhitespace always
 --typeattributes preserve
 --typeblanklines remove

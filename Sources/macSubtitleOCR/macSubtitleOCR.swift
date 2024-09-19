@@ -1,6 +1,6 @@
 //
-// macSup2Srt.swift
-// macSup2Srt
+// macSubtitleOCR.swift
+// macSubtitleOCR
 //
 // Created by Ethan Dye on 9/2/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
@@ -12,7 +12,7 @@ import os
 import UniformTypeIdentifiers
 import Vision
 
-// The main struct representing the macSup2Srt command-line tool.
+// The main struct representing the macSubtitleOCR command-line tool.
 @main
 struct macSubtitleOCR: ParsableCommand {
     // MARK: - Properties
@@ -49,7 +49,7 @@ struct macSubtitleOCR: ParsableCommand {
             }
     mutating func run() throws {
         // Setup utilities
-        let logger = Logger(subsystem: "github.ecdye.macSup2Srt", category: "main")
+        let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
         let manager = FileManager.default
 
         // Setup options
@@ -67,7 +67,7 @@ struct macSubtitleOCR: ParsableCommand {
         if self.sup.hasSuffix(".mkv") {
             let mkvParser = try MKVParser(filePath: sup)
             var trackNumber: Int?
-            guard let tracks = mkvParser.parseTracks() else { throw macSup2SrtError.invalidFormat }
+            guard let tracks = mkvParser.parseTracks() else { throw macSubtitleOCRError.invalidFormat }
             for track in tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
                 if track.codecId == "S_HDMV/PGS" {

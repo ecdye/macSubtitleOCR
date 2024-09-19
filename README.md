@@ -1,11 +1,11 @@
-# macSup2Srt
-[![License](https://img.shields.io/github/license/ecdye/macSup2Srt)](https://github.com/ecdye/macSup2Srt/blob/main/LICENSE.md)
-[![CodeQL](https://github.com/ecdye/macSup2Srt/actions/workflows/codeql.yml/badge.svg)](https://github.com/ecdye/macSup2Srt/actions/workflows/codeql.yml)
+# macSubtitleOCR
+[![License](https://img.shields.io/github/license/ecdye/macSubtitleOCR)](https://github.com/ecdye/macSubtitleOCR/blob/main/LICENSE.md)
+[![CodeQL](https://github.com/ecdye/macSubtitleOCR/actions/workflows/codeql.yml/badge.svg)](https://github.com/ecdye/macSubtitleOCR/actions/workflows/codeql.yml)
 
 
 ## Overview
 
-macSup2Srt is used to covert a file containing a PGS Subtitle stream to SubRip subtitles using OCR.
+macSubtitleOCR is used to covert a file containing a PGS Subtitle stream to SubRip subtitles using OCR.
 Currently the supported input file types are `.mkv` and `.sup`.
 It uses the built in OCR engine in macOS to perform the text recognition, which works really well.
 For more information on accuracy, see [Accuracy](#accuracy) below.
@@ -23,15 +23,15 @@ For more information on accuracy, see [Accuracy](#accuracy) below.
 > [!IMPORTANT]
 > This project requires at least Xcode 16 to work properly due to breaking changes, made by Apple, to the Xcode project format.
 
-To get started with macSup2Srt, clone the repository and then build the project with Xcode.
+To get started with macSubtitleOCR, clone the repository and then build the project with Swift.
 
 ``` shell
-git clone https://github.com/ecdye/macSup2Srt
-cd macSup2Srt
-xcodebuild -scheme macSup2Srt build
+git clone https://github.com/ecdye/macSubtitleOCR
+cd macSubtitleOCR
+swift build
 ```
 
-The completed build should be available in the build directory.
+The completed build should be available in the `.build/debug` directory.
 
 ### Accuracy
 

@@ -1,6 +1,6 @@
 //
 // ODS.swift
-// macSup2Srt
+// macSubtitleOCR
 //
 // Created by Ethan Dye on 9/12/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
@@ -77,7 +77,7 @@ public class ODS {
 
         // PGS includes the width and height as part of the image data length calculations
         guard objectDataLength <= data.count - 7 else {
-            throw macSup2SrtError.invalidFormat
+            throw macSubtitleOCRError.invalidFormat
         }
 
         let width = Int(data[7]) << 8 | Int(data[8])

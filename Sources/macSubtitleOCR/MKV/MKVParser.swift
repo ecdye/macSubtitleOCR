@@ -1,6 +1,6 @@
 //
 // MKVParser.swift
-// macSup2Srt
+// macSubtitleOCR
 //
 // Created by Ethan Dye on 9/16/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
@@ -16,14 +16,14 @@ class MKVParser {
     private var fileHandle: FileHandle
     private var stderr = StandardErrorOutputStream()
     private var timestampScale: Double = 1000000.0 // Default value if not specified in a given MKV file
-    private let logger = Logger(subsystem: "github.ecdye.macSup2Srt", category: "main")
+    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
 
     // MARK: - Lifecycle
 
     public init(filePath: String) throws {
         guard FileManager.default.fileExists(atPath: filePath) else {
             print("Error: file '\(filePath)' does not exist", to: &self.stderr)
-            throw macSup2SrtError.fileReadError
+            throw macSubtitleOCRError.fileReadError
         }
 
         self.fileHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))

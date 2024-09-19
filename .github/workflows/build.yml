@@ -15,22 +15,17 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Build with Xcode
-      uses: mxcl/xcodebuild@v3
-      with:
-        xcode: 16.0
-        platform: macOS
-        arch: arm64
-        action: build
-        scheme: macSup2Srt
-        verbosity: verbose
-        configuration: release
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
 
-    - name: Archive
-      run: tar cvJf ~/macSup2Srt.tar.xz -C /Users/runner/Library/Developer/Xcode/DerivedData/macSup2Srt-ceucuocfsoahbsgjtnfgwrlnyxsv/Build/Products/Release macSup2Srt
+    - name: Build
+      run: swift build --configuration release
+
+    - name: Test
+      run: swift test
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: macSup2Srt
-        path: ~/macSup2Srt.tar.xz
+        name: macSubtitleOCR
+        path: .build/release/macSubtitleOCR

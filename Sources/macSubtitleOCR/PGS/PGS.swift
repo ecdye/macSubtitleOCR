@@ -1,6 +1,6 @@
 //
 // PGS.swift
-// macSup2Srt
+// macSubtitleOCR
 //
 // Created by Ethan Dye on 9/2/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
@@ -76,12 +76,12 @@ public class PGS {
     public func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
         guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL, UTType.png.identifier as CFString, 1, nil)
         else {
-            throw macSup2SrtError.fileReadError
+            throw macSubtitleOCRError.fileReadError
         }
         CGImageDestinationAddImage(destination, image, nil)
 
         if !CGImageDestinationFinalize(destination) {
-            throw macSup2SrtError.fileReadError
+            throw macSubtitleOCRError.fileReadError
         }
     }
 
