@@ -8,11 +8,11 @@
 
 import Foundation
 
-public struct PGSSubtitle {
-    public var timestamp: TimeInterval = 0
-    public var imageWidth: Int = 0
-    public var imageHeight: Int = 0
-    public var imageData: Data = .init()
-    public var imagePalette: [UInt8] = []
-    public var endTimestamp: TimeInterval = 0
+struct PGSSubtitle {
+    var timestamp: TimeInterval = 0
+    var imageWidth: Int = 0
+    var imageHeight: Int = 0
+    var imageData: Data = .init()
+    var imagePalette: [UInt8] = []
+    var endTimestamp: TimeInterval = 0
 }

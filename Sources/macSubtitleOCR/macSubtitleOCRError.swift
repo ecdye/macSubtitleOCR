@@ -6,11 +6,9 @@
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
-public enum macSubtitleOCRError: Error {
+enum macSubtitleOCRError: Error {
     case invalidFormat
     case fileReadError
     case fileCreationError
     case fileWriteError
-    case unsupportedFormat
-    case invalidFile
 }

@@ -10,7 +10,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
-public class PGS {
+class PGS {
     // MARK: - Properties
 
     private var subtitles = [PGSSubtitle]()
@@ -23,14 +23,14 @@ public class PGS {
 
     // MARK: - Getters
 
-    public func getSubtitles() -> [PGSSubtitle] {
+    func getSubtitles() -> [PGSSubtitle] {
         subtitles
     }
 
     // MARK: - Functions
 
     // Converts the RGBA data to a CGImage
-    public func createImage(index: Int) -> CGImage? {
+    func createImage(index: Int) -> CGImage? {
         // Convert the image data to RGBA format using the palette
         let rgbaData = imageDataToRGBA(&subtitles[index])
 
@@ -86,18 +86,6 @@ public class PGS {
     private func parseTimestamp(_ data: Data) -> TimeInterval {
         let pts = (Int(data[2]) << 24 | Int(data[3]) << 16 | Int(data[4]) << 8 | Int(data[5]))
         return TimeInterval(pts) / 90000.0 // 90 kHz clock
-    }
-
-    // Parses the Presentation Composition Segment (PCS) to extract the height and width of the video.
-    // PCS structure (simplified):
-    //   0x14: Segment Type; already checked by the caller
-    //   2 bytes: Width
-    //   2 bytes: Height
-    private func parsePCS(_ data: Data) -> (width: Int, height: Int) {
-        let width = Int(data[0]) << 8 | Int(data[1])
-        let height = Int(data[2]) << 8 | Int(data[3])
-
-        return (width: width, height: height)
     }
 
     // Converts the image data to RGBA format using the palette

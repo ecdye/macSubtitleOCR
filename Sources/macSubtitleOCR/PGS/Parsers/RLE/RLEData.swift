@@ -23,27 +23,9 @@ class RLEData {
         self.data = data
     }
 
-    // MARK: - Getters
+    // MARK: - Functions
 
-    public func getData() -> Data {
-        data
-    }
-
-    public func getWidth() -> Int {
-        width
-    }
-
-    public func getHeight() -> Int {
-        height
-    }
-
-    // MARK: - Decoder
-
-    public func decode() throws -> Data {
-        try decodeRLEData(data: data, width: width, height: height)
-    }
-
-    private func decodeRLEData(data: Data, width: Int, height: Int) throws -> Data {
+    func decode() throws -> Data {
         var stderr = StandardErrorOutputStream()
         let rleBitmapEnd = data.endIndex
         var pixelCount = 0

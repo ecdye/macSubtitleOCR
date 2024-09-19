@@ -20,7 +20,7 @@ class MKVParser {
 
     // MARK: - Lifecycle
 
-    public init(filePath: String) throws {
+    init(filePath: String) throws {
         guard FileManager.default.fileExists(atPath: filePath) else {
             print("Error: file '\(filePath)' does not exist", to: &stderr)
             throw macSubtitleOCRError.fileReadError
@@ -35,7 +35,7 @@ class MKVParser {
     // MARK: - Functions
 
     // Parse the EBML structure and find the Tracks section
-    public func parseTracks() -> [MKVTrack]? {
+    func parseTracks() -> [MKVTrack]? {
         guard let _ = findElement(withID: EBML.segmentID) as? (UInt64, UInt32) else {
             print("Segment element not found")
             return nil
@@ -67,11 +67,11 @@ class MKVParser {
         return trackList
     }
 
-    public func closeFile() {
+    func closeFile() {
         fileHandle.closeFile()
     }
 
-    public func getSubtitleTrackData(trackNumber: Int, outPath: String) throws -> String? {
+    func getSubtitleTrackData(trackNumber: Int, outPath: String) throws -> String? {
         let tmpSup = URL(fileURLWithPath: outPath).deletingPathExtension().appendingPathExtension("sup")
             .lastPathComponent
 
@@ -270,7 +270,7 @@ class MKVParser {
             case EBML.trackNumberID:
                 trackNumber = Int((readBytes(from: fileHandle, length: 1)?.first)!)
                 logger.debug("Found track number: \(trackNumber!)")
-            case EBML.trackTypeID:
+            case EBML.trackTypeID: // Unused by us, left for debugging
                 trackType = readBytes(from: fileHandle, length: 1)?.first
                 logger.debug("Found track type: \(trackType!)")
             case EBML.codecID:
@@ -284,8 +284,8 @@ class MKVParser {
             if trackNumber != nil, trackType != nil, codecId != nil { break }
         }
 
-        if let trackNumber, let trackType, let codecId {
-            return MKVTrack(trackNumber: trackNumber, trackType: trackType, codecId: codecId)
+        if let trackNumber, let codecId {
+            return MKVTrack(trackNumber: trackNumber, codecId: codecId)
         }
         return nil
     }

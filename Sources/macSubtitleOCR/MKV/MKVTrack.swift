@@ -10,6 +10,5 @@ import Foundation
 
 struct MKVTrack {
     let trackNumber: Int
-    let trackType: UInt8
     let codecId: String
 }

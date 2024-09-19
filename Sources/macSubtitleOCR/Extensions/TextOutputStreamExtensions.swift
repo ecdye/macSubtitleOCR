@@ -8,6 +8,6 @@
 
 import Foundation
 
-public struct StandardErrorOutputStream: TextOutputStream {
+struct StandardErrorOutputStream: TextOutputStream {
     public mutating func write(_ string: String) { fputs(string, stderr) }
 }

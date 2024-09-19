@@ -30,6 +30,9 @@ jobs:
     - name: Test
       run: xcrun swift test
 
+    - name: Periphery
+      run: periphery scan --skip-build --index-store-path .build/debug/index/store
+
     - name: Save artifacts
       uses: actions/upload-artifact@v4
       with:

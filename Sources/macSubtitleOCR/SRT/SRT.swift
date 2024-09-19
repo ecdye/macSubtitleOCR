@@ -8,25 +8,21 @@
 
 import Foundation
 
-public class SRT {
+class SRT {
     // MARK: - Properties
 
     private var subtitles: [SRTSubtitle] = []
 
     // MARK: - Getters / Setters
 
-    public func getSubtitles() -> [SRTSubtitle] {
-        subtitles
-    }
-
-    public func appendSubtitle(_ subtitle: SRTSubtitle) {
+    func appendSubtitle(_ subtitle: SRTSubtitle) {
         subtitles.append(subtitle)
     }
 
     // MARK: - Functions
 
     // Writes the SRT object to the file at the given URL
-    public func write(toFileAt url: URL) throws {
+    func write(toFileAt url: URL) throws {
         let srtContent = encode()
         do {
             try srtContent.write(to: url, atomically: true, encoding: .utf8)
@@ -51,20 +47,6 @@ public class SRT {
         }
 
         return srtContent
-    }
-
-    private func parseTime(_ timeString: String) -> TimeInterval? {
-        let components = timeString.components(separatedBy: [":", ","])
-        guard components.count == 4,
-              let hours = Double(components[0]),
-              let minutes = Double(components[1]),
-              let seconds = Double(components[2]),
-              let milliseconds = Double(components[3])
-        else {
-            return nil
-        }
-
-        return (hours * 3600) + (minutes * 60) + seconds + (milliseconds / 1000)
     }
 
     private func formatTime(_ time: TimeInterval) -> String {

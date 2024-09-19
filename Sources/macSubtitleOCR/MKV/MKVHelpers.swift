@@ -1,5 +1,5 @@
 //
-// Helpers.swift
+// MKVHelpers.swift
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/16/24.
@@ -8,12 +8,12 @@
 
 import Foundation
 
-public func getUInt16BE(buffer: Data, offset: Int) -> UInt16 {
+func getUInt16BE(buffer: Data, offset: Int) -> UInt16 {
     (UInt16(buffer[offset]) << 8) | UInt16(buffer[offset + 1])
 }
 
 // Function to read a fixed length number of bytes and convert in into a (Un)signed integer
-public func readFixedLengthNumber(fileHandle: FileHandle, length: Int, signed: Bool = false) -> Int64 {
+func readFixedLengthNumber(fileHandle: FileHandle, length: Int, signed: Bool = false) -> Int64 {
     let data = fileHandle.readData(ofLength: length)
     let pos = 0
 
@@ -33,7 +33,7 @@ public func readFixedLengthNumber(fileHandle: FileHandle, length: Int, signed: B
 }
 
 // Encode the absolute timestamp as 4 bytes in big-endian format for PGS
-public func encodePTSForPGS(_ timestamp: Int64) -> [UInt8] {
+func encodePTSForPGS(_ timestamp: Int64) -> [UInt8] {
     let timestamp = UInt32(timestamp) // Convert to unsigned 32-bit value
     return [
         UInt8((timestamp >> 24) & 0xFF),
@@ -44,7 +44,7 @@ public func encodePTSForPGS(_ timestamp: Int64) -> [UInt8] {
 }
 
 // Calculate the absolute timestamp with 90 kHz accuracy for PGS format
-public func calcAbsPTSForPGS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64, _ timestampScale: Double) -> Int64 {
+func calcAbsPTSForPGS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64, _ timestampScale: Double) -> Int64 {
     // The block timestamp is relative, so we add it to the cluster timestamp
     Int64(((Double(clusterTimestamp) + Double(blockTimestamp)) / timestampScale) * 90000000)
 }

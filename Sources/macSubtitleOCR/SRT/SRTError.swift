@@ -6,10 +6,6 @@
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
-public enum SRTError: Error {
-    case invalidFormat
-    case invalidTimeFormat
-    case fileNotFound
-    case fileReadError
+enum SRTError: Error {
     case fileWriteError
 }

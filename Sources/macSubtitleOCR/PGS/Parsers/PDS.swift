@@ -9,11 +9,9 @@
 import Foundation
 import simd
 
-public class PDS {
+class PDS {
     // MARK: - Properties
 
-    private var id: UInt8 = 0
-    private var version: UInt8 = 0
     private var palette = [UInt8](repeating: 0, count: 1024)
 
     // MARK: - Lifecycle
@@ -22,32 +20,22 @@ public class PDS {
         guard data.count >= 8 else {
             throw PGSError.invalidFormat
         }
-        id = data[0]
-        version = data[1]
         try parsePDS(data)
     }
 
     // MARK: - Getters
 
-    public func getID() -> UInt8 {
-        id
-    }
-
-    public func getVersion() -> UInt8 {
-        version
-    }
-
-    public func getPalette() -> [UInt8] {
+    func getPalette() -> [UInt8] {
         palette
     }
 
-    // MARK: - Parser
+    // MARK: - Methods
 
     // Parses the Palette Definition Segment (PDS) to extract the RGBA palette.
     // PDS structure:
     //   1 byte: Segment Type (0x16); already checked by the caller
-    //   1 byte: Palette ID
-    //   1 byte: Palette Version
+    //   1 byte: Palette ID (unused by us)
+    //   1 byte: Palette Version (unused by us)
     //   Followed by a series of palette entries:
     //       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
     private func parsePDS(_ data: Data) throws {

@@ -6,8 +6,7 @@
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
-public enum PGSError: Error {
+enum PGSError: Error {
     case invalidFormat
     case fileReadError
-    case unsupportedFormat
 }

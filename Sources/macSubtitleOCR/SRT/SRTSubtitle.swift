@@ -8,9 +8,9 @@
 
 import Foundation
 
-public struct SRTSubtitle {
-    public var index: Int
-    public var startTime: TimeInterval
-    public var endTime: TimeInterval
-    public var text: String
+struct SRTSubtitle {
+    var index: Int
+    var startTime: TimeInterval
+    var endTime: TimeInterval
+    var text: String
 }
