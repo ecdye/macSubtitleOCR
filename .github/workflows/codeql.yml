@@ -26,11 +26,15 @@ jobs:
         languages: swift
         build-mode: manual
 
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
+    - name: Select Xcode
+      uses: mxcl/xcodebuild@v3
+      with:
+        xcode: 16.0
+        swift: 6.0
+        action: none
 
     - name: Build
-      run: swift build --configuration release
+      run: xcrun swift build --configuration release --arch arm64 --arch x86_64
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

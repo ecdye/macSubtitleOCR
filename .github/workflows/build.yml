@@ -15,17 +15,21 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
+    - name: Select Xcode
+      uses: mxcl/xcodebuild@v3
+      with:
+        xcode: 16.0
+        swift: 6.0
+        action: none
 
     - name: Build
-      run: swift build --configuration release
+      run: xcrun swift build --configuration release --arch arm64 --arch x86_64
 
     - name: Test
-      run: swift test
+      run: xcrun swift test
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4
       with:
         name: macSubtitleOCR
-        path: .build/release/macSubtitleOCR
+        path: .build/apple/Products/Release/macSubtitleOCR
