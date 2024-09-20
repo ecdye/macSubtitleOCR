@@ -9,7 +9,7 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
+private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "ebml")
 
 // Helper function to read variable-length integers (VINT) from MKV (up to 8 bytes)
 func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
@@ -27,6 +27,7 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
 
     // Extract the value
     logger.debug("Length: \(length), Mask: 0x\(String(format: "%08X", mask))")
+    logger.debug("Length: \(length), Mask - 1: 0x\(String(format: "%08X", mask - 1))")
     if mask - 1 == 0x0F {
         mask = 0xFF // Hacky workaround that I still don't understand why is needed
     } else if length == 1, !unmodified {
