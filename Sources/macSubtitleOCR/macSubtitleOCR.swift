@@ -17,7 +17,7 @@ import Vision
 struct macSubtitleOCR: ParsableCommand {
     // MARK: - Properties
 
-    @Argument(help: "Input .sup subtitle file")
+    @Argument(help: "Input file containing the subtitle stream (.sup or .mkv)")
     var sup: String
 
     @Argument(help: "Directory to output the completed .srt files to")
@@ -58,101 +58,23 @@ struct macSubtitleOCR: ParsableCommand {
         var subIndex = 1
         var jsonStream: [Any] = []
         var srtStreams: [Int: SRT] = [:]
+        var intermediateFiles: [Int: String] = [:]
 
         if sup.hasSuffix(".mkv") {
-            let mkvStream = try MKV(filePath: sup)
-            let tracks = mkvStream.getTracks()
-            for track in tracks {
+            let mkvStream = try MKVSubtitleExtractor(filePath: sup)
+            try mkvStream.parseTracks(codec: "S_HDMV/PGS")
+            for track in mkvStream.tracks {
                 subIndex = 1 // reset counter for each track
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
-                let subtitleDataPath = try mkvStream.getSubtitleTrackData(trackNumber: track.trackNumber, outPath: sup)!
+                intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(trackNumber: track.trackNumber, outPath: sup)!
 
                 // Open the PGS data stream
-                let PGS = try PGS(URL(fileURLWithPath: subtitleDataPath))
+                let PGS = try PGS(URL(fileURLWithPath: intermediateFiles[track.trackNumber]!))
 
                 let srtStream = SRT()
                 srtStreams[track.trackNumber] = srtStream
 
-                for subtitle in PGS.getSubtitles() {
-                    if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
-                        logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
-                        continue
-                    }
-
-                    guard let subImage = PGS.createImage(index: subIndex - 1)
-                    else {
-                        logger.info("Could not create image for index \(subIndex)! Skipping...")
-                        continue
-                    }
-
-                    // Save subtitle image as PNG if imageDirectory is provided
-                    if let imageDirectory {
-                        let outputDirectory = URL(fileURLWithPath: imageDirectory)
-                        do {
-                            try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: false, attributes: nil)
-                        } catch CocoaError.fileWriteFileExists {
-                            // Folder already existed
-                        }
-                        let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subIndex).png")
-
-                        try saveImageAsPNG(image: subImage, outputPath: pngPath)
-                    }
-
-                    // Perform text recognition
-                    let request = VNRecognizeTextRequest { request, _ in
-                        guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
-
-                        var subtitleLines: [[String: Any]] = []
-                        var subtitleText = ""
-                        var index = 0
-                        for observation in observations {
-                            let candidate = observation.topCandidates(1).first
-                            let string = candidate?.string ?? ""
-                            let confidence = candidate?.confidence ?? 0.0
-                            let stringRange = string.startIndex ..< string.endIndex
-                            let boxObservation = try? candidate?.boundingBox(for: stringRange)
-                            let boundingBox = boxObservation?.boundingBox ?? .zero
-                            let rect = VNImageRectForNormalizedRect(boundingBox, subtitle.imageWidth, subtitle.imageHeight)
-
-                            let line: [String: Any] = [
-                                "text": string,
-                                "confidence": confidence,
-                                "x": Int(rect.minX),
-                                "width": Int(rect.size.width),
-                                "y": Int(CGFloat(subtitle.imageHeight) - rect.minY - rect.size.height),
-                                "height": Int(rect.size.height),
-                            ]
-
-                            subtitleLines.append(line)
-                            subtitleText += string
-                            index += 1
-                            if index != observations.count {
-                                subtitleText += "\n"
-                            }
-                        }
-
-                        let subtitleData: [String: Any] = [
-                            "image": subIndex,
-                            "lines": subtitleLines,
-                            "text": subtitleText,
-                        ]
-
-                        srtStreams[track.trackNumber]?.appendSubtitle(SRTSubtitle(index: subIndex,
-                                                                                   startTime: subtitle.timestamp,
-                                                                                   endTime: subtitle.endTimestamp,
-                                                                                   text: subtitleText))
-
-                    }
-
-                    request.recognitionLevel = recognitionLevel
-                    request.usesLanguageCorrection = languageCorrection
-                    request.revision = revision
-                    request.recognitionLanguages = languages
-
-                    try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
-
-                    subIndex += 1
-                }
+                try processSubtitles(PGS: PGS, srtStream: srtStream, trackNumber: track.trackNumber, subIndex: subIndex, jsonStream: &jsonStream, logger: logger, manager: manager, recognitionLevel: recognitionLevel, languages: languages, revision: revision)
             }
         } else {
             // Open the PGS data stream
@@ -160,172 +82,8 @@ struct macSubtitleOCR: ParsableCommand {
             let srtStream = SRT()
             srtStreams[0] = srtStream
 
-            for subtitle in PGS.getSubtitles() {
-                if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
-                    logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
-                    continue
-                }
-
-                guard let subImage = PGS.createImage(index: subIndex - 1)
-                else {
-                    logger.info("Could not create image for index \(subIndex)! Skipping...")
-                    continue
-                }
-
-                // Save subtitle image as PNG if imageDirectory is provided
-                if let imageDirectory {
-                    let outputDirectory = URL(fileURLWithPath: imageDirectory)
-                    do {
-                        try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: false, attributes: nil)
-                    } catch CocoaError.fileWriteFileExists {
-                        // Folder already existed
-                    }
-                    let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subIndex).png")
-
-                    try saveImageAsPNG(image: subImage, outputPath: pngPath)
-                }
-
-                // Perform text recognition
-                let request = VNRecognizeTextRequest { request, _ in
-                    guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
-
-                    var subtitleLines: [[String: Any]] = []
-                    var subtitleText = ""
-                    var index = 0
-                    for observation in observations {
-                        let candidate = observation.topCandidates(1).first
-                        let string = candidate?.string ?? ""
-                        let confidence = candidate?.confidence ?? 0.0
-                        let stringRange = string.startIndex ..< string.endIndex
-                        let boxObservation = try? candidate?.boundingBox(for: stringRange)
-                        let boundingBox = boxObservation?.boundingBox ?? .zero
-                        let rect = VNImageRectForNormalizedRect(boundingBox, subtitle.imageWidth, subtitle.imageHeight)
-
-                        let line: [String: Any] = [
-                            "text": string,
-                            "confidence": confidence,
-                            "x": Int(rect.minX),
-                            "width": Int(rect.size.width),
-                            "y": Int(CGFloat(subtitle.imageHeight) - rect.minY - rect.size.height),
-                            "height": Int(rect.size.height),
-                        ]
-
-                        subtitleLines.append(line)
-                        subtitleText += string
-                        index += 1
-                        if index != observations.count {
-                            subtitleText += "\n"
-                        }
-                    }
-
-                    let subtitleData: [String: Any] = [
-                        "image": subIndex,
-                        "lines": subtitleLines,
-                        "text": subtitleText,
-                    ]
-
-                    jsonStream.append(subtitleData)
-
-                    // Append subtitle to SRT stream
-                    srtStream.appendSubtitle(SRTSubtitle(index: subIndex,
-                                                         startTime: subtitle.timestamp,
-                                                         endTime: subtitle.endTimestamp,
-                                                         text: subtitleText))
-                }
-
-                request.recognitionLevel = recognitionLevel
-                request.usesLanguageCorrection = languageCorrection
-                request.revision = revision
-                request.recognitionLanguages = languages
-
-                try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
-
-                subIndex += 1
-            }
+            try processSubtitles(PGS: PGS, srtStream: srtStream, trackNumber: 0, subIndex: subIndex, jsonStream: &jsonStream, logger: logger, manager: manager, recognitionLevel: recognitionLevel, languages: languages, revision: revision)
         }
-
-        // for subtitle in PGS.getSubtitles() {
-        //     if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
-        //         logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
-        //         continue
-        //     }
-
-        //     guard let subImage = PGS.createImage(index: subIndex - 1)
-        //     else {
-        //         logger.info("Could not create image for index \(subIndex)! Skipping...")
-        //         continue
-        //     }
-
-        //     // Save subtitle image as PNG if imageDirectory is provided
-        //     if let imageDirectory {
-        //         let outputDirectory = URL(fileURLWithPath: imageDirectory)
-        //         do {
-        //             try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: false, attributes: nil)
-        //         } catch CocoaError.fileWriteFileExists {
-        //             // Folder already existed
-        //         }
-        //         let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subIndex).png")
-
-        //         try saveImageAsPNG(image: subImage, outputPath: pngPath)
-        //     }
-
-        //     // Perform text recognition
-        //     let request = VNRecognizeTextRequest { request, _ in
-        //         guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
-
-        //         var subtitleLines: [[String: Any]] = []
-        //         var subtitleText = ""
-        //         var index = 0
-        //         for observation in observations {
-        //             let candidate = observation.topCandidates(1).first
-        //             let string = candidate?.string ?? ""
-        //             let confidence = candidate?.confidence ?? 0.0
-        //             let stringRange = string.startIndex ..< string.endIndex
-        //             let boxObservation = try? candidate?.boundingBox(for: stringRange)
-        //             let boundingBox = boxObservation?.boundingBox ?? .zero
-        //             let rect = VNImageRectForNormalizedRect(boundingBox, subtitle.imageWidth, subtitle.imageHeight)
-
-        //             let line: [String: Any] = [
-        //                 "text": string,
-        //                 "confidence": confidence,
-        //                 "x": Int(rect.minX),
-        //                 "width": Int(rect.size.width),
-        //                 "y": Int(CGFloat(subtitle.imageHeight) - rect.minY - rect.size.height),
-        //                 "height": Int(rect.size.height),
-        //             ]
-
-        //             subtitleLines.append(line)
-        //             subtitleText += string
-        //             index += 1
-        //             if index != observations.count {
-        //                 subtitleText += "\n"
-        //             }
-        //         }
-
-        //         let subtitleData: [String: Any] = [
-        //             "image": subIndex,
-        //             "lines": subtitleLines,
-        //             "text": subtitleText,
-        //         ]
-
-        //         jsonStream.append(subtitleData)
-
-        //         // Append subtitle to SRT stream
-        //         srtStream.appendSubtitle(SRTSubtitle(index: subIndex,
-        //                                              startTime: subtitle.timestamp,
-        //                                              endTime: subtitle.endTimestamp,
-        //                                              text: subtitleText))
-        //     }
-
-        //     request.recognitionLevel = recognitionLevel
-        //     request.usesLanguageCorrection = languageCorrection
-        //     request.revision = revision
-        //     request.recognitionLanguages = languages
-
-        //     try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
-
-        //     subIndex += 1
-        // }
 
         if let json {
             // Convert subtitle data to JSON
@@ -338,14 +96,6 @@ struct macSubtitleOCR: ParsableCommand {
                                  encoding: .utf8)
         }
 
-        if saveSup, inFile.hasSuffix(".mkv") {
-            try manager.moveItem(
-                at: URL(fileURLWithPath: sup),
-                to: URL(fileURLWithPath: inFile).deletingPathExtension().appendingPathExtension("sup"))
-        } else {
-            try manager.removeItem(at: URL(fileURLWithPath: sup))
-        }
-
         for (trackNumber, srtStream) in srtStreams {
             let outputDirectory = URL(fileURLWithPath: srtDirectory)
             do {
@@ -355,9 +105,15 @@ struct macSubtitleOCR: ParsableCommand {
             }
             let srtFilePath = outputDirectory.appendingPathComponent("track_\(trackNumber).srt")
             try srtStream.write(toFileAt: srtFilePath)
+            if saveSup, inFile.hasSuffix(".mkv") {
+                let fileName = "\(trackNumber)_" + URL(fileURLWithPath: inFile).deletingPathExtension().appendingPathExtension("sup").lastPathComponent
+                try manager.moveItem(
+                at: URL(fileURLWithPath: intermediateFiles[trackNumber]!),
+                to: URL(fileURLWithPath: inFile).deletingLastPathComponent().appendingPathComponent(fileName))
+            } else {
+                try manager.removeItem(at: URL(fileURLWithPath: intermediateFiles[trackNumber]!))
+            }
         }
-
-        //try srtStream.write(toFileAt: URL(fileURLWithPath: srt))
     }
 
     // MARK: - Methods
@@ -388,5 +144,92 @@ struct macSubtitleOCR: ParsableCommand {
         if !CGImageDestinationFinalize(destination) {
             throw macSubtitleOCRError.fileWriteError
         }
+    }
+
+    private func processSubtitles(PGS: PGS, srtStream: SRT, trackNumber: Int, subIndex: Int, jsonStream: inout [Any], logger: Logger, manager: FileManager, recognitionLevel: VNRequestTextRecognitionLevel, languages: [String], revision: Int) throws {
+        var subIndex = subIndex
+        var inJson = jsonStream
+        for subtitle in PGS.getSubtitles() {
+            if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
+                logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
+                continue
+            }
+
+            guard let subImage = PGS.createImage(index: subIndex - 1)
+            else {
+                logger.info("Could not create image for index \(subIndex)! Skipping...")
+                continue
+            }
+
+            // Save subtitle image as PNG if imageDirectory is provided
+            if let imageDirectory {
+                let outputDirectory = URL(fileURLWithPath: imageDirectory)
+                do {
+                    try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: false, attributes: nil)
+                } catch CocoaError.fileWriteFileExists {
+                    // Folder already existed
+                }
+                let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subIndex).png")
+
+                try saveImageAsPNG(image: subImage, outputPath: pngPath)
+            }
+
+            // Perform text recognition
+            let request = VNRecognizeTextRequest { request, _ in
+                guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
+
+                var subtitleLines: [[String: Any]] = []
+                var subtitleText = ""
+                var index = 0
+                for observation in observations {
+                    let candidate = observation.topCandidates(1).first
+                    let string = candidate?.string ?? ""
+                    let confidence = candidate?.confidence ?? 0.0
+                    let stringRange = string.startIndex ..< string.endIndex
+                    let boxObservation = try? candidate?.boundingBox(for: stringRange)
+                    let boundingBox = boxObservation?.boundingBox ?? .zero
+                    let rect = VNImageRectForNormalizedRect(boundingBox, subtitle.imageWidth, subtitle.imageHeight)
+
+                    let line: [String: Any] = [
+                        "text": string,
+                        "confidence": confidence,
+                        "x": Int(rect.minX),
+                        "width": Int(rect.size.width),
+                        "y": Int(CGFloat(subtitle.imageHeight) - rect.minY - rect.size.height),
+                        "height": Int(rect.size.height),
+                    ]
+
+                    subtitleLines.append(line)
+                    subtitleText += string
+                    index += 1
+                    if index != observations.count {
+                        subtitleText += "\n"
+                    }
+                }
+
+                let subtitleData: [String: Any] = [
+                    "image": subIndex,
+                    "lines": subtitleLines,
+                    "text": subtitleText,
+                ]
+
+                inJson.append(subtitleData)
+
+                srtStream.appendSubtitle(SRTSubtitle(index: subIndex,
+                                                     startTime: subtitle.timestamp,
+                                                     endTime: subtitle.endTimestamp,
+                                                     text: subtitleText))
+            }
+
+            request.recognitionLevel = recognitionLevel
+            request.usesLanguageCorrection = languageCorrection
+            request.revision = revision
+            request.recognitionLanguages = languages
+
+            try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
+
+            subIndex += 1
+        }
+        jsonStream = inJson
     }
 }

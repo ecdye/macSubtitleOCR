@@ -26,8 +26,6 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
     }
 
     // Extract the value
-    logger.debug("Length: \(length), Mask: 0x\(String(format: "%08X", mask))")
-    logger.debug("Length: \(length), Mask - 1: 0x\(String(format: "%08X", mask - 1))")
     if mask - 1 == 0x0F {
         mask = 0xFF // Hacky workaround that I still don't understand why is needed
     } else if length == 1, !unmodified {
@@ -35,8 +33,6 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
     } else {
         mask = mask - 1
     }
-    logger.debug("Byte before: 0x\(String(format: "%08X", firstByte))")
-    logger.debug("Byte after: 0x\(String(format: "%08X", firstByte & mask))")
 
     var value = UInt64(firstByte & mask)
 
@@ -61,6 +57,5 @@ func readBytes(from fileHandle: FileHandle, length: Int) -> Data? {
 func readEBMLElement(from fileHandle: FileHandle, unmodified: Bool = false) -> (elementID: UInt32, elementSize: UInt64) {
     let elementID = readVINT(from: fileHandle, unmodified: unmodified)
     let elementSize = readVINT(from: fileHandle, unmodified: true)
-    logger.debug("elementID: 0x\(String(format: "%08X", elementID)), elementSize: \(elementSize)")
     return (UInt32(elementID), elementSize)
 }
