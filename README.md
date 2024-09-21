@@ -13,10 +13,9 @@ For more information on accuracy, see [Accuracy](#accuracy) below.
 
 ### Options
 
-- Ability to export images in the `.sup` file to compare and manually refine OCR output
-- Ability to export raw JSON output from OCR engine for inspection
+- Ability to export images in the subtitle stream to compare and manually refine OCR output
 - Ability to use language recognition in the macOS OCR engine to improve OCR accuracy
-
+- Ability to export raw JSON output from OCR engine for inspection
 
 ### Building
 
