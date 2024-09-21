@@ -18,7 +18,7 @@ struct macSubtitleOCR: ParsableCommand {
     // MARK: - Properties
 
     @Argument(help: "Input file containing the subtitle stream (.sup or .mkv)")
-    var sup: String
+    var input: String
 
     @Argument(help: "Directory to output the completed .srt files to")
     var srtDirectory: String
@@ -49,7 +49,7 @@ struct macSubtitleOCR: ParsableCommand {
         let manager = FileManager.default
 
         // Setup options
-        let inFile = sup
+        let inFile = input
         let revision = setOCRRevision()
         let recognitionLevel = setOCRMode()
         let languages = language.split(separator: ",").map { String($0) }
@@ -60,13 +60,13 @@ struct macSubtitleOCR: ParsableCommand {
         var srtStreams: [Int: SRT] = [:]
         var intermediateFiles: [Int: String] = [:]
 
-        if sup.hasSuffix(".mkv") {
-            let mkvStream = try MKVSubtitleExtractor(filePath: sup)
+        if input.hasSuffix(".mkv") {
+            let mkvStream = try MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(codec: "S_HDMV/PGS")
             for track in mkvStream.tracks {
                 subIndex = 1 // reset counter for each track
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
-                intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(trackNumber: track.trackNumber, outPath: sup)!
+                intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(trackNumber: track.trackNumber, outPath: input)!
 
                 // Open the PGS data stream
                 let PGS = try PGS(URL(fileURLWithPath: intermediateFiles[track.trackNumber]!))
@@ -78,7 +78,7 @@ struct macSubtitleOCR: ParsableCommand {
             }
         } else {
             // Open the PGS data stream
-            let PGS = try PGS(URL(fileURLWithPath: sup))
+            let PGS = try PGS(URL(fileURLWithPath: input))
             let srtStream = SRT()
             srtStreams[0] = srtStream
 
@@ -108,8 +108,8 @@ struct macSubtitleOCR: ParsableCommand {
             if saveSup, inFile.hasSuffix(".mkv") {
                 let fileName = "\(trackNumber)_" + URL(fileURLWithPath: inFile).deletingPathExtension().appendingPathExtension("sup").lastPathComponent
                 try manager.moveItem(
-                at: URL(fileURLWithPath: intermediateFiles[trackNumber]!),
-                to: URL(fileURLWithPath: inFile).deletingLastPathComponent().appendingPathComponent(fileName))
+                    at: URL(fileURLWithPath: intermediateFiles[trackNumber]!),
+                    to: URL(fileURLWithPath: inFile).deletingLastPathComponent().appendingPathComponent(fileName))
             } else {
                 try manager.removeItem(at: URL(fileURLWithPath: intermediateFiles[trackNumber]!))
             }
@@ -146,7 +146,7 @@ struct macSubtitleOCR: ParsableCommand {
         }
     }
 
-    private func processSubtitles(PGS: PGS, srtStream: SRT, trackNumber: Int, subIndex: Int, jsonStream: inout [Any], logger: Logger, manager: FileManager, recognitionLevel: VNRequestTextRecognitionLevel, languages: [String], revision: Int) throws {
+    private func processSubtitles(PGS: PGS, srtStream: SRT, trackNumber _: Int, subIndex: Int, jsonStream: inout [Any], logger: Logger, manager: FileManager, recognitionLevel: VNRequestTextRecognitionLevel, languages: [String], revision: Int) throws {
         var subIndex = subIndex
         var inJson = jsonStream
         for subtitle in PGS.getSubtitles() {

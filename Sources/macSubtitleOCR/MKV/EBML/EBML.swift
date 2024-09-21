@@ -9,7 +9,6 @@
 import Foundation
 
 enum EBML {
-    static let ebml: UInt32 = 0x1A45_DFA3
     static let block: UInt32 = 0xA1
     static let blockGroup: UInt32 = 0xA0
     static let chapters: UInt32 = 0x1043_A770

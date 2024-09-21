@@ -1,7 +1,15 @@
+//
+// MKVTrackParser.swift
+// macSubtitleOCR
+//
+// Created by Ethan Dye on 9/20/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
+//
+
 import Foundation
 import os
 
-class MKVTrackParser: MKVFileHandler, MKVTrackParsing {
+class MKVTrackParser: MKVFileHandler {
     var tracks: [MKVTrack] = []
     private var stderr = StandardErrorOutputStream()
 
@@ -79,6 +87,7 @@ class MKVTrackParser: MKVFileHandler, MKVTrackParsing {
         // Step 1: Locate the Segment element
         guard let segmentSize = locateSegment() else { return nil }
         let segmentEndOffset = fileHandle.offsetInFile + segmentSize
+        // swiftformat:disable:next redundantSelf
         logger.debug("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset), EOF: \(self.eof)")
 
         var trackData = [Data](repeating: Data(), count: trackNumber.count)
@@ -110,6 +119,7 @@ class MKVTrackParser: MKVFileHandler, MKVTrackParsing {
 
     private func parseBlocks(within clusterEndOffset: UInt64, trackNumber: [Int], clusterTimestamp: Int64, trackData: inout [Data]) {
         while fileHandle.offsetInFile < clusterEndOffset {
+            // swiftformat:disable:next redundantSelf
             logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")
             guard case (var blockSize?, let blockType?) = findElement(withID: EBML.simpleBlock, EBML.blockGroup) else { break }
 

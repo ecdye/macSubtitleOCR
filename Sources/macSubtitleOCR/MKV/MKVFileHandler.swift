@@ -1,7 +1,15 @@
+//
+// MKVFileHandler.swift
+// macSubtitleOCR
+//
+// Created by Ethan Dye on 9/20/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
+//
+
 import Foundation
 import os
 
-class MKVFileHandler: MKVFileHandling {
+class MKVFileHandler {
     var fileHandle: FileHandle
     var eof: UInt64
     var timestampScale: Double = 1000000.0 // Default value if not specified in a given MKV file
@@ -11,8 +19,8 @@ class MKVFileHandler: MKVFileHandling {
         guard FileManager.default.fileExists(atPath: filePath) else {
             throw macSubtitleOCRError.fileReadError
         }
-        self.fileHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
-        self.eof = fileHandle.seekToEndOfFile()
+        fileHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
+        eof = fileHandle.seekToEndOfFile()
         fileHandle.seek(toFileOffset: 0)
     }
 
