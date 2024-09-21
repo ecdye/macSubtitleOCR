@@ -10,10 +10,14 @@ import Foundation
 import os
 
 class MKVFileHandler {
+    // MARK: - Properties
+
     var fileHandle: FileHandle
     var eof: UInt64
     var timestampScale: Double = 1000000.0 // Default value if not specified in a given MKV file
     var logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "mkv")
+
+    // MARK: - Lifecycle
 
     init(filePath: String) throws {
         guard FileManager.default.fileExists(atPath: filePath) else {
@@ -27,6 +31,8 @@ class MKVFileHandler {
     deinit {
         fileHandle.closeFile()
     }
+
+    // MARK: - Functions
 
     func locateSegment() -> UInt64? {
         if let (segmentSize, _) = findElement(withID: EBML.segmentID, avoidCluster: true) as? (UInt64, UInt32) {
@@ -52,9 +58,7 @@ class MKVFileHandler {
 
             // If, by chance, we find a TimestampScale element, update it from the default
             if elementID == EBML.timestampScale {
-                timestampScale = Double(readFixedLengthNumber(
-                    fileHandle: fileHandle,
-                    length: Int(elementSize)))
+                timestampScale = Double(readFixedLengthNumber(fileHandle: fileHandle, length: Int(elementSize)))
                 // swiftformat:disable:next redundantSelf
                 logger.debug("Found timestamp scale: \(self.timestampScale)")
                 return (nil, nil)
@@ -76,7 +80,6 @@ class MKVFileHandler {
                 fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
             }
         }
-
         return (nil, nil)
     }
 

@@ -66,7 +66,7 @@ struct macSubtitleOCR: ParsableCommand {
             for track in mkvStream.tracks {
                 subIndex = 1 // reset counter for each track
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
-                intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(trackNumber: track.trackNumber, outPath: input)!
+                intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(trackNumber: track.trackNumber)!
 
                 // Open the PGS data stream
                 let PGS = try PGS(URL(fileURLWithPath: intermediateFiles[track.trackNumber]!))

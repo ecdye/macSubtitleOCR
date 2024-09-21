@@ -10,8 +10,12 @@ import Foundation
 import os
 
 class MKVTrackParser: MKVFileHandler {
+    // MARK: - Properties
+
     var tracks: [MKVTrack] = []
     private var stderr = StandardErrorOutputStream()
+
+    // MARK: - Functions
 
     func parseTracks(codec: String) throws {
         guard let _ = findElement(withID: EBML.segmentID) as? (UInt64, UInt32) else {
@@ -48,39 +52,6 @@ class MKVTrackParser: MKVFileHandler {
         }
     }
 
-    private func parseTrackEntry(codec: String) -> Int? {
-        var trackNumber: Int?
-        var trackType: UInt8?
-        var codecId: String?
-
-        while let (elementID, elementSize, _) = tryParseElement() {
-            switch elementID {
-            case EBML.trackNumberID:
-                trackNumber = Int((readBytes(from: fileHandle, length: 1)?.first)!)
-                logger.debug("Found track number: \(trackNumber!)")
-            case EBML.trackTypeID: // Unused by us, left for debugging
-                trackType = readBytes(from: fileHandle, length: 1)?.first
-                logger.debug("Found track type: \(trackType!)")
-            case EBML.codecID:
-                var data = readBytes(from: fileHandle, length: Int(elementSize))
-                data?.removeNullBytes()
-                codecId = data.flatMap { String(data: $0, encoding: .ascii) }
-                logger.debug("Found codec ID: \(codecId!)")
-            default:
-                fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
-            }
-            if trackNumber != nil, trackType != nil, codecId != nil { break }
-        }
-
-        if let trackNumber, let codecId {
-            if codecId == codec {
-                return trackNumber
-            }
-        }
-        return nil
-    }
-
-    // Implement track extraction logic (e.g., `extractTrackData`) here
     func extractTrackData(trackNumber: [Int]) -> [Data]? {
         fileHandle.seek(toFileOffset: 0)
 
@@ -108,6 +79,40 @@ class MKVTrackParser: MKVFileHandler {
         }
 
         return trackData.isEmpty ? nil : trackData
+    }
+
+    // MARK: - Methods
+
+    private func parseTrackEntry(codec: String) -> Int? {
+        var trackNumber: Int?
+        var trackType: UInt8?
+        var codecId: String?
+
+        while let (elementID, elementSize, _) = tryParseElement() {
+            switch elementID {
+            case EBML.trackNumberID:
+                trackNumber = Int((fileHandle.readData(ofLength: 1).first)!)
+                logger.debug("Found track number: \(trackNumber!)")
+            case EBML.trackTypeID: // Unused by us, left for debugging
+                trackType = fileHandle.readData(ofLength: 1).first
+                logger.debug("Found track type: \(trackType!)")
+            case EBML.codecID:
+                var data = fileHandle.readData(ofLength: Int(elementSize))
+                data.removeNullBytes()
+                codecId = String(data: data, encoding: .ascii)
+                logger.debug("Found codec ID: \(codecId ?? "nil")")
+            default:
+                fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
+            }
+            if trackNumber != nil, trackType != nil, codecId != nil { break }
+        }
+
+        if let trackNumber, let codecId {
+            if codecId == codec {
+                return trackNumber
+            }
+        }
+        return nil
     }
 
     private func extractClusterTimestamp() -> Int64? {
@@ -154,14 +159,14 @@ class MKVTrackParser: MKVFileHandler {
 
                 trackData[trackNumber.firstIndex { $0 == Int(blockTrackNumber) }!].append(blockData)
             } else {
-                // Skip this block if it's for a different track
+                // Skip this block because it's for a different track
                 fileHandle.seek(toFileOffset: blockStartOffset + blockSize)
             }
         }
     }
 
     // Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
-    func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
+    private func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
         let trackNumber = readVINT(from: fileHandle, unmodified: true)
         let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2)
         let suffix = fileHandle.readData(ofLength: 1).first ?? 0
