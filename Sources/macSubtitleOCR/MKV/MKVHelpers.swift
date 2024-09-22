@@ -15,18 +15,14 @@ func getUInt16BE(buffer: Data, offset: Int) -> UInt16 {
 // Function to read a fixed length number of bytes and convert in into a (Un)signed integer
 func readFixedLengthNumber(fileHandle: FileHandle, length: Int, signed: Bool = false) -> Int64 {
     let data = fileHandle.readData(ofLength: length)
-    let pos = 0
-
     var result: Int64 = 0
-    for i in 0 ..< length {
-        result = result * 0x100 + Int64(data[pos + i])
+
+    for byte in data {
+        result = result << 8 | Int64(byte)
     }
 
-    if signed {
-        let signBitMask: UInt8 = 0x80
-        if data[pos] & signBitMask != 0 {
-            result -= Int64(1) << (8 * length) // Apply two's complement for signed numbers
-        }
+    if signed, data.first! & 0x80 != 0 {
+        result -= Int64(1) << (8 * length) // Apply two's complement for signed integers
     }
 
     return result
@@ -34,13 +30,7 @@ func readFixedLengthNumber(fileHandle: FileHandle, length: Int, signed: Bool = f
 
 // Encode the absolute timestamp as 4 bytes in big-endian format for PGS
 func encodePTSForPGS(_ timestamp: Int64) -> [UInt8] {
-    let timestamp = UInt32(timestamp) // Convert to unsigned 32-bit value
-    return [
-        UInt8((timestamp >> 24) & 0xFF),
-        UInt8((timestamp >> 16) & 0xFF),
-        UInt8((timestamp >> 8) & 0xFF),
-        UInt8(timestamp & 0xFF),
-    ]
+    withUnsafeBytes(of: UInt32(timestamp).bigEndian) { Array($0) }
 }
 
 // Calculate the absolute timestamp with 90 kHz accuracy for PGS format

@@ -2,7 +2,7 @@
 // ODS.swift
 // macSubtitleOCR
 //
-// Created by Ethan Dye on 9/12/24.
+// Created by Ethan Dye on 9/19/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 

@@ -2,7 +2,7 @@
 // macSubtitleOCRTests.swift
 // macSubtitleOCR
 //
-// Created by Ethan Dye on 9/18/24.
+// Created by Ethan Dye on 9/19/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
@@ -15,11 +15,11 @@ import Testing
 @Test func pgsMKV() throws {
     // Setup files
     let manager = FileManager.default
-    let srtPath = (manager.temporaryDirectory.path + "/test.srt")
+    let srtPath = (manager.temporaryDirectory.path + "/srt")
     let jsonPath = (manager.temporaryDirectory.path + "/test.json")
     let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.absoluteString.replacing("file://", with: "")
     let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString.replacing("file://", with: "")
-    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
+    let goodJSONPath = Bundle.module.url(forResource: "testMKV.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
 
     // Run tests
     let options = [mkvPath, srtPath, "--json", jsonPath, "--language-correction"]
@@ -28,21 +28,24 @@ import Testing
 
     // Compare output
     let srtExpectedOutput = try String(contentsOfFile: goodSRTPath, encoding: .utf8)
-    let srtActualOutput = try String(contentsOfFile: srtPath, encoding: .utf8)
+    let srt0ActualOutput = try String(contentsOfFile: srtPath + "/track_0.srt", encoding: .utf8)
+    let srt1ActualOutput = try String(contentsOfFile: srtPath + "/track_1.srt", encoding: .utf8)
     let jsonExpectedOutput = try String(contentsOfFile: goodJSONPath, encoding: .utf8)
     let jsonActualOutput = try String(contentsOfFile: jsonPath, encoding: .utf8)
 
-    let srtMatch = similarityPercentage(srtExpectedOutput, srtActualOutput)
+    let srt0Match = similarityPercentage(srtExpectedOutput, srt0ActualOutput)
+    let srt1Match = similarityPercentage(srtExpectedOutput, srt1ActualOutput)
     let jsonMatch = similarityPercentage(jsonExpectedOutput, jsonActualOutput)
 
-    #expect(srtMatch >= 90.0)
+    #expect(srt0Match >= 90.0)
+    #expect(srt1Match >= 90.0)
     #expect(jsonMatch >= 90.0)
 }
 
 @Test func pgsSUP() throws {
     // Setup files
     let manager = FileManager.default
-    let srtPath = (manager.temporaryDirectory.path + "/test.srt")
+    let srtPath = (manager.temporaryDirectory.path + "/srt")
     let jsonPath = (manager.temporaryDirectory.path + "/test.json")
     let supPath = Bundle.module.url(forResource: "test.sup", withExtension: nil)!.absoluteString.replacing("file://", with: "")
     let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString.replacing("file://", with: "")
@@ -55,7 +58,7 @@ import Testing
 
     // Compare output
     let srtExpectedOutput = try String(contentsOfFile: goodSRTPath, encoding: .utf8)
-    let srtActualOutput = try String(contentsOfFile: srtPath, encoding: .utf8)
+    let srtActualOutput = try String(contentsOfFile: srtPath + "/track_0.srt", encoding: .utf8)
     let jsonExpectedOutput = try String(contentsOfFile: goodJSONPath, encoding: .utf8)
     let jsonActualOutput = try String(contentsOfFile: jsonPath, encoding: .utf8)
 

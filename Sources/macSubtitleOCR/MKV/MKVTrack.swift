@@ -9,6 +9,7 @@
 import Foundation
 
 struct MKVTrack {
-    let trackNumber: Int
-    let codecId: String
+    var trackNumber: Int
+    var codecId: String
+    var trackData: Data
 }
