@@ -110,7 +110,7 @@ struct macSubtitleOCR: ParsableCommand {
                 try manager.moveItem(
                     at: URL(fileURLWithPath: intermediateFiles[trackNumber]!),
                     to: URL(fileURLWithPath: inFile).deletingLastPathComponent().appendingPathComponent(fileName))
-            } else {
+            } else if inFile.hasSuffix(".mkv") {
                 try manager.removeItem(at: URL(fileURLWithPath: intermediateFiles[trackNumber]!))
             }
         }
