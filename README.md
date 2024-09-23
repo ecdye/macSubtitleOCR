@@ -1,11 +1,12 @@
 # macSubtitleOCR
 [![License](https://img.shields.io/github/license/ecdye/macSubtitleOCR)](https://github.com/ecdye/macSubtitleOCR/blob/main/LICENSE.md)
 [![CodeQL](https://github.com/ecdye/macSubtitleOCR/actions/workflows/codeql.yml/badge.svg)](https://github.com/ecdye/macSubtitleOCR/actions/workflows/codeql.yml)
-
+[![Build](https://github.com/ecdye/macSubtitleOCR/actions/workflows/build.yml/badge.svg)](https://github.com/ecdye/macSubtitleOCR/actions/workflows/build.yml)
+[![Lint](https://github.com/ecdye/macSubtitleOCR/actions/workflows/lint.yml/badge.svg)](https://github.com/ecdye/macSubtitleOCR/actions/workflows/lint.yml)
 
 ## Overview
 
-macSubtitleOCR is used to covert a file containing a PGS Subtitle stream to SubRip subtitles using OCR.
+macSubtitleOCR is used to convert a file containing a PGS Subtitle stream to SubRip subtitles using OCR.
 Currently the supported input file types are `.mkv` and `.sup`.
 It uses the built in OCR engine in macOS to perform the text recognition, which works really well.
 For more information on accuracy, see [Accuracy](#accuracy) below.
@@ -13,14 +14,14 @@ For more information on accuracy, see [Accuracy](#accuracy) below.
 
 ### Options
 
-- Ability to export images in the subtitle stream to compare and manually refine OCR output
-- Ability to use language recognition in the macOS OCR engine to improve OCR accuracy
+- Ability to export `.png` images of the subtitles to allow manual refinement of the OCR output
+- Ability to use language recognition (i.e. seeing if a sequence of characters actually makes a valid word) in the macOS OCR engine to improve OCR accuracy
 - Ability to export raw JSON output from OCR engine for inspection
 
 ### Building
 
 > [!IMPORTANT]
-> This project requires Swift 6 work properly!
+> This project requires Swift 6 to work properly!
 
 To get started with macSubtitleOCR, clone the repository and then build the project with Swift.
 
@@ -44,15 +45,13 @@ swift test
 ### Accuracy
 
 In simple tests against the Tesseract OCR engine the accuracy of the macOS OCR engine has been significantly better.
-This improvement is especially noticable with words like 'I', especially when italicized.
+This improvement is especially noticeable with words like 'I', especially when italicized.
 The binary image compare method used in projects like [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit) may be slightly more accurate, but it depends on the use case.
 
-## TODO (not necessarily in order)
+## TODO / Contributing
 
-- Implement complete testing and formal linting / style guidelines
-- Implement an option to not output the `.sup` file when parsing from `.mkv` files (ie. perform the operation completely in memory)
-- Add additional test cases
-- Implement the ability to read `.sub` VobSub files and VobSub streams from `.mkv` files
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidance on how to contribute to the project.
+To help with a specific project on the TODO list please view issues tagged as [enhancements](https://github.com/ecdye/macSubtitleOCR/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement).
 
 ## Reference
 

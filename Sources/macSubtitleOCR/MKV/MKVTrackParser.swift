@@ -30,13 +30,13 @@ class MKVTrackParser: MKVFileHandler {
 
         let endOfTracksOffset = fileHandle.offsetInFile + tracksSize
 
-        var trackNums = [Int]()
+        var trackNumbers = [Int]()
         while fileHandle.offsetInFile < endOfTracksOffset {
             if let (elementID, elementSize, _) = tryParseElement() {
                 if elementID == EBML.trackEntryID {
                     logger.debug("Found TrackEntry element")
                     if let track = parseTrackEntry(codec: codec) {
-                        trackNums.append(track)
+                        trackNumbers.append(track)
                     }
                 } else if elementID == EBML.chapters {
                     break
@@ -46,7 +46,7 @@ class MKVTrackParser: MKVFileHandler {
             }
         }
 
-        let trackData = extractTrackData(trackNumber: trackNums)
+        let trackData = extractTrackData(trackNumber: trackNumbers)
         trackData?.enumerated().forEach { index, data in
             tracks.append(MKVTrack(trackNumber: index, codecId: codec, trackData: data))
         }
