@@ -42,17 +42,19 @@ class PGS {
             return nil
         }
 
-        return CGImage(width: subtitles[index].imageWidth,
-                       height: subtitles[index].imageHeight,
-                       bitsPerComponent: 8,
-                       bitsPerPixel: 32,
-                       bytesPerRow: subtitles[index].imageWidth * 4, // 4 bytes per pixel (RGBA)
-                       space: colorSpace,
-                       bitmapInfo: bitmapInfo,
-                       provider: provider,
-                       decode: nil,
-                       shouldInterpolate: false,
-                       intent: .defaultIntent)
+        let image = CGImage(width: subtitles[index].imageWidth,
+                            height: subtitles[index].imageHeight,
+                            bitsPerComponent: 8,
+                            bitsPerPixel: 32,
+                            bytesPerRow: subtitles[index].imageWidth * 4, // 4 bytes per pixel (RGBA)
+                            space: colorSpace,
+                            bitmapInfo: bitmapInfo,
+                            provider: provider,
+                            decode: nil,
+                            shouldInterpolate: false,
+                            intent: .defaultIntent)
+
+        return cropImageToVisibleArea(image!, buffer: 5)
     }
 
     // MARK: - Methods
@@ -171,5 +173,65 @@ class PGS {
                 return subtitle
             }
         }
+    }
+
+    private func cropImageToVisibleArea(_ image: CGImage, buffer: Int) -> CGImage? {
+        guard let dataProvider = image.dataProvider,
+              let data = dataProvider.data
+        else {
+            return nil
+        }
+
+        let width = image.width
+        let height = image.height
+        let bytesPerPixel = image.bitsPerPixel / 8
+        let bytesPerRow = image.bytesPerRow
+        let alphaInfo = image.alphaInfo
+
+        guard alphaInfo == .premultipliedLast || alphaInfo == .last else {
+            // Ensure that the image contains an alpha channel.
+            return nil
+        }
+
+        let pixelData = CFDataGetBytePtr(data)
+
+        var minX = width
+        var maxX = 0
+        var minY = height
+        var maxY = 0
+
+        // Iterate over each pixel to find the non-transparent bounding box
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let pixelIndex = y * bytesPerRow + x * bytesPerPixel
+                let alpha = pixelData![pixelIndex + 3] // Assuming RGBA format
+
+                if alpha > 0 { // Non-transparent pixel
+                    if x < minX { minX = x }
+                    if x > maxX { maxX = x }
+                    if y < minY { minY = y }
+                    if y > maxY { maxY = y }
+                }
+            }
+        }
+
+        // Check if the image is fully transparent, return nil if so
+        if minX == width || maxX == 0 || minY == height || maxY == 0 {
+            return nil // Fully transparent image
+        }
+
+        // Add buffer to the bounding box, ensuring it's clamped within the image bounds
+        minX = max(0, minX - buffer)
+        maxX = min(width - 1, maxX + buffer)
+        minY = max(0, minY - buffer)
+        maxY = min(height - 1, maxY + buffer)
+
+        let croppedWidth = maxX - minX + 1
+        let croppedHeight = maxY - minY + 1
+
+        let croppedRect = CGRect(x: minX, y: minY, width: croppedWidth, height: croppedHeight)
+
+        // Create a cropped image from the original image
+        return image.cropping(to: croppedRect)
     }
 }

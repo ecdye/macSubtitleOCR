@@ -7,10 +7,11 @@
 //
 
 import ArgumentParser
-import Cocoa
 import os
 import UniformTypeIdentifiers
 import Vision
+
+private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
 
 // The main struct representing the macSubtitleOCR command-line tool.
 @main
@@ -20,17 +21,17 @@ struct macSubtitleOCR: ParsableCommand {
     @Argument(help: "Input file containing the subtitle stream (.sup or .mkv)")
     var input: String
 
-    @Argument(help: "Directory to output the completed .srt files to")
-    var srtDirectory: String
-
-    @Option(help: "File to output the OCR direct output in json to (optional)")
-    var json: String?
-
-    @Option(help: "Output image files of subtitles to directory (optional)")
-    var imageDirectory: String?
+    @Argument(help: "Directory to output files to")
+    var outputDirectory: String
 
     @Option(wrappedValue: "en", help: "The input image language(s)")
     var language: String
+
+    @Flag(help: "Save image files for subtitle track (optional)")
+    var saveImages = false
+
+    @Flag(help: "Save the raw json results from OCR (optional)")
+    var json = false
 
     @Flag(help: "Enable fast mode (less accurate)")
     var fastMode = false
@@ -39,26 +40,15 @@ struct macSubtitleOCR: ParsableCommand {
     var languageCorrection = false
 
     @Flag(help: "Save extracted `.sup` file to disk (MKV input only)")
-    var saveSup: Bool = false
+    var saveSup = false
 
     // MARK: - Entrypoint
 
-    mutating func run() throws {
-        // Setup utilities
-        let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
-        let manager = FileManager.default
-
-        // Setup options
-        let inFile = input
-        let revision = setOCRRevision()
-        let recognitionLevel = setOCRMode()
-        let languages = language.split(separator: ",").map { String($0) }
-
-        // Setup data variables
+    func run() throws {
+        let fileManager = FileManager.default
         var subIndex = 1
-        var jsonStream: [Any] = []
-        var srtStreams: [Int: SRT] = [:]
         var intermediateFiles: [Int: String] = [:]
+        var results: [macSubtitleOCRResult] = []
 
         if input.hasSuffix(".mkv") {
             let mkvStream = try MKVSubtitleExtractor(filePath: input)
@@ -71,54 +61,47 @@ struct macSubtitleOCR: ParsableCommand {
                 // Open the PGS data stream
                 let PGS = try PGS(URL(fileURLWithPath: intermediateFiles[track.trackNumber]!))
 
-                let srtStream = SRT()
-                srtStreams[track.trackNumber] = srtStream
-
-                try processSubtitles(PGS: PGS, srtStream: srtStream, trackNumber: track.trackNumber, subIndex: subIndex, jsonStream: &jsonStream, logger: logger, manager: manager, recognitionLevel: recognitionLevel, languages: languages, revision: revision)
+                let result = try processSubtitles(PGS: PGS, trackNumber: track.trackNumber, subIndex: subIndex)
+                results.append(result)
             }
         } else {
             // Open the PGS data stream
             let PGS = try PGS(URL(fileURLWithPath: input))
-            let srtStream = SRT()
-            srtStreams[0] = srtStream
-
-            try processSubtitles(PGS: PGS, srtStream: srtStream, trackNumber: 0, subIndex: subIndex, jsonStream: &jsonStream, logger: logger, manager: manager, recognitionLevel: recognitionLevel, languages: languages, revision: revision)
+            let result = try processSubtitles(PGS: PGS, trackNumber: 0, subIndex: subIndex)
+            results.append(result)
         }
 
-        if let json {
-            // Convert subtitle data to JSON
-            let jsonData = try JSONSerialization.data(withJSONObject: jsonStream, options: [.prettyPrinted, .sortedKeys])
-            let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
+        let outputDirectory = URL(fileURLWithPath: outputDirectory)
+        try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true, attributes: nil)
+        for result in results {
+            // Save srt file
+            let srtFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).srt")
+            try result.srt.write(toFileAt: srtFilePath)
 
-            // Write JSON to file
-            try jsonString.write(to: URL(fileURLWithPath: json),
-                                 atomically: true,
-                                 encoding: .utf8)
-        }
-
-        for (trackNumber, srtStream) in srtStreams {
-            let outputDirectory = URL(fileURLWithPath: srtDirectory)
-            do {
-                try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: false, attributes: nil)
-            } catch CocoaError.fileWriteFileExists {
-                // Folder already existed
+            // Save json file
+            if json {
+                // Convert subtitle data to JSON
+                let jsonData = try JSONSerialization.data(withJSONObject: result.json, options: [.prettyPrinted, .sortedKeys])
+                let jsonString = (String(data: jsonData, encoding: .utf8) ?? "[]")
+                let jsonFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).json")
+                try jsonString.write(to: jsonFilePath, atomically: true, encoding: .utf8)
             }
-            let srtFilePath = outputDirectory.appendingPathComponent("track_\(trackNumber).srt")
-            try srtStream.write(toFileAt: srtFilePath)
-            if saveSup, inFile.hasSuffix(".mkv") {
-                let fileName = "\(trackNumber)_" + URL(fileURLWithPath: inFile).deletingPathExtension().appendingPathExtension("sup").lastPathComponent
-                try manager.moveItem(
-                    at: URL(fileURLWithPath: intermediateFiles[trackNumber]!),
-                    to: URL(fileURLWithPath: inFile).deletingLastPathComponent().appendingPathComponent(fileName))
-            } else if inFile.hasSuffix(".mkv") {
-                try manager.removeItem(at: URL(fileURLWithPath: intermediateFiles[trackNumber]!))
+
+            // Save or remove intermediate files
+            if saveSup, input.hasSuffix(".mkv") {
+                let subtitleFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).sup")
+                try fileManager.moveItem(
+                    at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!),
+                    to: subtitleFilePath)
+            } else if input.hasSuffix(".mkv") {
+                try fileManager.removeItem(at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!))
             }
         }
     }
 
     // MARK: - Methods
 
-    private func setOCRMode() -> VNRequestTextRecognitionLevel {
+    private func getOCRMode() -> VNRequestTextRecognitionLevel {
         if fastMode {
             VNRequestTextRecognitionLevel.fast
         } else {
@@ -126,7 +109,7 @@ struct macSubtitleOCR: ParsableCommand {
         }
     }
 
-    private func setOCRRevision() -> Int {
+    private func getOCRRevision() -> Int {
         if #available(macOS 13, *) {
             VNRecognizeTextRequestRevision3
         } else {
@@ -146,9 +129,11 @@ struct macSubtitleOCR: ParsableCommand {
         }
     }
 
-    private func processSubtitles(PGS: PGS, srtStream: SRT, trackNumber _: Int, subIndex: Int, jsonStream: inout [Any], logger: Logger, manager: FileManager, recognitionLevel: VNRequestTextRecognitionLevel, languages: [String], revision: Int) throws {
+    private func processSubtitles(PGS: PGS, trackNumber: Int, subIndex: Int) throws -> macSubtitleOCRResult {
         var subIndex = subIndex
-        var inJson = jsonStream
+        var json: [Any] = []
+        let srt = SRT()
+
         for subtitle in PGS.getSubtitles() {
             if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
                 logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
@@ -161,16 +146,11 @@ struct macSubtitleOCR: ParsableCommand {
                 continue
             }
 
-            // Save subtitle image as PNG if imageDirectory is provided
-            if let imageDirectory {
-                let outputDirectory = URL(fileURLWithPath: imageDirectory)
-                do {
-                    try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: false, attributes: nil)
-                } catch CocoaError.fileWriteFileExists {
-                    // Folder already existed
-                }
-                let pngPath = outputDirectory.appendingPathComponent("subtitle_\(subIndex).png")
-
+            // Save subtitle image as PNG if requested
+            if saveImages {
+                let imageDirectory = URL(fileURLWithPath: outputDirectory).appendingPathComponent("images/" + "track_\(trackNumber)/")
+                try FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true, attributes: nil)
+                let pngPath = imageDirectory.appendingPathComponent("subtitle_\(subIndex).png")
                 try saveImageAsPNG(image: subImage, outputPath: pngPath)
             }
 
@@ -213,23 +193,23 @@ struct macSubtitleOCR: ParsableCommand {
                     "text": subtitleText,
                 ]
 
-                inJson.append(subtitleData)
+                json.append(subtitleData)
 
-                srtStream.appendSubtitle(SRTSubtitle(index: subIndex,
-                                                     startTime: subtitle.timestamp,
-                                                     endTime: subtitle.endTimestamp,
-                                                     text: subtitleText))
+                srt.appendSubtitle(SRTSubtitle(index: subIndex,
+                                               startTime: subtitle.timestamp,
+                                               endTime: subtitle.endTimestamp,
+                                               text: subtitleText))
             }
 
-            request.recognitionLevel = recognitionLevel
+            request.recognitionLevel = getOCRMode()
             request.usesLanguageCorrection = languageCorrection
-            request.revision = revision
-            request.recognitionLanguages = languages
+            request.revision = getOCRRevision()
+            request.recognitionLanguages = language.split(separator: ",").map { String($0) }
 
             try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
 
             subIndex += 1
         }
-        jsonStream = inJson
+        return macSubtitleOCRResult(trackNumber: trackNumber, srt: srt, json: json)
     }
 }

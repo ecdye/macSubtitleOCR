@@ -14,59 +14,58 @@ import Testing
 
 @Test func pgsMKV() throws {
     // Setup files
-    let manager = FileManager.default
-    let srtPath = (manager.temporaryDirectory.path + "/srt")
-    let jsonPath = (manager.temporaryDirectory.path + "/test.json")
+    let outputPath = (FileManager.default.temporaryDirectory.path + "/output")
     let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.absoluteString.replacing("file://", with: "")
     let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString.replacing("file://", with: "")
-    let goodJSONPath = Bundle.module.url(forResource: "testMKV.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
+    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
 
     // Run tests
-    let options = [mkvPath, srtPath, "--json", jsonPath, "--language-correction"]
+    let options = [mkvPath, outputPath, "--json", "--language-correction"]
     var runner = try macSubtitleOCR.parseAsRoot(options)
     try runner.run()
 
     // Compare output
     let srtExpectedOutput = try String(contentsOfFile: goodSRTPath, encoding: .utf8)
-    let srt0ActualOutput = try String(contentsOfFile: srtPath + "/track_0.srt", encoding: .utf8)
-    let srt1ActualOutput = try String(contentsOfFile: srtPath + "/track_1.srt", encoding: .utf8)
+    let srt0ActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
+    let srt1ActualOutput = try String(contentsOfFile: outputPath + "/track_1.srt", encoding: .utf8)
     let jsonExpectedOutput = try String(contentsOfFile: goodJSONPath, encoding: .utf8)
-    let jsonActualOutput = try String(contentsOfFile: jsonPath, encoding: .utf8)
+    let json0ActualOutput = try String(contentsOfFile: outputPath + "/track_0.json", encoding: .utf8)
+    let json1ActualOutput = try String(contentsOfFile: outputPath + "/track_1.json", encoding: .utf8)
 
     let srt0Match = similarityPercentage(srtExpectedOutput, srt0ActualOutput)
     let srt1Match = similarityPercentage(srtExpectedOutput, srt1ActualOutput)
-    let jsonMatch = similarityPercentage(jsonExpectedOutput, jsonActualOutput)
+    let json0Match = similarityPercentage(jsonExpectedOutput, json0ActualOutput)
+    let json1Match = similarityPercentage(jsonExpectedOutput, json1ActualOutput)
 
-    #expect(srt0Match >= 90.0)
-    #expect(srt1Match >= 90.0)
-    #expect(jsonMatch >= 90.0)
+    #expect(srt0Match >= 95.0)
+    #expect(srt1Match >= 95.0)
+    #expect(json0Match >= 95.0)
+    #expect(json1Match >= 95.0)
 }
 
 @Test func pgsSUP() throws {
     // Setup files
-    let manager = FileManager.default
-    let srtPath = (manager.temporaryDirectory.path + "/srt")
-    let jsonPath = (manager.temporaryDirectory.path + "/test.json")
+    let outputPath = (FileManager.default.temporaryDirectory.path + "/output")
     let supPath = Bundle.module.url(forResource: "test.sup", withExtension: nil)!.absoluteString.replacing("file://", with: "")
     let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString.replacing("file://", with: "")
     let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
 
     // Run tests
-    let options = [supPath, srtPath, "--json", jsonPath, "--language-correction"]
+    let options = [supPath, outputPath, "--json", "--language-correction"]
     var runner = try macSubtitleOCR.parseAsRoot(options)
     try runner.run()
 
     // Compare output
     let srtExpectedOutput = try String(contentsOfFile: goodSRTPath, encoding: .utf8)
-    let srtActualOutput = try String(contentsOfFile: srtPath + "/track_0.srt", encoding: .utf8)
+    let srtActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
     let jsonExpectedOutput = try String(contentsOfFile: goodJSONPath, encoding: .utf8)
-    let jsonActualOutput = try String(contentsOfFile: jsonPath, encoding: .utf8)
+    let jsonActualOutput = try String(contentsOfFile: outputPath + "/track_0.json", encoding: .utf8)
 
     let srtMatch = similarityPercentage(srtExpectedOutput, srtActualOutput)
     let jsonMatch = similarityPercentage(jsonExpectedOutput, jsonActualOutput)
 
-    #expect(srtMatch >= 90.0)
-    #expect(jsonMatch >= 90.0)
+    #expect(srtMatch >= 95.0)
+    #expect(jsonMatch >= 95.0)
 }
 
 // MARK: - Helpers
@@ -75,32 +74,35 @@ import Testing
 func levenshteinDistance(_ lhs: String, _ rhs: String) -> Int {
     let lhsChars = Array(lhs)
     let rhsChars = Array(rhs)
+
     let lhsLength = lhsChars.count
     let rhsLength = rhsChars.count
 
-    var distanceMatrix = [[Int]](repeating: [Int](repeating: 0, count: rhsLength + 1), count: lhsLength + 1)
+    // If one of the strings is empty, the distance is the length of the other
+    if lhsLength == 0 { return rhsLength }
+    if rhsLength == 0 { return lhsLength }
 
-    // Initialize the matrix
-    for i in 0 ... lhsLength {
-        distanceMatrix[i][0] = i
-    }
-    for j in 0 ... rhsLength {
-        distanceMatrix[0][j] = j
-    }
+    // Use two rows instead of the full matrix
+    var previousRow = [Int](0 ... rhsLength)
+    var currentRow = [Int](repeating: 0, count: rhsLength + 1)
 
-    // Compute the distance
     for i in 1 ... lhsLength {
+        currentRow[0] = i
+
         for j in 1 ... rhsLength {
             let cost = lhsChars[i - 1] == rhsChars[j - 1] ? 0 : 1
-            distanceMatrix[i][j] = min(
-                distanceMatrix[i - 1][j] + 1, // Deletion
-                distanceMatrix[i][j - 1] + 1, // Insertion
-                distanceMatrix[i - 1][j - 1] + cost // Substitution
+            currentRow[j] = min(
+                previousRow[j] + 1, // Deletion
+                currentRow[j - 1] + 1, // Insertion
+                previousRow[j - 1] + cost // Substitution
             )
         }
+
+        // Swap the rows
+        swap(&previousRow, &currentRow)
     }
 
-    return distanceMatrix[lhsLength][rhsLength]
+    return previousRow[rhsLength]
 }
 
 // Function to calculate the similarity percentage
