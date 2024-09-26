@@ -46,7 +46,6 @@ struct macSubtitleOCR: ParsableCommand {
 
     func run() throws {
         let fileManager = FileManager.default
-        var subIndex = 1
         var intermediateFiles: [Int: String] = [:]
         var results: [macSubtitleOCRResult] = []
 
@@ -54,20 +53,19 @@ struct macSubtitleOCR: ParsableCommand {
             let mkvStream = try MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(codec: "S_HDMV/PGS")
             for track in mkvStream.tracks {
-                subIndex = 1 // reset counter for each track
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
                 intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(trackNumber: track.trackNumber)!
 
                 // Open the PGS data stream
                 let PGS = try PGS(URL(fileURLWithPath: intermediateFiles[track.trackNumber]!))
 
-                let result = try processSubtitles(PGS: PGS, trackNumber: track.trackNumber, subIndex: subIndex)
+                let result = try processSubtitles(PGS: PGS, trackNumber: track.trackNumber)
                 results.append(result)
             }
         } else {
             // Open the PGS data stream
             let PGS = try PGS(URL(fileURLWithPath: input))
-            let result = try processSubtitles(PGS: PGS, trackNumber: 0, subIndex: subIndex)
+            let result = try processSubtitles(PGS: PGS, trackNumber: 0)
             results.append(result)
         }
 
@@ -129,8 +127,8 @@ struct macSubtitleOCR: ParsableCommand {
         }
     }
 
-    private func processSubtitles(PGS: PGS, trackNumber: Int, subIndex: Int) throws -> macSubtitleOCRResult {
-        var subIndex = subIndex
+    private func processSubtitles(PGS: PGS, trackNumber: Int) throws -> macSubtitleOCRResult {
+        var subIndex = 1
         var json: [Any] = []
         let srt = SRT()
 
