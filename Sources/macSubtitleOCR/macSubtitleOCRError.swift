@@ -7,7 +7,6 @@
 //
 
 enum macSubtitleOCRError: Error {
-    case invalidFormat
     case fileReadError
     case fileCreationError
     case fileWriteError
