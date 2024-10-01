@@ -59,13 +59,13 @@ struct macSubtitleOCR: ParsableCommand {
                 // Open the PGS data stream
                 let PGS = try PGS(URL(fileURLWithPath: intermediateFiles[track.trackNumber]!))
 
-                let result = try processSubtitles(PGS: PGS, trackNumber: track.trackNumber)
+                let result = try processSubtitles(subtitles: PGS.getSubtitles(), trackNumber: track.trackNumber)
                 results.append(result)
             }
         } else {
             // Open the PGS data stream
             let PGS = try PGS(URL(fileURLWithPath: input))
-            let result = try processSubtitles(PGS: PGS, trackNumber: 0)
+            let result = try processSubtitles(subtitles: PGS.getSubtitles(), trackNumber: 0)
             results.append(result)
         }
 
@@ -127,12 +127,12 @@ struct macSubtitleOCR: ParsableCommand {
         }
     }
 
-    private func processSubtitles(PGS: PGS, trackNumber: Int) throws -> macSubtitleOCRResult {
+    private func processSubtitles(subtitles: [Subtitle], trackNumber: Int) throws -> macSubtitleOCRResult {
         var subIndex = 1
         var json: [Any] = []
         let srt = SRT()
 
-        for subtitle in PGS.getSubtitles() {
+        for subtitle in subtitles {
             if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
                 logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
                 continue
