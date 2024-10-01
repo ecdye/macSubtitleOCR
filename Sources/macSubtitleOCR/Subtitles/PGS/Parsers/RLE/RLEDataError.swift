@@ -7,6 +7,6 @@
 //
 
 enum RLEDataError: Error {
-    case invalidData
+    case invalidLineLength
     case insufficientData
 }

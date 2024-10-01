@@ -27,30 +27,22 @@ class RLEData {
 
     func decode() throws -> Data {
         var stderr = StandardErrorOutputStream()
-        let rleBitmapEnd = data.endIndex
         var pixelCount = 0
         var lineCount = 0
-        var buf = 0
+        var iterator = data.makeIterator()
 
         var image = Data()
 
-        while buf < rleBitmapEnd, lineCount < height {
-            var color: UInt8 = data[buf]
-            buf += 1
+        while var color: UInt8 = iterator.next(), lineCount < height {
             var run = 1
 
             if color == 0x00 {
-                let flags = data[buf]
-                buf += 1
+                let flags = iterator.next()!
                 run = Int(flags & 0x3F)
                 if flags & 0x40 != 0 {
-                    run = (run << 8) + Int(data[buf])
-                    buf += 1
+                    run = (run << 8) + Int(iterator.next()!)
                 }
-                color = (flags & 0x80) != 0 ? data[buf] : 0
-                if (flags & 0x80) != 0 {
-                    buf += 1
-                }
+                color = (flags & 0x80) != 0 ? iterator.next()! : 0
             }
 
             // Ensure run is valid and doesn't exceed pixel buffer
@@ -62,7 +54,7 @@ class RLEData {
                 // New Line: Check if pixels align correctly
                 if pixelCount % width > 0 {
                     print("Error: Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.", to: &stderr)
-                    throw RLEDataError.invalidData
+                    throw RLEDataError.invalidLineLength
                 }
                 lineCount += 1
             }
