@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import os
 
 class ODS {
     // MARK: - Properties
@@ -44,6 +43,15 @@ class ODS {
     // MARK: - Methods
 
     // Parses the Object Definition Segment (ODS) to extract the subtitle image bitmap.
+    // ODS structure (simplified):
+    //   0x17: Segment Type; already checked by the caller
+    //   2 bytes: Object ID (unused by us)
+    //   1 byte: Version number (unused by us)
+    //   1 byte: Sequence flag (0x40: Last in sequence, 0x80: First in sequence, 0xC0: First and last in sequence (0x40 | 0x80)
+    //   3 bytes: Object data length (unused by us)
+    //   2 bytes: Object width
+    //   2 bytes: Object height
+    //   Rest: Image data (run-length encoded, RLE)
     private func parseODS(_ data: Data) throws {
         let sequenceFlag = data[3]
         if sequenceFlag != 0x40 {
@@ -51,6 +59,7 @@ class ODS {
             objectHeight = Int(data[9]) << 8 | Int(data[10])
         }
 
+        // PGS includes the width and height as part of the image data length calculations
         guard data.count > 7 else {
             throw PGSError.invalidODSDataLength
         }
