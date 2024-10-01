@@ -65,6 +65,6 @@ struct ODS {
 
     private func decodeRLEData() -> Data {
         let rleImageData = RLEData(data: rawImageData, width: objectWidth, height: objectHeight)
-        return rleImageData.decode()
+        return rleImageData.decodePGS()
     }
 }

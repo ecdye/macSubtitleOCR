@@ -13,22 +13,35 @@ class Subtitle {
     var index: Int?
     var text: String?
     var startTimestamp: TimeInterval?
+    var imageXOffset: Int?
+    var imageYOffset: Int?
     var imageWidth: Int?
     var imageHeight: Int?
+    var imageEvenOffset: Int?
+    var imageOddOffset: Int?
     var imageData: Data?
     var imagePalette: [UInt8]?
+    var imageAlpha: [UInt8]?
+    var imageStride: Int?
+    var numberOfColors: Int?
     var endTimestamp: TimeInterval?
 
-    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil,
-         imageWidth: Int? = nil, imageHeight: Int? = nil, imageData: Data? = nil, imagePalette: [UInt8]? = nil) {
+    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil, imageXOffset: Int? = nil, imageYOffset: Int? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil, imageEvenOffset: Int? = nil, imageOddOffset: Int? = nil, imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, imageStride: Int? = nil, numberOfColors: Int? = nil) {
         self.index = index
         self.text = text
         self.startTimestamp = startTimestamp
         self.endTimestamp = endTimestamp
+        self.imageXOffset = imageXOffset
+        self.imageYOffset = imageYOffset
         self.imageWidth = imageWidth
         self.imageHeight = imageHeight
+        self.imageEvenOffset = imageEvenOffset
+        self.imageOddOffset = imageOddOffset
         self.imageData = imageData
         self.imagePalette = imagePalette
+        self.imageAlpha = imageAlpha
+        self.imageStride = imageStride
+        self.numberOfColors = numberOfColors
     }
 
     // MARK: - Functions
@@ -66,7 +79,6 @@ class Subtitle {
     // Converts the image data to RGBA format using the palette
     private func imageDataToRGBA() -> Data {
         let bytesPerPixel = 4
-        let numColors = 256 // There are only 256 possible palette entries in a PGS Subtitle
         var rgbaData = Data(capacity: imageWidth! * imageHeight! * bytesPerPixel)
 
         for y in 0 ..< imageHeight! {
@@ -74,7 +86,7 @@ class Subtitle {
                 let index = Int(y) * imageWidth! + Int(x)
                 let colorIndex = Int(imageData![index])
 
-                guard colorIndex < numColors else {
+                guard colorIndex < numberOfColors! else {
                     continue
                 }
 

@@ -1,0 +1,31 @@
+# VobSub index file, v7 (do not modify this line!)
+palette: 000000, 0000ff, 00ff00, ff0000, ffff00, ff00ff, 00ffff, ffffff, 808000, 8080ff, 800080, 80ff80, 008080, ff8080, 555555, aaaaaa
+langidx: 0
+
+id: en, index: 0
+timestamp: 00:01:47:250, filepos: 000000000
+timestamp: 00:01:51:792, filepos: 000001800
+timestamp: 00:01:58:000, filepos: 000003000
+timestamp: 00:02:01:750, filepos: 000006000
+timestamp: 00:02:05:250, filepos: 000008000
+timestamp: 00:02:07:500, filepos: 000009000
+timestamp: 00:02:09:417, filepos: 000009800
+timestamp: 00:02:15:000, filepos: 00000c000
+timestamp: 00:02:18:000, filepos: 00000d800
+timestamp: 00:02:23:417, filepos: 00000f800
+timestamp: 00:02:28:833, filepos: 000010800
+timestamp: 00:02:32:958, filepos: 000012000
+timestamp: 00:03:27:250, filepos: 000014000
+timestamp: 00:03:30:750, filepos: 000015800
+timestamp: 00:03:48:250, filepos: 000016800
+timestamp: 00:04:10:333, filepos: 000017800
+timestamp: 00:04:25:250, filepos: 000019000
+timestamp: 00:05:04:000, filepos: 000019800
+timestamp: 00:05:38:750, filepos: 00001a800
+timestamp: 00:07:25:833, filepos: 00001b000
+timestamp: 00:07:32:792, filepos: 00001c000
+timestamp: 00:07:37:792, filepos: 00001d800
+timestamp: 00:07:40:833, filepos: 00001f000
+timestamp: 00:09:17:583, filepos: 000020800
+timestamp: 00:10:21:583, filepos: 000021000
+timestamp: 00:10:26:208, filepos: 000021800

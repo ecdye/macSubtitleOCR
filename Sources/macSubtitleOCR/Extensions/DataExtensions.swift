@@ -27,4 +27,10 @@ extension Data {
             return bytes.reduce(0) { T($0) << 8 + T($1) }
         }
     }
+
+    /* Useful for debugging purposes
+     func hexEncodedString() -> String {
+         map { String(format: "%02hhx", $0) }.joined()
+     }
+     */
 }

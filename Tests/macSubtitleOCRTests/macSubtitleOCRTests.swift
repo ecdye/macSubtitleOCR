@@ -73,3 +73,28 @@ import Testing
     #expect(srtMatch >= 95.0)
     #expect(jsonMatch >= 95.0)
 }
+
+@Test func vobSubSub() throws {
+    // Setup files
+    let outputPath = (FileManager.default.temporaryDirectory.path + "/output")
+    let subPath = Bundle.module.url(forResource: "test.sub", withExtension: nil)!.absoluteString.replacing("file://", with: "")
+    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString.replacing("file://", with: "")
+    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
+
+    // Run tests
+    let options = [subPath, outputPath, "--json", "--language-correction"]
+    var runner = try macSubtitleOCR.parseAsRoot(options)
+    try runner.run()
+
+    // Compare output
+    let srtExpectedOutput = try String(contentsOfFile: goodSRTPath, encoding: .utf8)
+    let srtActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
+    let jsonExpectedOutput = try String(contentsOfFile: goodJSONPath, encoding: .utf8)
+    let jsonActualOutput = try String(contentsOfFile: outputPath + "/track_0.json", encoding: .utf8)
+
+    let srtMatch = similarityPercentage(srtExpectedOutput, srtActualOutput)
+    let jsonMatch = similarityPercentage(jsonExpectedOutput, jsonActualOutput)
+
+    #expect(srtMatch >= 90.0)
+    #expect(jsonMatch >= 90.0)
+}

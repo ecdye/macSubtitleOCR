@@ -107,7 +107,8 @@ struct PGS {
                 imageWidth: ods.objectWidth,
                 imageHeight: ods.objectHeight,
                 imageData: ods.imageData,
-                imagePalette: pds.palette)
+                imagePalette: pds.palette,
+                numberOfColors: 256)
         }
     }
 }

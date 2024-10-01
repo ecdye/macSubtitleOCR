@@ -49,7 +49,11 @@ struct macSubtitleOCR: ParsableCommand {
         var intermediateFiles: [Int: String] = [:]
         var results: [macSubtitleOCRResult] = []
 
-        if input.hasSuffix(".mkv") {
+        if input.hasSuffix(".sub") {
+            let sub = try VobSub(input, input.replacingOccurrences(of: ".sub", with: ".idx"))
+            let result = try processSubtitles(subtitles: sub.getSubtitles(), trackNumber: 0)
+            results.append(result)
+        } else if input.hasSuffix(".mkv") {
             let mkvStream = try MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(codec: "S_HDMV/PGS")
             for track in mkvStream.tracks {
@@ -62,7 +66,7 @@ struct macSubtitleOCR: ParsableCommand {
                 let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: track.trackNumber)
                 results.append(result)
             }
-        } else {
+        } else if input.hasSuffix(".sup") {
             // Open the PGS data stream
             let PGS = try PGS(URL(fileURLWithPath: input))
             let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: 0)
