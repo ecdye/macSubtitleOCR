@@ -149,7 +149,7 @@ class MKVTrackParser: MKVFileHandler {
                 let raw = fileHandle.readData(ofLength: Int(blockSize - (fileHandle.offsetInFile - blockStartOffset)))
                 var offset = 0
                 while (offset + 3) <= raw.count {
-                    let segmentSize = min(Int(getUInt16BE(buffer: raw, offset: offset + 1) + 3), raw.count - offset)
+                    let segmentSize = min(Int(raw.value(ofType: UInt16.self, at: offset + 1)! + 3), raw.count - offset)
                     logger.debug("Segment size \(segmentSize) at \(offset) type 0x\(String(format: "%02x", raw[offset]))")
 
                     blockData.append(pgsHeader)

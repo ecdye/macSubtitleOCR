@@ -8,10 +8,6 @@
 
 import Foundation
 
-func getUInt16BE(buffer: Data, offset: Int) -> UInt16 {
-    (UInt16(buffer[offset]) << 8) | UInt16(buffer[offset + 1])
-}
-
 // Function to read a fixed length number of bytes and convert in into a (Un)signed integer
 func readFixedLengthNumber(fileHandle: FileHandle, length: Int, signed: Bool = false) -> Int64 {
     let data = fileHandle.readData(ofLength: length)

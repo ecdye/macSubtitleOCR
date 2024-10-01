@@ -55,8 +55,8 @@ class ODS {
     private func parseODS(_ data: Data) throws {
         let sequenceFlag = data[3]
         if sequenceFlag != 0x40 {
-            objectWidth = Int(data[7]) << 8 | Int(data[8])
-            objectHeight = Int(data[9]) << 8 | Int(data[10])
+            objectWidth = Int(data.value(ofType: UInt16.self, at: 7)!)
+            objectHeight = Int(data.value(ofType: UInt16.self, at: 9)!)
         }
 
         // PGS includes the width and height as part of the image data length calculations

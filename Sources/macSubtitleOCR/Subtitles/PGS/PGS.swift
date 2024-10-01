@@ -56,7 +56,7 @@ class PGS {
     }
 
     private func parseTimestamp(_ data: Data) -> TimeInterval {
-        let pts = (Int(data[2]) << 24 | Int(data[3]) << 16 | Int(data[4]) << 8 | Int(data[5]))
+        let pts = data.value(ofType: UInt32.self, at: 2)!
         return TimeInterval(pts) / 90000.0 // 90 kHz clock
     }
 
@@ -75,7 +75,7 @@ class PGS {
             let segmentType = headerData[10]
 
             // Read segment length (2 bytes, big-endian)
-            let segmentLength = Int(headerData[11]) << 8 | Int(headerData[12])
+            let segmentLength = Int(headerData.value(ofType: UInt16.self, at: 11)!)
 
             if segmentType == 0x80 { // END (End of Display Set Segment)
                 return nil
