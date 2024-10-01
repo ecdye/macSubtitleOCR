@@ -138,7 +138,7 @@ struct macSubtitleOCR: ParsableCommand {
                 continue
             }
 
-            guard let subImage = PGS.createImage(index: subIndex - 1)
+            guard let subImage = subtitle.createImage()
             else {
                 logger.info("Could not create image for index \(subIndex)! Skipping...")
                 continue
