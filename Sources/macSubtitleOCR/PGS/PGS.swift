@@ -122,6 +122,8 @@ class PGS {
         var subtitle = PGSSubtitle()
         var p1 = false
         var p2 = false
+        var multipleODS = false
+        var ods: ODS?
         while true {
             guard headerData.count == 13 else {
                 print("Failed to read PGS header correctly.")
@@ -154,14 +156,22 @@ class PGS {
                 subtitle.imagePalette = try PDS(segmentData).getPalette()
                 p1 = true
             case 0x15: // ODS (Object Definition Segment)
-                let ODS = try ODS(segmentData)
-                subtitle.imageWidth = ODS.getObjectWidth()
-                subtitle.imageHeight = ODS.getObjectHeight()
-                subtitle.imageData = ODS.getImageData()
+                if segmentData[3] == 0x80 {
+                    ods = try ODS(segmentData)
+                    multipleODS = true
+                    break
+                } else if multipleODS {
+                    try ods?.appendSegment(segmentData)
+                    if segmentData[3] != 0x40 { break } else { multipleODS = false }
+                } else {
+                    ods = try ODS(segmentData)
+                }
                 p2 = true
+                subtitle.imageWidth = ods!.getObjectWidth()
+                subtitle.imageHeight = ods!.getObjectHeight()
+                subtitle.imageData = ods!.getImageData()
             case 0x16, 0x17: // PCS (Presentation Composition Segment), WDS (Window Definition Segment)
-                headerData = fileHandle.readData(ofLength: 13)
-                continue // PCS and WDS parsing not required for basic rendering
+                break // PCS and WDS parsing not required for basic rendering
             default:
                 return nil
             }

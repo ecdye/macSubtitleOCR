@@ -7,13 +7,14 @@
 //
 
 import Foundation
+import os
 
 class ODS {
     // MARK: - Properties
 
-    private var objectDataLength: Int = 0
     private var objectWidth: Int = 0
     private var objectHeight: Int = 0
+    private var rawImageData: Data = .init()
     private var imageData: Data = .init()
 
     // MARK: - Lifecycle
@@ -22,7 +23,7 @@ class ODS {
         try parseODS(data)
     }
 
-    // MARK: - Getters
+    // MARK: - Getters / Setters
 
     func getObjectWidth() -> Int {
         objectWidth
@@ -36,31 +37,38 @@ class ODS {
         imageData
     }
 
+    func appendSegment(_ data: Data) throws {
+        try parseODS(data)
+    }
+
     // MARK: - Methods
 
     // Parses the Object Definition Segment (ODS) to extract the subtitle image bitmap.
-    // ODS structure (simplified):
-    //   0x17: Segment Type; already checked by the caller
-    //   2 bytes: Object ID (unused by us)
-    //   1 byte: Version number (unused by us)
-    //   1 byte: Sequence flag (should be 0x80 for new object, 0x00 for continuation) (unused by us)
-    //   3 bytes: Object data length
-    //   2 bytes: Object width
-    //   2 bytes: Object height
-    //   Rest: Image data (run-length encoded, RLE)
     private func parseODS(_ data: Data) throws {
-        // let objectID = Int(data[0]) << 8 | Int(data[1])
-        objectDataLength = Int(data[4]) << 16 | Int(data[5]) << 8 | Int(data[6])
-
-        // PGS includes the width and height as part of the image data length calculations
-        guard objectDataLength <= data.count - 7 else {
-            throw macSubtitleOCRError.invalidFormat
+        let sequenceFlag = data[3]
+        if sequenceFlag != 0x40 {
+            objectWidth = Int(data[7]) << 8 | Int(data[8])
+            objectHeight = Int(data[9]) << 8 | Int(data[10])
         }
 
-        objectWidth = Int(data[7]) << 8 | Int(data[8])
-        objectHeight = Int(data[9]) << 8 | Int(data[10])
+        guard data.count > 7 else {
+            throw PGSError.invalidODSDataLength
+        }
 
-        let rleImageData = RLEData(data: data.subdata(in: 11 ..< data.endIndex), width: objectWidth, height: objectHeight)
-        imageData = try rleImageData.decode()
+        switch sequenceFlag {
+        case 0x40:
+            rawImageData.append(data.subdata(in: 4 ..< data.count))
+            imageData = try decodeRLEData()
+        case 0x80:
+            rawImageData.append(data.subdata(in: 11 ..< data.count))
+        default:
+            rawImageData.append(data.subdata(in: 11 ..< data.count))
+            imageData = try decodeRLEData()
+        }
+    }
+
+    private func decodeRLEData() throws -> Data {
+        let rleImageData = RLEData(data: rawImageData, width: objectWidth, height: objectHeight)
+        return try rleImageData.decode()
     }
 }
