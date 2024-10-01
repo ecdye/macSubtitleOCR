@@ -6,8 +6,8 @@
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
-import Foundation
 import CoreGraphics
+import Foundation
 
 class Subtitle {
     var timestamp: TimeInterval = 0

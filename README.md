@@ -6,9 +6,10 @@
 
 ## Overview
 
-macSubtitleOCR is used to convert a file containing a PGS Subtitle stream to SubRip subtitles using OCR.
-Currently the supported input file types are `.mkv` and `.sup`.
-It uses the built in OCR engine in macOS to perform the text recognition, which works really well.
+macSubtitleOCR is a tool that converts bitmap subtitles to SubRip subtitles using OCR.
+Currently the only supported bitmap format is PGS.
+These bitmap subtitles can be read in from `.mkv` or `.sup` files.
+We use the built in macOS OCR engine to perform the text recognition, which works really well.
 For more information on accuracy, see [Accuracy](#accuracy) below.
 
 
@@ -36,7 +37,7 @@ The completed build should be available in the `.build/debug` directory.
 ### Testing
 
 Tests compare the output to a know good output.
-We target a match of at least 90% as different machines will produce different output.
+We target a match of at least 95% as different machines will produce slightly different output.
 
 ``` shell
 swift test
