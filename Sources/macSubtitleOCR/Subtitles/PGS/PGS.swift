@@ -13,7 +13,7 @@ import ImageIO
 class PGS {
     // MARK: - Properties
 
-    private var subtitles = [PGSSubtitle]()
+    private var subtitles = [Subtitle]()
 
     // MARK: - Lifecycle
 
@@ -23,7 +23,7 @@ class PGS {
 
     // MARK: - Getters
 
-    func getSubtitles() -> [PGSSubtitle] {
+    func getSubtitles() -> [Subtitle] {
         subtitles
     }
 
@@ -69,7 +69,7 @@ class PGS {
         var headerData = fileHandle.readData(ofLength: 13)
 
         while fileHandle.offsetInFile < fileLength {
-            guard var subtitle = try parseNextSubtitle(fileHandle: fileHandle, headerData: &headerData)
+            guard let subtitle = try parseNextSubtitle(fileHandle: fileHandle, headerData: &headerData)
             else {
                 headerData = fileHandle.readData(ofLength: 13)
                 continue
@@ -91,7 +91,7 @@ class PGS {
     }
 
     // Converts the image data to RGBA format using the palette
-    private func imageDataToRGBA(_ subtitle: inout PGSSubtitle) -> Data {
+    private func imageDataToRGBA(_ subtitle: inout Subtitle) -> Data {
         let bytesPerPixel = 4
         let numColors = 256 // There are only 256 possible palette entries in a PGS Subtitle
         var rgbaData = Data(capacity: subtitle.imageWidth * subtitle.imageHeight * bytesPerPixel)
@@ -118,8 +118,8 @@ class PGS {
         return rgbaData
     }
 
-    private func parseNextSubtitle(fileHandle: FileHandle, headerData: inout Data) throws -> PGSSubtitle? {
-        var subtitle = PGSSubtitle()
+    private func parseNextSubtitle(fileHandle: FileHandle, headerData: inout Data) throws -> Subtitle? {
+        let subtitle = Subtitle()
         var p1 = false
         var p2 = false
         var multipleODS = false

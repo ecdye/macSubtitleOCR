@@ -1,5 +1,5 @@
 //
-// PGSSubtitle.swift
+// Subtitle.swift
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/19/24.
@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct PGSSubtitle {
+class Subtitle {
     var timestamp: TimeInterval = 0
     var imageWidth: Int = 0
     var imageHeight: Int = 0
