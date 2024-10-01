@@ -1,4 +1,5 @@
 # macSubtitleOCR
+
 [![License](https://img.shields.io/github/license/ecdye/macSubtitleOCR)](https://github.com/ecdye/macSubtitleOCR/blob/main/LICENSE.md)
 [![CodeQL](https://github.com/ecdye/macSubtitleOCR/actions/workflows/codeql.yml/badge.svg)](https://github.com/ecdye/macSubtitleOCR/actions/workflows/codeql.yml)
 [![Build](https://github.com/ecdye/macSubtitleOCR/actions/workflows/build.yml/badge.svg)](https://github.com/ecdye/macSubtitleOCR/actions/workflows/build.yml)
@@ -6,25 +7,24 @@
 
 ## Overview
 
-macSubtitleOCR is a tool that converts bitmap subtitles to SubRip subtitles using OCR.
-Currently the only supported bitmap format is PGS.
-These bitmap subtitles can be read in from `.mkv` or `.sup` files.
-We use the built in macOS OCR engine to perform the text recognition, which works really well.
-For more information on accuracy, see [Accuracy](#accuracy) below.
+**macSubtitleOCR** is a tool written entirely in Swift to convert bitmap subtitles into SubRip subtitle format (SRT) using Optical Character Recognition (OCR).
+Currently, it supports PGS bitmap subtitles, which can be extracted from `.mkv` or `.sup` files.
+The tool leverages the built-in macOS OCR engine, which provides highly accurate text recognition.
 
+For more details on performance, see the [Accuracy](#accuracy) section below.
 
-### Options
+### Features
 
-- Ability to export `.png` images of the subtitles to allow manual refinement of the OCR output
-- Ability to use language recognition (i.e. seeing if a sequence of characters actually makes a valid word) in the macOS OCR engine to improve OCR accuracy
-- Ability to export raw JSON output from OCR engine for inspection
+- Export `.png` images of subtitles for manual correction of OCR output.
+- Use macOS OCR engine's language recognition feature to improve accuracy by validating character sequences as valid words.
+- Export raw JSON output from the OCR engine for further analysis.
 
-### Building
+### Building the Project
 
 > [!IMPORTANT]
-> This project requires Swift 6 to work properly!
+> This project requires Swift 6 to compile and run correctly.
 
-To get started with macSubtitleOCR, clone the repository and then build the project with Swift.
+To build macSubtitleOCR, follow these steps:
 
 ``` shell
 git clone https://github.com/ecdye/macSubtitleOCR
@@ -32,12 +32,12 @@ cd macSubtitleOCR
 swift build
 ```
 
-The completed build should be available in the `.build/debug` directory.
+The compiled build will be available in the `.build/debug` directory.
 
-### Testing
+### Running Tests
 
-Tests compare the output to a know good output.
-We target a match of at least 95% as different machines will produce slightly different output.
+The testing process compares OCR output against known correct results.
+We aim for at least 95% accuracy, because slight differences may occur between machines.
 
 ``` shell
 swift test
@@ -45,16 +45,16 @@ swift test
 
 ### Accuracy
 
-In simple tests against the Tesseract OCR engine the accuracy of the macOS OCR engine has been significantly better.
-This improvement is especially noticeable with words like 'I', especially when italicized.
-The binary image compare method used in projects like [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit) may be slightly more accurate, but it depends on the use case.
+In tests comparing macSubtitleOCR with the Tesseract OCR engine, the macOS OCR engine often outperforms Tesseract, particularly with challenging cases like the letter 'I'.
+While methods like binary image comparison, used by tools such as [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit), may offer slightly better accuracy in some cases, the macOS OCR engine provides excellent results for most use cases.
 
-## TODO / Contributing
+## Contribution and TODO
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidance on how to contribute to the project.
-To help with a specific project on the TODO list please view issues tagged as [enhancements](https://github.com/ecdye/macSubtitleOCR/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement).
+For information on how to contribute to the project, please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Reference
+If you're interested in working on specific features or improvements, check out issues tagged as [enhancements](https://github.com/ecdye/macSubtitleOCR/issues?q=is%3Aissue+is%3Aopen+label%3Aenhancement).
 
-<https://blog.thescorpius.com/index.php/2017/07/15/presentation-graphic-stream-sup-files-bluray-subtitle-format/>
-<https://www.matroska.org/technical/elements.html>
+## References
+
+- [Presentation Graphic Stream (PGS) Files](https://blog.thescorpius.com/index.php/2017/07/15/presentation-graphic-stream-sup-files-bluray-subtitle-format/)
+- [Matroska Technical Specifications](https://www.matroska.org/technical/elements.html)
