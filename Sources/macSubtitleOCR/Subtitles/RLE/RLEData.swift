@@ -84,7 +84,6 @@ struct RLEData {
         var i = 0
         var y = 0
         var x = 0
-        var onlyHalf = false
         var currentNibbles: [UInt8?] = [nibbles[i], nibbles[i + 1]]
         i += 2
         while currentNibbles[1] != nil, y < height {
@@ -102,64 +101,29 @@ struct RLEData {
             let color = UInt8(nibble & 0x03)
             var run = Int(nibble >> 2)
 
-            if onlyHalf, color != 0 {
-                print("Got something weird, fixing it \(color) \(run)")
-                if run >= 1, run <= 3 {
-                    i -= 4
-                    currentNibbles = [nibbles[i], nibbles[i + 1]]
-                    i += 2
-                    continue
-                } else if run >= 4, run <= 15 {
-                    i -= 5
-                    currentNibbles = [nibbles[i], nibbles[i + 1]]
-                    i += 2
-                    continue
-                } // else if 16 <= run, run <= 63 {
-                //     i -= 7
-                //     currentNibbles = [nibbles[i], nibbles[i + 1]]
-                //     i += 2
-                //     continue
-                // } //else if 64 <= run, run <= 255 {
-                //     i -= 8
-                //     currentNibbles = [nibbles[i], nibbles[i + 1]]
-                //     i += 2
-                //     continue
-                // }
+            if image.count % width == 0, color != 0, run <= 15 {
+                i -= 5
+                currentNibbles = [nibbles[i], nibbles[i + 1]]
+                i += 2
+                continue
             }
-            if onlyHalf {
-                onlyHalf = false
-            }
-
             x += Int(run)
 
             if run == 0 || x >= width {
                 run += width - x
                 x = 0
-                // Index is byte aligned at start of new line
-                // if y % 2 == 0, y > height / 2 {
-                //     odd.toggle()
-                // }
                 y += 1
-                onlyHalf = true
-                image.append(contentsOf: repeatElement(color, count: run))
-                image.append(contentsOf: repeatElement(0, count: width))
-                continue
             }
 
             image.append(contentsOf: repeatElement(color, count: run))
-            if image.count == 181585 {
-                print("Image count is 181585")
-            }
         }
         return image
     }
 
     func getNibble(currentNibbles: inout [UInt8?], nibbles: Data, i: inout Int, odd: inout Bool) -> UInt16 {
         if odd {
-            // _ = currentNibbles.removeFirst()
             _ = currentNibbles.removeFirst()
             odd.toggle()
-            // currentNibbles.append(i.next())
             currentNibbles.append(nibbles[i])
             i += 1
         }

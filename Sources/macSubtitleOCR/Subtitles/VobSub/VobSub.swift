@@ -2,7 +2,7 @@
 // VobSub.swift
 // macSubtitleOCR
 //
-// Created by Ethan Dye on 9/21/24.
+// Created by Ethan Dye on 9/30/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
@@ -13,7 +13,7 @@ import os
 
 class VobSub {
     struct IdxSubtitleReference {
-        let timestamp: String
+        let timestamp: TimeInterval
         let offset: Int
     }
 
@@ -52,6 +52,8 @@ class VobSub {
         let lines = idxData.split(separator: "\n")
         let timestampRegex: NSRegularExpression
         let offsetRegex: NSRegularExpression
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "HH:mm:ss:SSS"
         do {
             timestampRegex = try NSRegularExpression(pattern: "timestamp: (\\d{2}:\\d{2}:\\d{2}:\\d{3})")
             offsetRegex = try NSRegularExpression(pattern: "filepos: (\\w+)")
@@ -73,9 +75,10 @@ class VobSub {
                 let offsetMatch = offsetRegex.firstMatch(in: String(line), options: [], range: NSRange(location: 0, length: line.count))
 
                 if let timestampMatch, let offsetMatch {
-                    let timestamp = (line as NSString).substring(with: timestampMatch.range(at: 1))
+                    let timestampString = (line as NSString).substring(with: timestampMatch.range(at: 1))
+                    let timestamp = dateFormatter.date(from: timestampString)?.timeIntervalSinceReferenceDate
                     let offsetString = (line as NSString).substring(with: offsetMatch.range(at: 1))
-                    if let offset = Int(offsetString, radix: 16) {
+                    if let offset = Int(offsetString, radix: 16), let timestamp {
                         subtitles.append(IdxSubtitleReference(timestamp: timestamp, offset: offset))
                     }
                 }
@@ -96,7 +99,7 @@ class VobSub {
                 nextOffset = subFile.seekToEndOfFile()
                 subFile.seek(toFileOffset: currentOffset)
             }
-            var pic = Subtitle(startTimestamp: 0, endTimestamp: 0, imageData: .init(), numberOfColors: 16)
+            var pic = Subtitle(startTimestamp: subtitle.timestamp, endTimestamp: 0, imageData: .init(), numberOfColors: 16)
             try readSubFrame(pic: &pic, subFile: subFile, offset: offset, nextOffset: nextOffset, idxPalette: idxPalette)
             logger.debug("Found image at offset \(subtitle.offset) with timestamp \(subtitle.timestamp)")
             logger.debug("Image size: \(pic.imageWidth!) x \(pic.imageHeight!)")

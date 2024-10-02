@@ -2,7 +2,7 @@
 // VobSubParser.swift
 // macSubtitleOCR
 //
-// Created by Ethan Dye on 9/21/24.
+// Created by Ethan Dye on 9/30/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
@@ -36,7 +36,7 @@ func readSubFrame(pic: inout Subtitle, subFile: FileHandle, offset: UInt64, next
         let stuffingLength = Int(subFile.readData(ofLength: 1)[0] & 7)
         subFile.readData(ofLength: stuffingLength) // Stuffing bytes
         logger.debug("Skipped \(stuffingLength) stuffing bytes")
-        let psHeaderLength = subFile.offsetInFile - offset
+        let psHeaderLength = subFile.offsetInFile - startOffset
         logger.debug("PS header length: \(psHeaderLength)")
 
         // Read the next 4 bytes to find the pes packet
@@ -51,7 +51,7 @@ func readSubFrame(pic: inout Subtitle, subFile: FileHandle, offset: UInt64, next
             fatalError("Error: PES packet length is 0 at offset \(subFile.offsetInFile)")
         }
         let nextPSOffset = subFile.offsetInFile + UInt64(pesLength)
-        let pesHeaderLength = subFile.offsetInFile - offset - psHeaderLength
+        let pesHeaderLength = subFile.offsetInFile - startOffset
         logger.debug("PES packet length: \(pesLength), Next PES packet offset: \(nextPSOffset), PS header length: \(pesHeaderLength)")
 
         let extByteOne = subFile.readData(ofLength: 1)[0]
@@ -59,22 +59,22 @@ func readSubFrame(pic: inout Subtitle, subFile: FileHandle, offset: UInt64, next
         logger.debug("firstPacket: \(firstPacket)")
 
         subFile.readData(ofLength: 1) // PTS DTS flags
-        let pesHeaderDataLength = Int(subFile.readData(ofLength: 1)[0])
-        subFile.readData(ofLength: pesHeaderDataLength) // Skip PES Header data bytes
-        logger.debug("Skipped \(pesHeaderDataLength) PTS bytes")
+        let ptsDataLength = Int(subFile.readData(ofLength: 1)[0])
+        subFile.readData(ofLength: ptsDataLength) // Skip PES Header data bytes
+        logger.debug("Skipped \(ptsDataLength) PTS bytes")
 
         let streamID = Int(subFile.readData(ofLength: 1)[0] - 0x20)
         logger.debug("Stream ID: \(streamID)")
 
         var trueHeaderSize = Int(subFile.offsetInFile - startOffset)
-        if firstPacket, pesHeaderDataLength >= 5 {
+        if firstPacket, ptsDataLength >= 5 {
             let size = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self, at: 0) ?? 0)
             relativeControlOffset = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self, at: 0) ?? 0)
             let rleSize = relativeControlOffset - 2
             controlSize = size - rleSize - 4 // 4 bytes for the size and control offset
             logger.debug("Size: \(size), RLE Size: \(rleSize), Control Size: \(controlSize!)")
 
-            controlOffset = Int(subFile.offsetInFile) + relativeControlOffset - 2 // Skip the 2 bytes we already read
+            controlOffset = Int(subFile.offsetInFile) + rleSize
             trueHeaderSize = Int(subFile.offsetInFile - startOffset)
             firstPacketFound = true
         } else if firstPacketFound {
@@ -93,11 +93,11 @@ func readSubFrame(pic: inout Subtitle, subFile: FileHandle, offset: UInt64, next
         }
         logger.debug("Obtained \(controlHeaderCopied) of \(controlSize!) bytes of control header")
 
-        let rleFragment = RLEFragment(offset: Int(savedOffset), size: pesLength - trueHeaderSize - difference + Int(psHeaderLength + pesHeaderLength))
-        subFile.seek(toFileOffset: UInt64(rleFragment.offset))
-        pic.imageData!.append(subFile.readData(ofLength: rleFragment.size))
-        rleLengthFound += rleFragment.size
-        logger.debug("RLE fragment size: \(rleFragment.size), Total RLE length: \(rleLengthFound)")
+        let rleFragmentSize = Int(nextPSOffset - savedOffset) - difference
+        subFile.seek(toFileOffset: savedOffset)
+        pic.imageData!.append(subFile.readData(ofLength: rleFragmentSize))
+        rleLengthFound += rleFragmentSize
+        logger.debug("RLE fragment size: \(rleFragmentSize), Total RLE length: \(rleLengthFound)")
 
         subFile.seek(toFileOffset: nextPSOffset)
     } while subFile.offsetInFile < nextOffset && controlHeaderCopied < controlSize!
