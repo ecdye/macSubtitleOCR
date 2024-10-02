@@ -98,7 +98,7 @@ class PGS {
             case 0x14: // PDS (Palette Definition Segment)
                 do {
                     subtitle.imagePalette = try PDS(segmentData).getPalette()
-                } catch PGSError.invalidPDSDataLength(let length) {
+                } catch let PGSError.invalidPDSDataLength(length) {
                     fatalError("Error: Invalid Palette Data Segment length: \(length)")
                 }
                 foundPDS = true
