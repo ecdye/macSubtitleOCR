@@ -8,6 +8,6 @@
 
 struct macSubtitleOCRResult {
     var trackNumber: Int
-    var srt: SRT
+    var srt: [Subtitle]
     var json: [Any]
 }

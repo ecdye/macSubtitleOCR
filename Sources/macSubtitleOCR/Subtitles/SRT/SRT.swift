@@ -8,15 +8,15 @@
 
 import Foundation
 
-class SRT {
+struct SRT {
     // MARK: - Properties
 
-    private var subtitles: [SRTSubtitle] = []
+    private var subtitles: [Subtitle] = []
 
     // MARK: - Getters / Setters
 
-    func appendSubtitle(_ subtitle: SRTSubtitle) {
-        subtitles.append(subtitle)
+    init(subtitles: [Subtitle]) {
+        self.subtitles = subtitles
     }
 
     // MARK: - Functions
@@ -38,12 +38,12 @@ class SRT {
         var srtContent = ""
 
         for subtitle in subtitles {
-            let startTime = formatTime(subtitle.startTime)
-            let endTime = formatTime(subtitle.endTime)
+            let startTime = formatTime(subtitle.startTimestamp!)
+            let endTime = formatTime(subtitle.endTimestamp!)
 
-            srtContent += "\(subtitle.index)\n"
+            srtContent += "\(subtitle.index!)\n"
             srtContent += "\(startTime) --> \(endTime)\n"
-            srtContent += "\(subtitle.text)\n\n"
+            srtContent += "\(subtitle.text!)\n\n"
         }
 
         return srtContent

@@ -10,12 +10,25 @@ import CoreGraphics
 import Foundation
 
 class Subtitle {
-    var timestamp: TimeInterval = 0
-    var imageWidth: Int = 0
-    var imageHeight: Int = 0
-    var imageData: Data = .init()
-    var imagePalette: [UInt8] = []
-    var endTimestamp: TimeInterval = 0
+    var index: Int?
+    var text: String?
+    var startTimestamp: TimeInterval?
+    var imageWidth: Int?
+    var imageHeight: Int?
+    var imageData: Data?
+    var imagePalette: [UInt8]?
+    var endTimestamp: TimeInterval?
+
+    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil, imageData: Data? = nil, imagePalette: [UInt8]? = nil) {
+        self.index = index
+        self.text = text
+        self.startTimestamp = startTimestamp
+        self.endTimestamp = endTimestamp
+        self.imageWidth = imageWidth
+        self.imageHeight = imageHeight
+        self.imageData = imageData
+        self.imagePalette = imagePalette
+    }
 
     // MARK: - Functions
 
@@ -32,11 +45,11 @@ class Subtitle {
             return nil
         }
 
-        let image = CGImage(width: imageWidth,
-                            height: imageHeight,
+        let image = CGImage(width: imageWidth!,
+                            height: imageHeight!,
                             bitsPerComponent: 8,
                             bitsPerPixel: 32,
-                            bytesPerRow: imageWidth * 4, // 4 bytes per pixel (RGBA)
+                            bytesPerRow: imageWidth! * 4, // 4 bytes per pixel (RGBA)
                             space: colorSpace,
                             bitmapInfo: bitmapInfo,
                             provider: provider,
@@ -53,12 +66,12 @@ class Subtitle {
     private func imageDataToRGBA() -> Data {
         let bytesPerPixel = 4
         let numColors = 256 // There are only 256 possible palette entries in a PGS Subtitle
-        var rgbaData = Data(capacity: imageWidth * imageHeight * bytesPerPixel)
+        var rgbaData = Data(capacity: imageWidth! * imageHeight! * bytesPerPixel)
 
-        for y in 0 ..< imageHeight {
-            for x in 0 ..< imageWidth {
-                let index = Int(y) * imageWidth + Int(x)
-                let colorIndex = Int(imageData[index])
+        for y in 0 ..< imageHeight! {
+            for x in 0 ..< imageWidth! {
+                let index = Int(y) * imageWidth! + Int(x)
+                let colorIndex = Int(imageData![index])
 
                 guard colorIndex < numColors else {
                     continue
@@ -66,10 +79,10 @@ class Subtitle {
 
                 let paletteOffset = colorIndex * 4
                 rgbaData.append(contentsOf: [
-                    imagePalette[paletteOffset],
-                    imagePalette[paletteOffset + 1],
-                    imagePalette[paletteOffset + 2],
-                    imagePalette[paletteOffset + 3],
+                    imagePalette![paletteOffset],
+                    imagePalette![paletteOffset + 1],
+                    imagePalette![paletteOffset + 2],
+                    imagePalette![paletteOffset + 3],
                 ])
             }
         }

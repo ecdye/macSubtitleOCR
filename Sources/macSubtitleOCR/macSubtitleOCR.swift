@@ -74,7 +74,8 @@ struct macSubtitleOCR: ParsableCommand {
         for result in results {
             // Save srt file
             let srtFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).srt")
-            try result.srt.write(toFileAt: srtFilePath)
+            let srt = SRT(subtitles: result.srt)
+            try srt.write(toFileAt: srtFilePath)
 
             // Save json file
             if json {
@@ -130,7 +131,7 @@ struct macSubtitleOCR: ParsableCommand {
     private func processSubtitles(subtitles: [Subtitle], trackNumber: Int) throws -> macSubtitleOCRResult {
         var subIndex = 1
         var json: [Any] = []
-        let srt = SRT()
+        var srtSubtitles: [Subtitle] = []
 
         for subtitle in subtitles {
             if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
@@ -166,14 +167,14 @@ struct macSubtitleOCR: ParsableCommand {
                     let stringRange = string.startIndex ..< string.endIndex
                     let boxObservation = try? candidate?.boundingBox(for: stringRange)
                     let boundingBox = boxObservation?.boundingBox ?? .zero
-                    let rect = VNImageRectForNormalizedRect(boundingBox, subtitle.imageWidth, subtitle.imageHeight)
+                    let rect = VNImageRectForNormalizedRect(boundingBox, subtitle.imageWidth!, subtitle.imageHeight!)
 
                     let line: [String: Any] = [
                         "text": string,
                         "confidence": confidence,
                         "x": Int(rect.minX),
                         "width": Int(rect.size.width),
-                        "y": Int(CGFloat(subtitle.imageHeight) - rect.minY - rect.size.height),
+                        "y": Int(CGFloat(subtitle.imageHeight!) - rect.minY - rect.size.height),
                         "height": Int(rect.size.height),
                     ]
 
@@ -193,10 +194,10 @@ struct macSubtitleOCR: ParsableCommand {
 
                 json.append(subtitleData)
 
-                srt.appendSubtitle(SRTSubtitle(index: subIndex,
-                                               startTime: subtitle.timestamp,
-                                               endTime: subtitle.endTimestamp,
-                                               text: subtitleText))
+                srtSubtitles.append(Subtitle(index: subIndex,
+                                             text: subtitleText,
+                                             startTimestamp: subtitle.startTimestamp,
+                                             endTimestamp: subtitle.endTimestamp))
             }
 
             request.recognitionLevel = getOCRMode()
@@ -208,6 +209,6 @@ struct macSubtitleOCR: ParsableCommand {
 
             subIndex += 1
         }
-        return macSubtitleOCRResult(trackNumber: trackNumber, srt: srt, json: json)
+        return macSubtitleOCRResult(trackNumber: trackNumber, srt: srtSubtitles, json: json)
     }
 }

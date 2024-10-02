@@ -35,7 +35,7 @@ struct PGS {
             }
 
             // Find the next timestamp to use as our end timestamp
-            while subtitle.endTimestamp <= subtitle.timestamp {
+            while subtitle.endTimestamp == nil {
                 headerData = fileHandle.readData(ofLength: 13)
                 subtitle.endTimestamp = parseTimestamp(headerData)
             }
@@ -52,11 +52,9 @@ struct PGS {
     }
 
     private func parseNextSubtitle(fileHandle: FileHandle, headerData: inout Data) throws -> Subtitle? {
-        let subtitle = Subtitle()
-        var foundPDS = false
-        var foundODS = false
         var multipleODS = false
         var ods: ODS?
+        var pds: PDS?
         while true {
             guard headerData.count == 13 else {
                 fatalError("Failed to read PGS header correctly, got header length: \(headerData.count) expected: 13")
@@ -78,11 +76,10 @@ struct PGS {
             switch segmentType {
             case 0x14: // PDS (Palette Definition Segment)
                 do {
-                    subtitle.imagePalette = try PDS(segmentData).palette
+                    pds = try PDS(segmentData)
                 } catch let PGSError.invalidPDSDataLength(length) {
                     fatalError("Error: Invalid Palette Data Segment length: \(length)")
                 }
-                foundPDS = true
             case 0x15: // ODS (Object Definition Segment)
                 if segmentData[3] == 0x80 {
                     ods = try ODS(segmentData)
@@ -94,10 +91,6 @@ struct PGS {
                 } else {
                     ods = try ODS(segmentData)
                 }
-                foundODS = true
-                subtitle.imageWidth = ods!.objectWidth
-                subtitle.imageHeight = ods!.objectHeight
-                subtitle.imageData = ods!.imageData
             case 0x16, 0x17: // PCS (Presentation Composition Segment), WDS (Window Definition Segment)
                 break // PCS and WDS parsing not required for basic rendering
             default:
@@ -105,12 +98,9 @@ struct PGS {
                 return nil
             }
             headerData = fileHandle.readData(ofLength: 13)
-            if foundPDS, foundODS {
-                foundPDS = false
-                foundODS = false
-                subtitle.timestamp = parseTimestamp(headerData)
-                return subtitle
-            }
+            guard let pds, let ods else { continue }
+            let startTimestamp = parseTimestamp(headerData)
+            return Subtitle(startTimestamp: startTimestamp, imageWidth: ods.objectWidth, imageHeight: ods.objectHeight, imageData: ods.imageData, imagePalette: pds.palette)
         }
     }
 }
