@@ -17,8 +17,8 @@ class PDS {
     // MARK: - Lifecycle
 
     init(_ data: Data) throws {
-        guard data.count >= 8 else {
-            throw PGSError.invalidFormat
+        guard data.count >= 7, (data.count - 2) % 5 == 0 else {
+            throw PGSError.invalidPDSDataLength(length: data.count)
         }
         try parsePDS(data)
     }
@@ -40,11 +40,6 @@ class PDS {
     //       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
     private func parsePDS(_ data: Data) throws {
         // Start reading after the first 2 bytes (Palette ID and Version)
-        if (data.count - 2) % 5 != 0 {
-            print("Invalid Palette Data Segment Length: \(data.count)")
-            throw PGSError.invalidFormat
-        }
-
         var i = 2
         while i + 4 <= data.count {
             let index = data[i]

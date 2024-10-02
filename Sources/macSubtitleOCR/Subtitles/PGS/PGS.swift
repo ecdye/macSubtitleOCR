@@ -9,11 +9,13 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import os
 
 class PGS {
     // MARK: - Properties
 
     private var subtitles = [Subtitle]()
+    private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
 
     // MARK: - Lifecycle
 
@@ -62,13 +64,13 @@ class PGS {
 
     private func parseNextSubtitle(fileHandle: FileHandle, headerData: inout Data) throws -> Subtitle? {
         let subtitle = Subtitle()
-        var p1 = false
-        var p2 = false
+        var foundPDS = false
+        var foundODS = false
         var multipleODS = false
         var ods: ODS?
         while true {
             guard headerData.count == 13 else {
-                print("Failed to read PGS header correctly.")
+                logger.warning("Failed to read PGS header correctly.")
                 return nil
             }
 
@@ -80,7 +82,7 @@ class PGS {
             if segmentType == 0x80 { // END (End of Display Set Segment)
                 return nil
             } else if segmentLength == 0 {
-                print("Invalid segment found! Skipping...")
+                logger.warning("Invalid segment found! Skipping...")
                 return nil
             }
 
@@ -88,15 +90,18 @@ class PGS {
             let segmentData = fileHandle.readData(ofLength: segmentLength)
 
             guard segmentData.count == segmentLength else {
-                print("Failed to read the full segment data, got: \(segmentData.count) expected: \(segmentLength)")
-                return nil
+                fatalError("Error: Failed to read the full segment data, got: \(segmentData.count) expected: \(segmentLength)")
             }
 
             // Parse the segment based on the type (0x14 for PCS, 0x15 for WDS, 0x16 for PDS, 0x17 for ODS)
             switch segmentType {
             case 0x14: // PDS (Palette Definition Segment)
-                subtitle.imagePalette = try PDS(segmentData).getPalette()
-                p1 = true
+                do {
+                    subtitle.imagePalette = try PDS(segmentData).getPalette()
+                } catch let PGSError.invalidPDSDataLength(length) {
+                    fatalError("Error: Invalid Palette Data Segment length: \(length)")
+                }
+                foundPDS = true
             case 0x15: // ODS (Object Definition Segment)
                 if segmentData[3] == 0x80 {
                     ods = try ODS(segmentData)
@@ -108,7 +113,7 @@ class PGS {
                 } else {
                     ods = try ODS(segmentData)
                 }
-                p2 = true
+                foundODS = true
                 subtitle.imageWidth = ods!.getObjectWidth()
                 subtitle.imageHeight = ods!.getObjectHeight()
                 subtitle.imageData = ods!.getImageData()
@@ -118,9 +123,9 @@ class PGS {
                 return nil
             }
             headerData = fileHandle.readData(ofLength: 13)
-            if p1, p2 {
-                p1 = false
-                p2 = false
+            if foundPDS, foundODS {
+                foundPDS = false
+                foundODS = false
                 subtitle.timestamp = parseTimestamp(headerData)
                 return subtitle
             }
