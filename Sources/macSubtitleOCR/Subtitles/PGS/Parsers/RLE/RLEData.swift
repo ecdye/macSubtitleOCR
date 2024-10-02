@@ -8,7 +8,7 @@
 
 import Foundation
 
-class RLEData {
+struct RLEData {
     // MARK: - Properties
 
     private var width: Int
@@ -26,7 +26,6 @@ class RLEData {
     // MARK: - Functions
 
     func decode() throws -> Data {
-        var stderr = StandardErrorOutputStream()
         var pixelCount = 0
         var lineCount = 0
         var iterator = data.makeIterator()
@@ -53,8 +52,7 @@ class RLEData {
             } else if run == 0 {
                 // New Line: Check if pixels align correctly
                 if pixelCount % width > 0 {
-                    print("Error: Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.", to: &stderr)
-                    throw RLEDataError.invalidLineLength
+                    fatalError("Error: Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.")
                 }
                 lineCount += 1
             }
@@ -62,8 +60,7 @@ class RLEData {
 
         // Check if we decoded enough pixels
         if pixelCount < width * height {
-            print("Error: Insufficient RLE data for subtitle.", to: &stderr)
-            throw RLEDataError.insufficientData
+            fatalError("Error: Insufficient RLE data for subtitle.")
         }
 
         return image

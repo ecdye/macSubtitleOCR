@@ -11,28 +11,15 @@ import Foundation
 import ImageIO
 import os
 
-class PGS {
+struct PGS {
     // MARK: - Properties
 
-    private var subtitles = [Subtitle]()
+    private(set) var subtitles = [Subtitle]()
     private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
 
     // MARK: - Lifecycle
 
     init(_ url: URL) throws {
-        try parseSupFile(fromFileAt: url)
-    }
-
-    // MARK: - Getters
-
-    func getSubtitles() -> [Subtitle] {
-        subtitles
-    }
-
-    // MARK: - Methods
-
-    // Parses a `.sup` file and populates the subtitles array
-    private func parseSupFile(fromFileAt url: URL) throws {
         let fileHandle = try FileHandle(forReadingFrom: url)
         defer { fileHandle.closeFile() }
 
@@ -57,6 +44,8 @@ class PGS {
         }
     }
 
+    // MARK: - Methods
+
     private func parseTimestamp(_ data: Data) -> TimeInterval {
         let pts = data.value(ofType: UInt32.self, at: 2)!
         return TimeInterval(pts) / 90000.0 // 90 kHz clock
@@ -70,25 +59,17 @@ class PGS {
         var ods: ODS?
         while true {
             guard headerData.count == 13 else {
-                logger.warning("Failed to read PGS header correctly.")
-                return nil
+                fatalError("Failed to read PGS header correctly, got header length: \(headerData.count) expected: 13")
             }
 
             let segmentType = headerData[10]
-
-            // Read segment length (2 bytes, big-endian)
             let segmentLength = Int(headerData.value(ofType: UInt16.self, at: 11)!)
 
-            if segmentType == 0x80 { // END (End of Display Set Segment)
-                return nil
-            } else if segmentLength == 0 {
-                logger.warning("Invalid segment found! Skipping...")
-                return nil
-            }
+            // Check for the end of the subtitle stream (0x80 segment type and 0 length)
+            guard segmentType != 0x80, segmentLength != 0 else { return nil }
 
             // Read the rest of the segment
             let segmentData = fileHandle.readData(ofLength: segmentLength)
-
             guard segmentData.count == segmentLength else {
                 fatalError("Error: Failed to read the full segment data, got: \(segmentData.count) expected: \(segmentLength)")
             }
@@ -97,7 +78,7 @@ class PGS {
             switch segmentType {
             case 0x14: // PDS (Palette Definition Segment)
                 do {
-                    subtitle.imagePalette = try PDS(segmentData).getPalette()
+                    subtitle.imagePalette = try PDS(segmentData).palette
                 } catch let PGSError.invalidPDSDataLength(length) {
                     fatalError("Error: Invalid Palette Data Segment length: \(length)")
                 }
@@ -109,17 +90,18 @@ class PGS {
                     break
                 } else if multipleODS {
                     try ods?.appendSegment(segmentData)
-                    if segmentData[3] != 0x40 { break } else { multipleODS = false }
+                    if segmentData[3] != 0x40 { break }
                 } else {
                     ods = try ODS(segmentData)
                 }
                 foundODS = true
-                subtitle.imageWidth = ods!.getObjectWidth()
-                subtitle.imageHeight = ods!.getObjectHeight()
-                subtitle.imageData = ods!.getImageData()
+                subtitle.imageWidth = ods!.objectWidth
+                subtitle.imageHeight = ods!.objectHeight
+                subtitle.imageData = ods!.imageData
             case 0x16, 0x17: // PCS (Presentation Composition Segment), WDS (Window Definition Segment)
                 break // PCS and WDS parsing not required for basic rendering
             default:
+                logger.warning("Unknown segment type: \(segmentType, format: .hex), skipping...")
                 return nil
             }
             headerData = fileHandle.readData(ofLength: 13)

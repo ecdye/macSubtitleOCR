@@ -9,10 +9,10 @@
 import Foundation
 import simd
 
-class PDS {
+struct PDS {
     // MARK: - Properties
 
-    private var palette = [UInt8](repeating: 0, count: 1024)
+    private(set) var palette = [UInt8](repeating: 0, count: 1024)
 
     // MARK: - Lifecycle
 
@@ -20,13 +20,7 @@ class PDS {
         guard data.count >= 7, (data.count - 2) % 5 == 0 else {
             throw PGSError.invalidPDSDataLength(length: data.count)
         }
-        try parsePDS(data)
-    }
-
-    // MARK: - Getters
-
-    func getPalette() -> [UInt8] {
-        palette
+        parsePDS(data.advanced(by: 2))
     }
 
     // MARK: - Methods
@@ -38,9 +32,9 @@ class PDS {
     //   1 byte: Palette Version (unused by us)
     //   Followed by a series of palette entries:
     //       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
-    private func parsePDS(_ data: Data) throws {
+    private mutating func parsePDS(_ data: Data) {
         // Start reading after the first 2 bytes (Palette ID and Version)
-        var i = 2
+        var i = 0
         while i + 4 <= data.count {
             let index = data[i]
             let y = data[i + 1]

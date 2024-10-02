@@ -59,13 +59,13 @@ struct macSubtitleOCR: ParsableCommand {
                 // Open the PGS data stream
                 let PGS = try PGS(URL(fileURLWithPath: intermediateFiles[track.trackNumber]!))
 
-                let result = try processSubtitles(subtitles: PGS.getSubtitles(), trackNumber: track.trackNumber)
+                let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: track.trackNumber)
                 results.append(result)
             }
         } else {
             // Open the PGS data stream
             let PGS = try PGS(URL(fileURLWithPath: input))
-            let result = try processSubtitles(subtitles: PGS.getSubtitles(), trackNumber: 0)
+            let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: 0)
             results.append(result)
         }
 

@@ -8,13 +8,13 @@
 
 import Foundation
 
-class ODS {
+struct ODS {
     // MARK: - Properties
 
-    private var objectWidth: Int = 0
-    private var objectHeight: Int = 0
+    private(set) var objectWidth: Int = 0
+    private(set) var objectHeight: Int = 0
     private var rawImageData: Data = .init()
-    private var imageData: Data = .init()
+    private(set) var imageData: Data = .init()
 
     // MARK: - Lifecycle
 
@@ -22,21 +22,7 @@ class ODS {
         try parseODS(data)
     }
 
-    // MARK: - Getters / Setters
-
-    func getObjectWidth() -> Int {
-        objectWidth
-    }
-
-    func getObjectHeight() -> Int {
-        objectHeight
-    }
-
-    func getImageData() -> Data {
-        imageData
-    }
-
-    func appendSegment(_ data: Data) throws {
+    mutating func appendSegment(_ data: Data) throws {
         try parseODS(data)
     }
 
@@ -52,7 +38,7 @@ class ODS {
     //   2 bytes: Object width
     //   2 bytes: Object height
     //   Rest: Image data (run-length encoded, RLE)
-    private func parseODS(_ data: Data) throws {
+    private mutating func parseODS(_ data: Data) throws {
         let sequenceFlag = data[3]
         if sequenceFlag != 0x40 {
             objectWidth = Int(data.value(ofType: UInt16.self, at: 7)!)
