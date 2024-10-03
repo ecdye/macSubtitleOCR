@@ -18,7 +18,9 @@ struct VobSub {
     // MARK: - Lifecycle
 
     init(_ sub: String, _ idx: String) throws {
+        logger.debug("Extracting VobSub subtitles from \(sub) and \(idx)")
         let subFile = try FileHandle(forReadingFrom: URL(filePath: sub))
+        defer { subFile.closeFile() }
         let idx = VobSubIDX(URL(filePath: idx))
         try extractSubtitleImages(subFile: subFile, idx: idx)
     }
@@ -27,6 +29,7 @@ struct VobSub {
 
     private mutating func extractSubtitleImages(subFile: FileHandle, idx: VobSubIDX) throws {
         for index in idx.offsets.indices {
+            logger.debug("Reading image at index \(index), offset: \(idx.offsets[index]), timestamp: \(idx.timestamps[index])")
             let offset = idx.offsets[index]
             let timestamp = idx.timestamps[index]
             let nextOffset: UInt64 = if index + 1 < idx.offsets.count {
