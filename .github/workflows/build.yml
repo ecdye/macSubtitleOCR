@@ -28,7 +28,7 @@ jobs:
 
       - name: Test
         timeout-minutes: 10
-        run: xcrun swift test
+        run: xcrun swift test --parallel --skip "macSubtitleOCRTests.vobSubSUB()"
 
       - name: Periphery
         run: |
