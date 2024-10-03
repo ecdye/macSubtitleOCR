@@ -23,18 +23,18 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: swift
-        build-mode: manual
-
     - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
         xcode: 16.0
         swift: 6.0
         action: none
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: swift
+        build-mode: manual
 
     - name: Build
       run: xcrun swift build --configuration release --arch arm64 --arch x86_64
