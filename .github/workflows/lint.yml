@@ -18,5 +18,6 @@ jobs:
 
     - name: SwiftFormat
       run: |
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
         brew install swiftformat
         swiftformat --lint . --reporter github-actions-log --disable fileHeader # seems to be broken currently in Actions env
