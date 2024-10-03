@@ -20,8 +20,6 @@ func readSubFrame(pic: inout Subtitle, subFile: FileHandle, offset: UInt64, next
     var relativeControlOffset = 0
     var rleLengthFound = 0
 
-    // logger.info("Reading subtitle frame at offset \(offset) with next offset \(nextOffset)")
-    print("Reading subtitle frame at offset \(offset) with next offset \(nextOffset)")
     subFile.seek(toFileOffset: offset)
     repeat {
         let startOffset = subFile.offsetInFile
@@ -168,11 +166,7 @@ func readSubFrame(pic: inout Subtitle, subFile: FileHandle, offset: UInt64, next
             let dimensions = (width: pic.imageWidth!, height: pic.imageHeight!)
             logger.debug("Dimensions: width: \(dimensions.width), height: \(dimensions.height)")
         case 6:
-            pic.imageEvenOffset = (Int(controlHeader.value(ofType: UInt16.self, at: index)!) - 4)
-            pic.imageOddOffset = (Int(controlHeader.value(ofType: UInt16.self, at: index + 2)!) - 4)
-            index += 4
-            let rleOffsets = (even: pic.imageEvenOffset!, odd: pic.imageOddOffset!)
-            logger.debug("RLE Offsets: even: \(rleOffsets.even), odd: \(rleOffsets.odd)")
+            break // RLE offsets (not implemented)
         case 7:
             break // Color / Alpha updates (not implemented)
         default:
@@ -199,23 +193,9 @@ func decodePalette(subPicture: Subtitle, masterPalette: [UInt8]) -> [UInt8] {
 }
 
 func decodeImage(subtitle: Subtitle, fileBuffer _: FileHandle) throws -> Data {
-    let sizeEven: Int
-    let sizeOdd: Int
     let width = subtitle.imageWidth!
     let height = subtitle.imageHeight!
     var bitmap = Data(repeating: 0, count: width * height * subtitle.imageStride!)
-
-    if subtitle.imageOddOffset! > subtitle.imageEvenOffset! {
-        sizeEven = subtitle.imageOddOffset! - subtitle.imageEvenOffset!
-        sizeOdd = subtitle.imageData!.count - subtitle.imageOddOffset!
-    } else {
-        sizeOdd = subtitle.imageEvenOffset! - subtitle.imageOddOffset!
-        sizeEven = subtitle.imageData!.count - subtitle.imageEvenOffset!
-    }
-
-    guard sizeEven > 0, sizeOdd > 0 else {
-        throw VobSubError.invalidRLEBufferOffset
-    }
 
     let rleData = RLEData(data: subtitle.imageData!, width: width, height: height)
     bitmap = try rleData.decodeVobSub()

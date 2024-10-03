@@ -76,7 +76,7 @@ class VobSub {
 
                 if let timestampMatch, let offsetMatch {
                     let timestampString = (line as NSString).substring(with: timestampMatch.range(at: 1))
-                    let timestamp = dateFormatter.date(from: timestampString)?.timeIntervalSinceReferenceDate
+                    let timestamp = extractTimestamp(from: timestampString)
                     let offsetString = (line as NSString).substring(with: offsetMatch.range(at: 1))
                     if let offset = Int(offsetString, radix: 16), let timestamp {
                         subtitles.append(IdxSubtitleReference(timestamp: timestamp, offset: offset))
@@ -85,6 +85,26 @@ class VobSub {
             }
         }
         return subtitles
+    }
+
+    func extractTimestamp(from idxTimestamp: String) -> TimeInterval? {
+        // Split the timestamp into components (hours, minutes, seconds, milliseconds)
+        let components = idxTimestamp.split(separator: ":")
+
+        // Ensure we have exactly 4 components (hh:mm:ss:ms)
+        guard components.count == 4,
+              let hours = Double(components[0]),
+              let minutes = Double(components[1]),
+              let seconds = Double(components[2]),
+              let milliseconds = Double(components[3])
+        else {
+            return nil
+        }
+
+        // Convert everything to seconds
+        let totalSeconds = (hours * 3600) + (minutes * 60) + seconds + (milliseconds / 1000)
+
+        return totalSeconds
     }
 
     func extractSubtitleImages(subFile: FileHandle, idxReference: [IdxSubtitleReference]) throws {

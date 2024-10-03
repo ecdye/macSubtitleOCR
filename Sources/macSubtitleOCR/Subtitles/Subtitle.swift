@@ -26,7 +26,7 @@ class Subtitle {
     var numberOfColors: Int?
     var endTimestamp: TimeInterval?
 
-    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil, imageXOffset: Int? = nil, imageYOffset: Int? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil, imageEvenOffset: Int? = nil, imageOddOffset: Int? = nil, imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, imageStride: Int? = nil, numberOfColors: Int? = nil) {
+    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil, imageXOffset: Int? = nil, imageYOffset: Int? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil, imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, imageStride: Int? = nil, numberOfColors: Int? = nil) {
         self.index = index
         self.text = text
         self.startTimestamp = startTimestamp
@@ -35,8 +35,6 @@ class Subtitle {
         self.imageYOffset = imageYOffset
         self.imageWidth = imageWidth
         self.imageHeight = imageHeight
-        self.imageEvenOffset = imageEvenOffset
-        self.imageOddOffset = imageOddOffset
         self.imageData = imageData
         self.imagePalette = imagePalette
         self.imageAlpha = imageAlpha
