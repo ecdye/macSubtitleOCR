@@ -50,7 +50,7 @@
 --markcategories true
 --markextensions always
 --marktypes always
---maxwidth none
+--maxwidth 125
 --modifierorder
 --nevertrailing
 --nilinit remove
@@ -87,3 +87,5 @@
 --wrapternary default
 --wraptypealiases preserve
 --yodaswap always
+
+--disable wrapMultilineStatementBraces

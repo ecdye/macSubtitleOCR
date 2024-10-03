@@ -15,9 +15,12 @@ import Testing
 @Test func pgsMKV() throws {
     // Setup files
     let outputPath = (FileManager.default.temporaryDirectory.path + "/output")
-    let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.absoluteString.replacing("file://", with: "")
-    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString.replacing("file://", with: "")
-    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
+    let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.absoluteString
+        .replacing("file://", with: "")
+    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString
+        .replacing("file://", with: "")
+    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString
+        .replacing("file://", with: "")
 
     // Run tests
     let options = [mkvPath, outputPath, "--json", "--language-correction"]
@@ -46,9 +49,12 @@ import Testing
 @Test func pgsSUP() throws {
     // Setup files
     let outputPath = (FileManager.default.temporaryDirectory.path + "/output")
-    let supPath = Bundle.module.url(forResource: "test.sup", withExtension: nil)!.absoluteString.replacing("file://", with: "")
-    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString.replacing("file://", with: "")
-    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString.replacing("file://", with: "")
+    let supPath = Bundle.module.url(forResource: "test.sup", withExtension: nil)!.absoluteString
+        .replacing("file://", with: "")
+    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString
+        .replacing("file://", with: "")
+    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString
+        .replacing("file://", with: "")
 
     // Run tests
     let options = [supPath, outputPath, "--json", "--language-correction"]

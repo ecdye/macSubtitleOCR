@@ -69,7 +69,8 @@ struct PGS {
             // Read the rest of the segment
             let segmentData = fileHandle.readData(ofLength: segmentLength)
             guard segmentData.count == segmentLength else {
-                fatalError("Error: Failed to read the full segment data, got: \(segmentData.count) expected: \(segmentLength)")
+                fatalError(
+                    "Error: Failed to read the full segment data, got: \(segmentData.count) expected: \(segmentLength)")
             }
 
             // Parse the segment based on the type (0x14 for PCS, 0x15 for WDS, 0x16 for PDS, 0x17 for ODS)
@@ -100,7 +101,12 @@ struct PGS {
             headerData = fileHandle.readData(ofLength: 13)
             guard let pds, let ods else { continue }
             let startTimestamp = parseTimestamp(headerData)
-            return Subtitle(startTimestamp: startTimestamp, imageWidth: ods.objectWidth, imageHeight: ods.objectHeight, imageData: ods.imageData, imagePalette: pds.palette)
+            return Subtitle(
+                startTimestamp: startTimestamp,
+                imageWidth: ods.objectWidth,
+                imageHeight: ods.objectHeight,
+                imageData: ods.imageData,
+                imagePalette: pds.palette)
         }
     }
 }

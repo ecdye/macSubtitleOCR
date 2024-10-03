@@ -75,7 +75,11 @@ class MKVTrackParser: MKVFileHandler {
             }
 
             // Step 4: Parse Blocks (SimpleBlock or Block) within each Cluster
-            parseBlocks(within: clusterEndOffset, trackNumber: trackNumber, clusterTimestamp: clusterTimestamp, trackData: &trackData)
+            parseBlocks(
+                within: clusterEndOffset,
+                trackNumber: trackNumber,
+                clusterTimestamp: clusterTimestamp,
+                trackData: &trackData)
         }
 
         return trackData.isEmpty ? nil : trackData
@@ -122,11 +126,13 @@ class MKVTrackParser: MKVFileHandler {
         return nil
     }
 
-    private func parseBlocks(within clusterEndOffset: UInt64, trackNumber: [Int], clusterTimestamp: Int64, trackData: inout [Data]) {
+    private func parseBlocks(within clusterEndOffset: UInt64, trackNumber: [Int], clusterTimestamp: Int64,
+                             trackData: inout [Data]) {
         while fileHandle.offsetInFile < clusterEndOffset {
             // swiftformat:disable:next redundantSelf
             logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")
-            guard case (var blockSize?, let blockType?) = findElement(withID: EBML.simpleBlock, EBML.blockGroup) else { break }
+            guard case (var blockSize?, let blockType?) = findElement(withID: EBML.simpleBlock, EBML.blockGroup)
+            else { break }
 
             var blockStartOffset = fileHandle.offsetInFile
 
@@ -137,7 +143,8 @@ class MKVTrackParser: MKVFileHandler {
             }
 
             // Step 5: Read the track number in the block and compare it
-            guard let (blockTrackNumber, blockTimestamp) = readTrackNumber(from: fileHandle) as? (UInt64, Int64) else { continue }
+            guard let (blockTrackNumber, blockTimestamp) = readTrackNumber(from: fileHandle) as? (UInt64, Int64)
+            else { continue }
             if trackNumber.contains(Int(blockTrackNumber)) {
                 // Step 6: Calculate and encode the timestamp as 4 bytes in big-endian (PGS format)
                 let absPTS = calcAbsPTSForPGS(clusterTimestamp, blockTimestamp, timestampScale)

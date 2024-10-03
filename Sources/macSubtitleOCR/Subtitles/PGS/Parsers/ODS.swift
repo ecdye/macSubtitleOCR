@@ -33,7 +33,8 @@ struct ODS {
     //   0x17: Segment Type; already checked by the caller
     //   2 bytes: Object ID (unused by us)
     //   1 byte: Version number (unused by us)
-    //   1 byte: Sequence flag (0x40: Last in sequence, 0x80: First in sequence, 0xC0: First and last in sequence (0x40 | 0x80)
+    //   1 byte: Sequence flag (0x40: Last in sequence, 0x80: First in sequence, 0xC0: First and last in sequence (0x40 |
+    //   0x80)
     //   3 bytes: Object data length (unused by us)
     //   2 bytes: Object width
     //   2 bytes: Object height

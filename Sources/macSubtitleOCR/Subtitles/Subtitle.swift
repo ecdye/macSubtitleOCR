@@ -19,7 +19,8 @@ class Subtitle {
     var imagePalette: [UInt8]?
     var endTimestamp: TimeInterval?
 
-    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil, imageData: Data? = nil, imagePalette: [UInt8]? = nil) {
+    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil,
+         imageWidth: Int? = nil, imageHeight: Int? = nil, imageData: Data? = nil, imagePalette: [UInt8]? = nil) {
         self.index = index
         self.text = text
         self.startTimestamp = startTimestamp

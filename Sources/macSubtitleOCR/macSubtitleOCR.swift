@@ -80,7 +80,9 @@ struct macSubtitleOCR: ParsableCommand {
             // Save json file
             if json {
                 // Convert subtitle data to JSON
-                let jsonData = try JSONSerialization.data(withJSONObject: result.json, options: [.prettyPrinted, .sortedKeys])
+                let jsonData = try JSONSerialization.data(
+                    withJSONObject: result.json,
+                    options: [.prettyPrinted, .sortedKeys])
                 let jsonString = (String(data: jsonData, encoding: .utf8) ?? "[]")
                 let jsonFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).json")
                 try jsonString.write(to: jsonFilePath, atomically: true, encoding: .utf8)
@@ -117,7 +119,11 @@ struct macSubtitleOCR: ParsableCommand {
     }
 
     private func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
-        guard let destination = CGImageDestinationCreateWithURL(outputPath as CFURL, UTType.png.identifier as CFString, 1, nil)
+        guard let destination = CGImageDestinationCreateWithURL(
+            outputPath as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil)
         else {
             throw macSubtitleOCRError.fileCreationError
         }
@@ -147,8 +153,12 @@ struct macSubtitleOCR: ParsableCommand {
 
             // Save subtitle image as PNG if requested
             if saveImages {
-                let imageDirectory = URL(fileURLWithPath: outputDirectory).appendingPathComponent("images/" + "track_\(trackNumber)/")
-                try FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true, attributes: nil)
+                let imageDirectory = URL(fileURLWithPath: outputDirectory)
+                    .appendingPathComponent("images/" + "track_\(trackNumber)/")
+                try FileManager.default.createDirectory(
+                    at: imageDirectory,
+                    withIntermediateDirectories: true,
+                    attributes: nil)
                 let pngPath = imageDirectory.appendingPathComponent("subtitle_\(subIndex).png")
                 try saveImageAsPNG(image: subImage, outputPath: pngPath)
             }
