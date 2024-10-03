@@ -63,10 +63,7 @@ struct VobSubParser {
                 fatalError("Error: PES packet length is 0 at offset \(subFile.offsetInFile)")
             }
             let nextPSOffset = subFile.offsetInFile + UInt64(pesLength)
-            let pesHeaderLength = subFile.offsetInFile - startOffset
-            logger
-                .debug(
-                    "PES packet length: \(pesLength), Next PES packet offset: \(nextPSOffset), PS header length: \(pesHeaderLength)")
+            logger.debug("pesLength: \(pesLength), nextPSOffset: \(nextPSOffset)")
 
             let extByteOne = subFile.readData(ofLength: 1)[0]
             let firstPacket = (extByteOne >> 2 & 0x01) == 0
