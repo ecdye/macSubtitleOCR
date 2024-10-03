@@ -25,7 +25,7 @@ struct RLEData {
 
     // MARK: - Functions
 
-    func decode() -> Data {
+    func decodePGS() -> Data {
         var pixelCount = 0
         var lineCount = 0
         var iterator = data.makeIterator()
@@ -66,9 +66,8 @@ struct RLEData {
         return image
     }
 
-    func decodeVobSub() throws -> Data {
+    func decodeVobSub() -> Data {
         var nibbles = Data()
-        var odd = false
         var image = Data()
 
         // Convert RLE data to nibbles
@@ -87,16 +86,16 @@ struct RLEData {
         var currentNibbles: [UInt8?] = [nibbles[i], nibbles[i + 1]]
         i += 2
         while currentNibbles[1] != nil, y < height {
-            var nibble = getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i, odd: &odd)
+            var nibble = getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
 
             if nibble < 0x04 {
                 if nibble == 0x00 {
-                    nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i, odd: &odd)
+                    nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
                     if nibble < 0x04 {
-                        nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i, odd: &odd)
+                        nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
                     }
                 }
-                nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i, odd: &odd)
+                nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
             }
             let color = UInt8(nibble & 0x03)
             var run = Int(nibble >> 2)
@@ -121,7 +120,8 @@ struct RLEData {
         for i in stride(from: 0, to: height / 2, by: 1) {
             finalImage.append(image.subdata(in: i * width ..< i * width + width))
             if height % 2 != 0 {
-                finalImage.append(image.subdata(in: ((height / 2) + i + 1) * width ..< ((height / 2) + i + 1) * width + width))
+                finalImage
+                    .append(image.subdata(in: ((height / 2) + i + 1) * width ..< ((height / 2) + i + 1) * width + width))
             } else {
                 finalImage.append(image.subdata(in: ((height / 2) + i) * width ..< ((height / 2) + i) * width + width))
             }
@@ -132,13 +132,7 @@ struct RLEData {
         return finalImage
     }
 
-    func getNibble(currentNibbles: inout [UInt8?], nibbles: Data, i: inout Int, odd: inout Bool) -> UInt16 {
-        if odd {
-            _ = currentNibbles.removeFirst()
-            odd.toggle()
-            currentNibbles.append(nibbles[i])
-            i += 1
-        }
+    func getNibble(currentNibbles: inout [UInt8?], nibbles: Data, i: inout Int) -> UInt16 {
         let nibble = UInt16(currentNibbles.removeFirst()!)
         currentNibbles.append(nibbles[i])
         i += 1

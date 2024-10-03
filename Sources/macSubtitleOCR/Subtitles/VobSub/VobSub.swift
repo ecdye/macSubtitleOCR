@@ -29,7 +29,8 @@ struct VobSub {
 
     private mutating func extractSubtitleImages(subFile: FileHandle, idx: VobSubIDX) throws {
         for index in idx.offsets.indices {
-            logger.debug("Reading image at index \(index), offset: \(idx.offsets[index]), timestamp: \(idx.timestamps[index])")
+            logger
+                .debug("Reading image at index \(index), offset: \(idx.offsets[index]), timestamp: \(idx.timestamps[index])")
             let offset = idx.offsets[index]
             let timestamp = idx.timestamps[index]
             let nextOffset: UInt64 = if index + 1 < idx.offsets.count {
@@ -37,8 +38,12 @@ struct VobSub {
             } else {
                 subFile.seekToEndOfFile()
             }
-            var subtitle = Subtitle(startTimestamp: timestamp, endTimestamp: 0, imageData: .init(), numberOfColors: 16)
-            try readSubFrame(pic: &subtitle, subFile: subFile, offset: offset, nextOffset: nextOffset, idxPalette: idx.palette)
+            let subtitle = try VobSubParser(
+                subFile: subFile,
+                timestamp: timestamp,
+                offset: offset,
+                nextOffset: nextOffset,
+                idxPalette: idx.palette).subtitle
             logger.debug("Found image at offset \(offset) with timestamp \(timestamp)")
             logger.debug("Image size: \(subtitle.imageWidth!) x \(subtitle.imageHeight!)")
             subtitles.append(subtitle)

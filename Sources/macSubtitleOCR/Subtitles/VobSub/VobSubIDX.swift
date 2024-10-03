@@ -44,7 +44,8 @@ struct VobSubIDX {
 
             // Handle timestamp and filepos in one go
             guard let timestamp = extractTimestamp(from: trimmedLine),
-               let offset = extractOffset(from: trimmedLine) else {
+                  let offset = extractOffset(from: trimmedLine)
+            else {
                 throw macSubtitleOCRError.fileReadError
             }
             offsets.append(offset)
@@ -80,7 +81,8 @@ struct VobSubIDX {
               let hours = Double(components[0]),
               let minutes = Double(components[1]),
               let seconds = Double(components[2]),
-              let milliseconds = Double(components[3]) else {
+              let milliseconds = Double(components[3])
+        else {
             return nil
         }
 

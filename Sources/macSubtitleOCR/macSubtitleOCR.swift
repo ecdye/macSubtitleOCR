@@ -50,7 +50,9 @@ struct macSubtitleOCR: ParsableCommand {
         var results: [macSubtitleOCRResult] = []
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
-            let sub = try VobSub(input.replacingOccurrences(of: ".idx", with: ".sub"), input.replacingOccurrences(of: ".sub", with: ".idx"))
+            let sub = try VobSub(
+                input.replacingOccurrences(of: ".idx", with: ".sub"),
+                input.replacingOccurrences(of: ".sub", with: ".idx"))
             let result = try processSubtitles(subtitles: sub.subtitles, trackNumber: 0)
             results.append(result)
         } else if input.hasSuffix(".mkv") {
