@@ -63,3 +63,4 @@ If you're interested in working on specific features or improvements, check out 
 
 - [Presentation Graphic Stream (PGS) Files](https://blog.thescorpius.com/index.php/2017/07/15/presentation-graphic-stream-sup-files-bluray-subtitle-format/)
 - [Matroska Technical Specifications](https://www.matroska.org/technical/elements.html)
+- [DVD Subtitle Stream (VobSub) Files](http://www.mpucoder.com/DVD/index.html)

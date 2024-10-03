@@ -74,7 +74,7 @@ import Testing
     #expect(jsonMatch >= 95.0)
 }
 
-@Test func vobSubSub() throws {
+@Test func vobSubSUB() throws {
     // Setup files
     let outputPath = (FileManager.default.temporaryDirectory.path + "/output")
     let subPath = Bundle.module.url(forResource: "test.sub", withExtension: nil)!.absoluteString.replacing("file://", with: "")
