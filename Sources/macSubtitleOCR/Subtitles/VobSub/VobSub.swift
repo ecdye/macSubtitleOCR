@@ -47,26 +47,16 @@ class VobSub {
         }
     }
 
-    func parseIdxFile(idxData: String) -> [IdxSubtitleReference] {
+    func parseIdxFile(idxData: String) throws -> [IdxSubtitleReference] {
         var subtitles = [IdxSubtitleReference]()
         let lines = idxData.split(separator: "\n")
-        let timestampRegex: NSRegularExpression
-        let offsetRegex: NSRegularExpression
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "HH:mm:ss:SSS"
-        do {
-            timestampRegex = try NSRegularExpression(pattern: "timestamp: (\\d{2}:\\d{2}:\\d{2}:\\d{3})")
-            offsetRegex = try NSRegularExpression(pattern: "filepos: (\\w+)")
-        } catch {
-            print("Error: Failed to create regular expressions: \(error)", to: &stderr)
-            return []
-        }
+        let timestampRegex = try NSRegularExpression(pattern: "timestamp: (\\d{2}:\\d{2}:\\d{2}:\\d{3})")
+        let offsetRegex = try NSRegularExpression(pattern: "filepos: (\\w+)")
 
         for line in lines {
             if line.starts(with: "palette:") {
                 let entries = line.split(separator: ", ").map { String($0) }
                 for entry in entries {
-                    print(entry.hexToBytes)
                     idxPalette.append(contentsOf: entry.hexToBytes)
                 }
             }
@@ -133,7 +123,7 @@ class VobSub {
             print("Error: Failed to read files", to: &stderr)
             return
         }
-        let subtitles = parseIdxFile(idxData: idxData)
+        let subtitles = try parseIdxFile(idxData: idxData)
         try extractSubtitleImages(subFile: subFile, idxReference: subtitles)
     }
 }

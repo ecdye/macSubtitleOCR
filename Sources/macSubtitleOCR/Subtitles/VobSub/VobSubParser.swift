@@ -116,6 +116,10 @@ func readSubFrame(pic: inout Subtitle, subFile: FileHandle, offset: UInt64, next
     index += 2
 
     var alphaSum = 0
+    let relativeEndTimestamp = controlHeader.value(ofType: UInt16.self, at: endOfControl - 1)! << 10
+    let endTimestamp = pic.startTimestamp! + TimeInterval(relativeEndTimestamp) / 90.0 - 9 // Not sure why we need to subtract 9 but its pretty close to accurate
+    pic.endTimestamp = endTimestamp
+    logger.debug("Display delay is \(endTimestamp)")
     while index < endOfControl {
         let command = controlHeader[index]
         index += 1
@@ -125,6 +129,9 @@ func readSubFrame(pic: inout Subtitle, subFile: FileHandle, offset: UInt64, next
             break // Set subtitle as forced
         case 1:
             break // Start display
+        case 2:
+            let displayDelay = controlHeader.value(ofType: UInt16.self, at: 0)
+            logger.debug("Display delay is \(displayDelay!)")
         case 3:
             var byte = controlHeader[index]
             index += 1

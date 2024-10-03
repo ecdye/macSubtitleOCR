@@ -17,8 +17,6 @@ class Subtitle {
     var imageYOffset: Int?
     var imageWidth: Int?
     var imageHeight: Int?
-    var imageEvenOffset: Int?
-    var imageOddOffset: Int?
     var imageData: Data?
     var imagePalette: [UInt8]?
     var imageAlpha: [UInt8]?
