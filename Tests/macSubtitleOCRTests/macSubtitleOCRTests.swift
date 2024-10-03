@@ -98,6 +98,6 @@ import Testing
     let srtMatch = similarityPercentage(srtExpectedOutput, srtActualOutput)
     let jsonMatch = similarityPercentage(jsonExpectedOutput, jsonActualOutput)
 
-    #expect(srtMatch >= 90.0)
-    #expect(jsonMatch >= 90.0)
+    #expect(srtMatch >= 90.0) // Lower threshold due to end timestamp differences
+    #expect(jsonMatch >= 95.0)
 }
