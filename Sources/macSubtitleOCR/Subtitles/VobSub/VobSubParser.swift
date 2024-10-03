@@ -18,17 +18,17 @@ struct VobSubParser {
 
     // MARK: - Lifecycle
 
-    init(subFile: FileHandle, timestamp: TimeInterval, offset: UInt64, nextOffset: UInt64, idxPalette: [UInt8]) throws {
+    init(subFile: FileHandle, timestamp: TimeInterval, offset: UInt64, nextOffset: UInt64, idxPalette: [UInt8]) {
         masterPalette = idxPalette
         subtitle.startTimestamp = timestamp
-        try readSubFrame(subFile: subFile, offset: offset, nextOffset: nextOffset, idxPalette: idxPalette)
+        readSubFrame(subFile: subFile, offset: offset, nextOffset: nextOffset, idxPalette: idxPalette)
         decodeImage()
         decodePalette()
     }
 
     // MARK: - Methods
 
-    func readSubFrame(subFile: FileHandle, offset: UInt64, nextOffset: UInt64, idxPalette _: [UInt8]) throws {
+    func readSubFrame(subFile: FileHandle, offset: UInt64, nextOffset: UInt64, idxPalette _: [UInt8]) {
         var firstPacketFound = false
         var controlOffset: Int?
         var controlSize: Int?

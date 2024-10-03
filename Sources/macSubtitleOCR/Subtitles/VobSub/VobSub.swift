@@ -22,15 +22,14 @@ struct VobSub {
         let subFile = try FileHandle(forReadingFrom: URL(filePath: sub))
         defer { subFile.closeFile() }
         let idx = VobSubIDX(URL(filePath: idx))
-        try extractSubtitleImages(subFile: subFile, idx: idx)
+        extractSubtitleImages(subFile: subFile, idx: idx)
     }
 
     // MARK: - Methods
 
-    private mutating func extractSubtitleImages(subFile: FileHandle, idx: VobSubIDX) throws {
+    private mutating func extractSubtitleImages(subFile: FileHandle, idx: VobSubIDX) {
         for index in idx.offsets.indices {
-            logger
-                .debug("Reading image at index \(index), offset: \(idx.offsets[index]), timestamp: \(idx.timestamps[index])")
+            logger.debug("Index \(index), offset: \(idx.offsets[index]), timestamp: \(idx.timestamps[index])")
             let offset = idx.offsets[index]
             let timestamp = idx.timestamps[index]
             let nextOffset: UInt64 = if index + 1 < idx.offsets.count {
@@ -38,7 +37,7 @@ struct VobSub {
             } else {
                 subFile.seekToEndOfFile()
             }
-            let subtitle = try VobSubParser(
+            let subtitle = VobSubParser(
                 subFile: subFile,
                 timestamp: timestamp,
                 offset: offset,
