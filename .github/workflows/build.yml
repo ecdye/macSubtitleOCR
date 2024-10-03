@@ -11,9 +11,35 @@ on:
       - '**/*.swift'
 
 jobs:
+  test:
+    name: Test
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: mxcl/xcodebuild@v3
+        with:
+          xcode: 16.0
+          swift: 6.0
+          action: none
+
+      - name: Test
+        timeout-minutes: 10
+        run: xcrun swift test
+
+      - name: Periphery
+        run: |
+          brew install peripheryapp/periphery/periphery
+          periphery scan --skip-build --index-store-path .build/debug/index/store
+
   build:
     name: Build
     runs-on: macos-latest
+    needs: test
+    if: needs.test.result == 'success'
 
     steps:
     - name: Checkout repository
@@ -30,14 +56,6 @@ jobs:
       run: |
         xcrun swift build --configuration release --arch arm64 --arch x86_64
         tar -cvJf macSubtitleOCR.tar.xz -C .build/apple/Products/Release macSubtitleOCR
-
-    - name: Test
-      run: xcrun swift test
-
-    - name: Periphery
-      run: |
-        brew install peripheryapp/periphery/periphery
-        periphery scan --skip-build --index-store-path .build/debug/index/store
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4
