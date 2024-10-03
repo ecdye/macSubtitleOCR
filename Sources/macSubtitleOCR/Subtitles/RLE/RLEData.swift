@@ -117,7 +117,19 @@ struct RLEData {
 
             image.append(contentsOf: repeatElement(color, count: run))
         }
-        return image
+        var finalImage = Data()
+        for i in stride(from: 0, to: height / 2, by: 1) {
+            finalImage.append(image.subdata(in: i * width ..< i * width + width))
+            if height % 2 != 0 {
+                finalImage.append(image.subdata(in: ((height / 2) + i + 1) * width ..< ((height / 2) + i + 1) * width + width))
+            } else {
+                finalImage.append(image.subdata(in: ((height / 2) + i) * width ..< ((height / 2) + i) * width + width))
+            }
+        }
+        if height % 2 != 0 {
+            finalImage.append(image.subdata(in: (height / 2) * width ..< (height / 2) * width + width))
+        }
+        return finalImage
     }
 
     func getNibble(currentNibbles: inout [UInt8?], nibbles: Data, i: inout Int, odd: inout Bool) -> UInt16 {
