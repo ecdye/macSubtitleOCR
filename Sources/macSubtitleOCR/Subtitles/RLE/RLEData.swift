@@ -68,7 +68,9 @@ struct RLEData {
 
     func decodeVobSub() -> Data {
         var nibbles = Data()
-        var image = Data()
+        var decodedLines = Data()
+        decodedLines.reserveCapacity(Int(width * height))
+        nibbles.reserveCapacity(data.count * 2)
 
         // Convert RLE data to nibbles
         for byte in data {
@@ -100,7 +102,7 @@ struct RLEData {
             let color = UInt8(nibble & 0x03)
             var run = Int(nibble >> 2)
 
-            if image.count % width == 0, color != 0, run == 15 {
+            if decodedLines.count % width == 0, color != 0, run == 15 {
                 i -= 5
                 currentNibbles = [nibbles[i], nibbles[i + 1]]
                 i += 2
@@ -117,25 +119,33 @@ struct RLEData {
                 }
             }
 
-            image.append(contentsOf: repeatElement(color, count: run))
+            decodedLines.append(contentsOf: repeatElement(color, count: run))
         }
+
+        return interleaveLines(decodedLines)
+    }
+
+    private func interleaveLines(_ decodedLines: Data) -> Data {
         var finalImage = Data()
-        for i in stride(from: 0, to: height / 2, by: 1) {
-            finalImage.append(image.subdata(in: i * width ..< i * width + width))
-            if height % 2 != 0 {
-                finalImage
-                    .append(image.subdata(in: ((height / 2) + i + 1) * width ..< ((height / 2) + i + 1) * width + width))
-            } else {
-                finalImage.append(image.subdata(in: ((height / 2) + i) * width ..< ((height / 2) + i) * width + width))
-            }
+        finalImage.reserveCapacity(Int(width * height))
+
+        let halfHeight = height / 2
+        let heightOdd = height % 2 != 0
+        for step in stride(from: 0, to: halfHeight, by: 1) {
+            finalImage.append(decodedLines.subdata(in: step * width ..< step * width + width))
+            let oddStepStart = (halfHeight + step + 1) * width
+            let evenStepStart = (halfHeight + step) * width
+            let start = heightOdd ? oddStepStart : evenStepStart
+            let end = heightOdd ? oddStepStart + width : evenStepStart + width
+            finalImage.append(decodedLines.subdata(in: start ..< end))
         }
         if height % 2 != 0 {
-            finalImage.append(image.subdata(in: (height / 2) * width ..< (height / 2) * width + width))
+            finalImage.append(decodedLines.subdata(in: halfHeight * width ..< halfHeight * width + width))
         }
         return finalImage
     }
 
-    func getNibble(currentNibbles: inout [UInt8?], nibbles: Data, i: inout Int) -> UInt16 {
+    private func getNibble(currentNibbles: inout [UInt8?], nibbles: Data, i: inout Int) -> UInt16 {
         let nibble = UInt16(currentNibbles.removeFirst()!)
         currentNibbles.append(nibbles[i])
         i += 1
