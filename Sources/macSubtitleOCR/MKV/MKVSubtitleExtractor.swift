@@ -10,20 +10,14 @@ import Foundation
 import os
 
 class MKVSubtitleExtractor: MKVTrackParser {
-    private var stderr = StandardErrorOutputStream()
-
     func getSubtitleTrackData(trackNumber: Int) throws -> String? {
-        let tmpFilePath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(trackNumber)")
-            .appendingPathExtension("sup")
-            .path
+        let trackPath = URL.temporaryDirectory.appendingPathComponent("\(trackNumber)").appendingPathExtension("sup").path
 
-        if FileManager.default.createFile(atPath: tmpFilePath, contents: tracks[trackNumber].trackData, attributes: nil) {
-            logger.debug("Created file at path: \(tmpFilePath).")
-            return tmpFilePath
+        if FileManager.default.createFile(atPath: trackPath, contents: tracks[trackNumber].trackData, attributes: nil) {
+            logger.debug("Created file at path: \(trackPath).")
+            return trackPath
         } else {
-            print("Failed to create file at path: \(tmpFilePath).", to: &stderr)
-            throw PGSError.fileReadError
+            fatalError("Error: Failed to create file at path: \(trackPath).")
         }
     }
 }

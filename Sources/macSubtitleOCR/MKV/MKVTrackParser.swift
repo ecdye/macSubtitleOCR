@@ -13,26 +13,23 @@ class MKVTrackParser: MKVFileHandler {
     // MARK: - Properties
 
     var tracks: [MKVTrack] = []
-    private var stderr = StandardErrorOutputStream()
 
     // MARK: - Functions
 
     func parseTracks(codec: String) throws {
-        guard let _ = findElement(withID: EBML.segmentID) as? (UInt64, UInt32) else {
-            print("Error: Segment element not found", to: &stderr)
-            throw MKVError.segmentElementNotFound
+        guard findElement(withID: EBML.segmentID) as? (UInt64, UInt32) != nil else {
+            fatalError("Error: Segment element not found in file: \(filePath)")
         }
 
         guard let (tracksSize, _) = findElement(withID: EBML.tracksID) as? (UInt64, UInt32) else {
-            print("Error: Tracks element not found", to: &stderr)
-            throw MKVError.tracksElementNotFound
+            fatalError("Error: Tracks element not found in file: \(filePath)")
         }
 
         let endOfTracksOffset = fileHandle.offsetInFile + tracksSize
 
         var trackNumbers = [Int]()
         while fileHandle.offsetInFile < endOfTracksOffset {
-            if let (elementID, elementSize, _) = tryParseElement() {
+            if let (elementID, elementSize) = tryParseElement() {
                 if elementID == EBML.trackEntryID {
                     logger.debug("Found TrackEntry element")
                     if let track = parseTrackEntry(codec: codec) {
@@ -59,7 +56,7 @@ class MKVTrackParser: MKVFileHandler {
         guard let segmentSize = locateSegment() else { return nil }
         let segmentEndOffset = fileHandle.offsetInFile + segmentSize
         // swiftformat:disable:next redundantSelf
-        logger.debug("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset), EOF: \(self.eof)")
+        logger.debug("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset), EOF: \(self.endOfFile)")
 
         var trackData = [Data](repeating: Data(), count: trackNumber.count)
 
@@ -92,7 +89,7 @@ class MKVTrackParser: MKVFileHandler {
         var trackType: UInt8?
         var codecId: String?
 
-        while let (elementID, elementSize, _) = tryParseElement() {
+        while let (elementID, elementSize) = tryParseElement() {
             switch elementID {
             case EBML.trackNumberID:
                 trackNumber = Int((fileHandle.readData(ofLength: 1).first)!)

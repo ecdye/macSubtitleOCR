@@ -33,9 +33,8 @@ struct ODS {
     //   0x17: Segment Type; already checked by the caller
     //   2 bytes: Object ID (unused by us)
     //   1 byte: Version number (unused by us)
-    //   1 byte: Sequence flag (0x40: Last in sequence, 0x80: First in sequence, 0xC0: First and last in sequence (0x40
-    //   |
-    //   0x80)
+    //   1 byte: Sequence flag (0x80: First in sequence, 0x40: Last in sequence,
+    //                          0xC0: First and last in sequence (0x40 | 0x80))
     //   3 bytes: Object data length (unused by us)
     //   2 bytes: Object width
     //   2 bytes: Object height
@@ -43,8 +42,8 @@ struct ODS {
     private mutating func parseODS(_ data: Data) throws {
         let sequenceFlag = data[3]
         if sequenceFlag != 0x40 {
-            objectWidth = Int(data.value(ofType: UInt16.self, at: 7)!)
-            objectHeight = Int(data.value(ofType: UInt16.self, at: 9)!)
+            objectWidth = Int(data.value(ofType: UInt16.self, at: 7) ?? 0)
+            objectHeight = Int(data.value(ofType: UInt16.self, at: 9) ?? 0)
         }
 
         // PGS includes the width and height as part of the image data length calculations
@@ -54,12 +53,12 @@ struct ODS {
 
         switch sequenceFlag {
         case 0x40:
-            rawImageData.append(data.subdata(in: 4 ..< data.count))
+            rawImageData.append(data.advanced(by: 4))
             imageData = decodeRLEData()
         case 0x80:
-            rawImageData.append(data.subdata(in: 11 ..< data.count))
+            rawImageData.append(data.advanced(by: 11))
         default:
-            rawImageData.append(data.subdata(in: 11 ..< data.count))
+            rawImageData.append(data.advanced(by: 11))
             imageData = decodeRLEData()
         }
     }

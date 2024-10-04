@@ -11,8 +11,7 @@ import Foundation
 extension Data {
     // Function to remove null bytes (0x00) from Data
     mutating func removeNullBytes() {
-        let nullByte: UInt8 = 0x00
-        removeAll { $0 == nullByte }
+        self = filter { $0 != 0x00 }
     }
 
     func value<T: BinaryInteger>(ofType _: T.Type, at offset: Int, convertEndian: Bool = false) -> T? {

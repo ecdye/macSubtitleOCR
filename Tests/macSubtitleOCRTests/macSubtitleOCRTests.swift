@@ -14,13 +14,10 @@ import Testing
 
 @Test func pgsMKV() throws {
     // Setup files
-    let outputPath = URL.temporaryDirectory.absoluteString.replacing("file://", with: "")
-    let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
-    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
-    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
+    let outputPath = URL.temporaryDirectory.path
+    let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.path
+    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.path
+    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.path
 
     // Run tests
     let options = [mkvPath, outputPath, "--json", "--language-correction"]
@@ -48,13 +45,10 @@ import Testing
 
 @Test func pgsSUP() throws {
     // Setup files
-    let outputPath = URL.temporaryDirectory.absoluteString.replacing("file://", with: "")
-    let supPath = Bundle.module.url(forResource: "test.sup", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
-    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
-    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
+    let outputPath = URL.temporaryDirectory.path
+    let supPath = Bundle.module.url(forResource: "test.sup", withExtension: nil)!.path
+    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.path
+    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.path
 
     // Run tests
     let options = [supPath, outputPath, "--json", "--language-correction"]
@@ -76,14 +70,10 @@ import Testing
 
 @Test func vobSubSUB() throws {
     // Setup files
-    let outputPath = URL.temporaryDirectory.absoluteString.replacing("file://", with: "")
-    let subPath = Bundle.module.url(forResource: "test.sub", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
-    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
-    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.absoluteString
-        .replacing("file://", with: "")
-
+    let outputPath = URL.temporaryDirectory.path
+    let subPath = Bundle.module.url(forResource: "test.sub", withExtension: nil)!.path
+    let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.path
+    let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.path
     // Run tests
     let options = [subPath, outputPath, "--json", "--language-correction"]
     var runner = try macSubtitleOCR.parseAsRoot(options)

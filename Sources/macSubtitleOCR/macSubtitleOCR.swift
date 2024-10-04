@@ -56,7 +56,7 @@ struct macSubtitleOCR: ParsableCommand {
             let result = try processSubtitles(subtitles: sub.subtitles, trackNumber: 0)
             results.append(result)
         } else if input.hasSuffix(".mkv") {
-            let mkvStream = try MKVSubtitleExtractor(filePath: input)
+            let mkvStream = MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(codec: "S_HDMV/PGS")
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
@@ -78,30 +78,32 @@ struct macSubtitleOCR: ParsableCommand {
         let outputDirectory = URL(fileURLWithPath: outputDirectory)
         try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true, attributes: nil)
         for result in results {
-            // Save srt file
-            let srtFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).srt")
-            let srt = SRT(subtitles: result.srt)
-            try srt.write(toFileAt: srtFilePath)
+            autoreleasepool {
+                // Save srt file
+                let srtFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).srt")
+                let srt = SRT(subtitles: result.srt)
+                srt.write(toFileAt: srtFilePath)
 
-            // Save json file
-            if json {
-                // Convert subtitle data to JSON
-                let jsonData = try JSONSerialization.data(
-                    withJSONObject: result.json,
-                    options: [.prettyPrinted, .sortedKeys])
-                let jsonString = (String(data: jsonData, encoding: .utf8) ?? "[]")
-                let jsonFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).json")
-                try jsonString.write(to: jsonFilePath, atomically: true, encoding: .utf8)
-            }
+                // Save json file
+                if json {
+                    // Convert subtitle data to JSON
+                    let jsonData = try? JSONSerialization.data(
+                        withJSONObject: result.json,
+                        options: [.prettyPrinted, .sortedKeys])
+                    let jsonString = (String(data: jsonData ?? Data(), encoding: .utf8) ?? "[]")
+                    let jsonFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).json")
+                    try? jsonString.write(to: jsonFilePath, atomically: true, encoding: .utf8)
+                }
 
-            // Save or remove intermediate files
-            if saveSubtitleFile, input.hasSuffix(".mkv") {
-                let subtitleFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).sup")
-                try fileManager.moveItem(
-                    at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!),
-                    to: subtitleFilePath)
-            } else if input.hasSuffix(".mkv") {
-                try fileManager.removeItem(at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!))
+                // Save or remove intermediate files
+                if saveSubtitleFile, input.hasSuffix(".mkv") {
+                    let subtitleFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).sup")
+                    try? fileManager.moveItem(
+                        at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!),
+                        to: subtitleFilePath)
+                } else if input.hasSuffix(".mkv") {
+                    try? fileManager.removeItem(at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!))
+                }
             }
         }
     }
@@ -116,26 +118,19 @@ struct macSubtitleOCR: ParsableCommand {
         }
     }
 
-    private func getOCRRevision() -> Int {
-        if #available(macOS 13, *) {
-            VNRecognizeTextRequestRevision3
-        } else {
-            VNRecognizeTextRequestRevision2
-        }
-    }
+    private func saveImages(image: CGImage, trackNumber: Int = 0, index: Int) throws {
+        let outputDirectory = URL(fileURLWithPath: outputDirectory)
+        let imageDirectory = outputDirectory.appendingPathComponent("images/" + "track_\(trackNumber)/")
+        let pngPath = imageDirectory.appendingPathComponent("subtitle_\(index).png")
 
-    private func saveImageAsPNG(image: CGImage, outputPath: URL) throws {
-        guard let destination = CGImageDestinationCreateWithURL(
-            outputPath as CFURL,
-            UTType.png.identifier as CFString,
-            1,
-            nil)
-        else {
+        try FileManager.default.createDirectory(at: imageDirectory, withIntermediateDirectories: true, attributes: nil)
+
+        let destination = CGImageDestinationCreateWithURL(pngPath as CFURL, UTType.png.identifier as CFString, 1, nil)
+        guard let destination else {
             throw macSubtitleOCRError.fileCreationError
         }
         CGImageDestinationAddImage(destination, image, nil)
-
-        if !CGImageDestinationFinalize(destination) {
+        guard CGImageDestinationFinalize(destination) else {
             throw macSubtitleOCRError.fileWriteError
         }
     }
@@ -159,14 +154,11 @@ struct macSubtitleOCR: ParsableCommand {
 
             // Save subtitle image as PNG if requested
             if saveImages {
-                let imageDirectory = URL(fileURLWithPath: outputDirectory)
-                    .appendingPathComponent("images/" + "track_\(trackNumber)/")
-                try FileManager.default.createDirectory(
-                    at: imageDirectory,
-                    withIntermediateDirectories: true,
-                    attributes: nil)
-                let pngPath = imageDirectory.appendingPathComponent("subtitle_\(subIndex).png")
-                try saveImageAsPNG(image: subImage, outputPath: pngPath)
+                do {
+                    try saveImages(image: subImage, trackNumber: trackNumber, index: subIndex)
+                } catch {
+                    logger.error("Error saving image \(trackNumber)-\(subIndex): \(error.localizedDescription)")
+                }
             }
 
             // Perform text recognition
@@ -202,13 +194,14 @@ struct macSubtitleOCR: ParsableCommand {
                     }
                 }
 
-                let subtitleData: [String: Any] = [
-                    "image": subIndex,
-                    "lines": subtitleLines,
-                    "text": subtitleText,
-                ]
-
-                json.append(subtitleData)
+                if self.json {
+                    let subtitleData: [String: Any] = [
+                        "image": subIndex,
+                        "lines": subtitleLines,
+                        "text": subtitleText,
+                    ]
+                    json.append(subtitleData)
+                }
 
                 srtSubtitles.append(Subtitle(index: subIndex,
                                              text: subtitleText,
@@ -218,7 +211,7 @@ struct macSubtitleOCR: ParsableCommand {
 
             request.recognitionLevel = getOCRMode()
             request.usesLanguageCorrection = languageCorrection
-            request.revision = getOCRRevision()
+            request.revision = VNRecognizeTextRequestRevision3
             request.recognitionLanguages = language.split(separator: ",").map { String($0) }
 
             try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])

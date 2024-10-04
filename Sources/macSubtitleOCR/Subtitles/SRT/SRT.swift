@@ -22,19 +22,19 @@ struct SRT {
     // MARK: - Functions
 
     // Writes the SRT object to the file at the given URL
-    func write(toFileAt url: URL) throws {
-        let srtContent = encode()
+    func write(toFileAt url: URL) {
+        let srtContent = encodeSRT()
         do {
             try srtContent.write(to: url, atomically: true, encoding: .utf8)
         } catch {
-            throw SRTError.fileWriteError
+            fatalError("Error: Failed to write SRT content to file: \(error)")
         }
     }
 
     // MARK: - Methods
 
     // Encodes the SRT object into SRT format and returns it as a string
-    private func encode() -> String {
+    private func encodeSRT() -> String {
         var srtContent = ""
 
         for subtitle in subtitles {

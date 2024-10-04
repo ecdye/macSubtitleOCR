@@ -30,8 +30,7 @@ func readVINT(from fileHandle: FileHandle, unmodified: Bool = false) -> UInt64 {
     var value = UInt64(firstByte & mask)
 
     if length > 1 {
-        let data = fileHandle.readData(ofLength: Int(length - 1))
-        for byte in data {
+        for byte in fileHandle.readData(ofLength: Int(length - 1)) {
             value = (value << 8) | UInt64(byte)
         }
     }

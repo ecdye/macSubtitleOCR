@@ -7,7 +7,6 @@
 //
 
 enum PGSError: Error {
-    case fileReadError
     case invalidODSDataLength
     case invalidPDSDataLength(length: Int)
 }
