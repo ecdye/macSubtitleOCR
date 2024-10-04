@@ -13,7 +13,7 @@
 --classthreshold 0
 --closingparen same-line
 --closurevoid remove
---commas always
+--commas inline
 --complexattrs preserve
 --computedvarattrs preserve
 --condassignment after-property

@@ -183,7 +183,7 @@ struct macSubtitleOCR: ParsableCommand {
                         "x": Int(rect.minX),
                         "width": Int(rect.size.width),
                         "y": Int(CGFloat(subtitle.imageHeight!) - rect.minY - rect.size.height),
-                        "height": Int(rect.size.height),
+                        "height": Int(rect.size.height)
                     ]
 
                     subtitleLines.append(line)
@@ -198,7 +198,7 @@ struct macSubtitleOCR: ParsableCommand {
                     let subtitleData: [String: Any] = [
                         "image": subIndex,
                         "lines": subtitleLines,
-                        "text": subtitleText,
+                        "text": subtitleText
                     ]
                     json.append(subtitleData)
                 }

@@ -91,7 +91,7 @@ class Subtitle {
                     imagePalette![paletteOffset],
                     imagePalette![paletteOffset + 1],
                     imagePalette![paletteOffset + 2],
-                    imagePalette![paletteOffset + 3],
+                    imagePalette![paletteOffset + 3]
                 ])
             }
         }

@@ -2,7 +2,7 @@
 // VobSubIDX.swift
 // macSubtitleOCR
 //
-// Created by Ethan Dye on 10/2/24.
+// Created by Ethan Dye on 10/4/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
