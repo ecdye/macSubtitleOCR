@@ -100,7 +100,7 @@ struct RLEData {
             let color = UInt8(nibble & 0x03)
             var run = Int(nibble >> 2)
 
-            if image.count % width == 0, color != 0, run <= 15 {
+            if image.count % width == 0, color != 0, run == 15 {
                 i -= 5
                 currentNibbles = [nibbles[i], nibbles[i + 1]]
                 i += 2
@@ -112,6 +112,9 @@ struct RLEData {
                 run += width - x
                 x = 0
                 y += 1
+                if i % 2 != 0 {
+                    _ = getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
+                }
             }
 
             image.append(contentsOf: repeatElement(color, count: run))

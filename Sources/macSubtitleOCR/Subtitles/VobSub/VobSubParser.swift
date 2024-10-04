@@ -43,7 +43,7 @@ struct VobSubParser {
             guard subFile.readData(ofLength: 4).value(ofType: UInt32.self, at: 0) == MPEG2PacketType.psPacket else {
                 fatalError("Error: Failed to find PS packet at offset \(subFile.offsetInFile)")
             }
-            logger.debug("Found PS packet at offset \(subFile.offsetInFile)")
+            logger.debug("Found PS packet at offset \(startOffset)")
 
             subFile.readData(ofLength: 6) // System clock reference
             subFile.readData(ofLength: 3) // Multiplexer rate
@@ -56,7 +56,7 @@ struct VobSubParser {
             guard subFile.readData(ofLength: 4).value(ofType: UInt32.self, at: 0) == MPEG2PacketType.pesPacket else {
                 fatalError("Error: Failed to find PES packet at offset \(subFile.offsetInFile)")
             }
-            logger.debug("Found PES packet at offset \(subFile.offsetInFile)")
+            logger.debug("Found PES packet at offset \(subFile.offsetInFile - 4)")
 
             let pesLength = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self, at: 0) ?? 0)
             if pesLength == 0 {
@@ -124,15 +124,14 @@ struct VobSubParser {
         var endOfControl = Int(controlHeader.value(ofType: UInt16.self, at: index)!) - relativeControlOffset - 4
         if endOfControl < 0 || endOfControl > controlSize! {
             logger.warning("Invalid control header size \(endOfControl). Setting to \(controlSize!)")
-            endOfControl = Int(controlSize!)
+            endOfControl = Int(controlSize! - 1)
         }
         index += 2
-
-        var alphaSum = 0
 
         // This is a hacky way to get the end timestamp, but it works somewhat accurately
         let relativeEndTimestamp = controlHeader.value(ofType: UInt16.self, at: endOfControl - 1)! << 10
         subtitle.endTimestamp = subtitle.startTimestamp! + TimeInterval(relativeEndTimestamp) / 90.0 - 9
+        logger.debug("relativeEndTimestamp: \(relativeEndTimestamp), endTimestamp: \(subtitle.endTimestamp!)")
 
         while index < endOfControl {
             let command = controlHeader[index]
@@ -163,6 +162,10 @@ struct VobSubParser {
                 index += 1
                 if subtitle.imageAlpha == nil {
                     subtitle.imageAlpha = [UInt8](repeating: 0, count: 4)
+                } else {
+                    // If the alpha is already set, don't overwrite it. This typically happens when fade in/out is used.
+                    index += 1
+                    break
                 }
                 subtitle.imageAlpha![3] = byte >> 4
                 subtitle.imageAlpha![2] = byte & 0x0F
@@ -170,9 +173,7 @@ struct VobSubParser {
                 index += 1
                 subtitle.imageAlpha![1] = byte >> 4
                 subtitle.imageAlpha![0] = byte & 0x0F
-                for i in 0 ..< 4 {
-                    alphaSum += Int(subtitle.imageAlpha![i])
-                }
+                logger.debug("Alpha: \(subtitle.imageAlpha!)")
             case 5:
                 subtitle.imageXOffset = Int(controlHeader[index]) << 4 | Int(controlHeader[index + 1] >> 4)
                 subtitle.imageWidth = (Int(controlHeader[index + 1] & 0x0F) << 8 | Int(controlHeader[index + 2])) - subtitle
@@ -182,6 +183,7 @@ struct VobSubParser {
                 subtitle.imageHeight = (Int(controlHeader[index + 1] & 0x0F) << 8 | Int(controlHeader[index + 2])) - subtitle
                     .imageYOffset! + 1
                 index += 3
+                logger.debug("Image size: \(subtitle.imageWidth!)x\(subtitle.imageHeight!)")
             default:
                 break
             }

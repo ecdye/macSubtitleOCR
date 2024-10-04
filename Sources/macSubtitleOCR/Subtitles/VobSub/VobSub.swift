@@ -44,7 +44,6 @@ struct VobSub {
                 nextOffset: nextOffset,
                 idxPalette: idx.palette).subtitle
             logger.debug("Found image at offset \(offset) with timestamp \(timestamp)")
-            logger.debug("Image size: \(subtitle.imageWidth!) x \(subtitle.imageHeight!)")
             subtitles.append(subtitle)
         }
     }
