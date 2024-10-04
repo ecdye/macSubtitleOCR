@@ -1,10 +1,10 @@
 name: CodeQL
 
 on:
-  push: 
+  push:
     branches: main
     paths: '**/*.swift'
-  pull_request: 
+  pull_request:
     branches: main
     paths: '**/*.swift'
   schedule:

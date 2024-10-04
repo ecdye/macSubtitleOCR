@@ -55,6 +55,7 @@ struct PGS {
         var multipleODS = false
         var ods: ODS?
         var pds: PDS?
+
         while true {
             guard headerData.count == 13 else {
                 fatalError("Failed to read PGS header correctly, got header length: \(headerData.count) expected: 13")

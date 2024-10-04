@@ -14,7 +14,7 @@ import Testing
 
 @Test func pgsMKV() throws {
     // Setup files
-    let outputPath = (FileManager.default.temporaryDirectory.path + "/output")
+    let outputPath = URL.temporaryDirectory.absoluteString.replacing("file://", with: "")
     let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.absoluteString
         .replacing("file://", with: "")
     let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString
@@ -48,7 +48,7 @@ import Testing
 
 @Test func pgsSUP() throws {
     // Setup files
-    let outputPath = (FileManager.default.temporaryDirectory.path + "/output")
+    let outputPath = URL.temporaryDirectory.absoluteString.replacing("file://", with: "")
     let supPath = Bundle.module.url(forResource: "test.sup", withExtension: nil)!.absoluteString
         .replacing("file://", with: "")
     let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.absoluteString

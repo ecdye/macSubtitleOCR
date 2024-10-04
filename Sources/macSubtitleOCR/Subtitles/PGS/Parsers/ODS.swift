@@ -54,17 +54,17 @@ struct ODS {
         switch sequenceFlag {
         case 0x40:
             rawImageData.append(data.subdata(in: 4 ..< data.count))
-            imageData = try decodeRLEData()
+            imageData = decodeRLEData()
         case 0x80:
             rawImageData.append(data.subdata(in: 11 ..< data.count))
         default:
             rawImageData.append(data.subdata(in: 11 ..< data.count))
-            imageData = try decodeRLEData()
+            imageData = decodeRLEData()
         }
     }
 
-    private func decodeRLEData() throws -> Data {
+    private func decodeRLEData() -> Data {
         let rleImageData = RLEData(data: rawImageData, width: objectWidth, height: objectHeight)
-        return try rleImageData.decode()
+        return rleImageData.decode()
     }
 }

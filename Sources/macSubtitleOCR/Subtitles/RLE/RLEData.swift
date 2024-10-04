@@ -25,7 +25,7 @@ struct RLEData {
 
     // MARK: - Functions
 
-    func decode() throws -> Data {
+    func decode() -> Data {
         var pixelCount = 0
         var lineCount = 0
         var iterator = data.makeIterator()
