@@ -7,17 +7,22 @@
 
 ## Overview
 
-**macSubtitleOCR** is a tool written entirely in Swift to convert bitmap subtitles into SubRip subtitle format (SRT) using Optical Character Recognition (OCR).
-Currently, it supports PGS bitmap subtitles, which can be extracted from `.mkv` or `.sup` files.
-The tool leverages the built-in macOS OCR engine, which provides highly accurate text recognition.
+**macSubtitleOCR** is a tool written entirely in Swift that converts bitmap subtitles into the SubRip subtitle format (SRT) using Optical Character Recognition (OCR).
+It currently supports both PGS and VobSub bitmap subtitles.
+The tool utilizes the built-in macOS OCR engine, offering highly accurate text recognition.
 
-For more details on performance, see the [Accuracy](#accuracy) section below.
+For more details on performance, refer to the [Accuracy](#accuracy) section below.
 
 ### Features
 
 - Export `.png` images of subtitles for manual correction of OCR output.
-- Use macOS OCR engine's language recognition feature to improve accuracy by validating character sequences as valid words.
+- Use the macOS OCR engine's language recognition feature to enhance accuracy by validating character sequences as real words.
 - Export raw JSON output from the OCR engine for further analysis.
+
+#### Supported Formats
+
+- PGS (`.mkv`, `.sup`)
+- VobSub (`.sub`, `.idx`)
 
 ### Building the Project
 
@@ -58,3 +63,4 @@ If you're interested in working on specific features or improvements, check out 
 
 - [Presentation Graphic Stream (PGS) Files](https://blog.thescorpius.com/index.php/2017/07/15/presentation-graphic-stream-sup-files-bluray-subtitle-format/)
 - [Matroska Technical Specifications](https://www.matroska.org/technical/elements.html)
+- [DVD Subtitle Stream (VobSub) Files](http://www.mpucoder.com/DVD/index.html)

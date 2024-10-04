@@ -18,7 +18,7 @@ private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", cat
 struct macSubtitleOCR: ParsableCommand {
     // MARK: - Properties
 
-    @Argument(help: "Input file containing the subtitle stream (.sup or .mkv)")
+    @Argument(help: "Input file containing the subtitle stream (.sup, .sub, .idx, or .mkv)")
     var input: String
 
     @Argument(help: "Directory to output files to")
@@ -39,8 +39,8 @@ struct macSubtitleOCR: ParsableCommand {
     @Flag(help: "Enable language correction")
     var languageCorrection = false
 
-    @Flag(help: "Save extracted `.sup` file to disk (MKV input only)")
-    var saveSup = false
+    @Flag(help: "Save extracted subtitle file to disk (MKV input only)")
+    var saveSubtitleFile = false
 
     // MARK: - Entrypoint
 
@@ -49,7 +49,13 @@ struct macSubtitleOCR: ParsableCommand {
         var intermediateFiles: [Int: String] = [:]
         var results: [macSubtitleOCRResult] = []
 
-        if input.hasSuffix(".mkv") {
+        if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
+            let sub = try VobSub(
+                input.replacingOccurrences(of: ".idx", with: ".sub"),
+                input.replacingOccurrences(of: ".sub", with: ".idx"))
+            let result = try processSubtitles(subtitles: sub.subtitles, trackNumber: 0)
+            results.append(result)
+        } else if input.hasSuffix(".mkv") {
             let mkvStream = try MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(codec: "S_HDMV/PGS")
             for track in mkvStream.tracks {
@@ -62,7 +68,7 @@ struct macSubtitleOCR: ParsableCommand {
                 let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: track.trackNumber)
                 results.append(result)
             }
-        } else {
+        } else if input.hasSuffix(".sup") {
             // Open the PGS data stream
             let PGS = try PGS(URL(fileURLWithPath: input))
             let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: 0)
@@ -89,7 +95,7 @@ struct macSubtitleOCR: ParsableCommand {
             }
 
             // Save or remove intermediate files
-            if saveSup, input.hasSuffix(".mkv") {
+            if saveSubtitleFile, input.hasSuffix(".mkv") {
                 let subtitleFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).sup")
                 try fileManager.moveItem(
                     at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!),

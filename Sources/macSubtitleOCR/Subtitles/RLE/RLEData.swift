@@ -25,7 +25,7 @@ struct RLEData {
 
     // MARK: - Functions
 
-    func decode() -> Data {
+    func decodePGS() -> Data {
         var pixelCount = 0
         var lineCount = 0
         var iterator = data.makeIterator()
@@ -64,5 +64,91 @@ struct RLEData {
         }
 
         return image
+    }
+
+    func decodeVobSub() -> Data {
+        var nibbles = Data()
+        var decodedLines = Data()
+        decodedLines.reserveCapacity(Int(width * height))
+        nibbles.reserveCapacity(data.count * 2)
+
+        // Convert RLE data to nibbles
+        for byte in data {
+            nibbles.append(byte >> 4)
+            nibbles.append(byte & 0x0F)
+        }
+        guard nibbles.count == 2 * data.count
+        else {
+            fatalError("Error: Failed to create nibbles from RLE data.")
+        }
+
+        var i = 0
+        var y = 0
+        var x = 0
+        var currentNibbles: [UInt8?] = [nibbles[i], nibbles[i + 1]]
+        i += 2
+        while currentNibbles[1] != nil, y < height {
+            var nibble = getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
+
+            if nibble < 0x04 {
+                if nibble == 0x00 {
+                    nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
+                    if nibble < 0x04 {
+                        nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
+                    }
+                }
+                nibble = nibble << 4 | getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
+            }
+            let color = UInt8(nibble & 0x03)
+            var run = Int(nibble >> 2)
+
+            if decodedLines.count % width == 0, color != 0, run == 15 {
+                i -= 5
+                currentNibbles = [nibbles[i], nibbles[i + 1]]
+                i += 2
+                continue
+            }
+            x += Int(run)
+
+            if run == 0 || x >= width {
+                run += width - x
+                x = 0
+                y += 1
+                if i % 2 != 0 {
+                    _ = getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
+                }
+            }
+
+            decodedLines.append(contentsOf: repeatElement(color, count: run))
+        }
+
+        return interleaveLines(decodedLines)
+    }
+
+    private func interleaveLines(_ decodedLines: Data) -> Data {
+        var finalImage = Data()
+        finalImage.reserveCapacity(Int(width * height))
+
+        let halfHeight = height / 2
+        let heightOdd = height % 2 != 0
+        for step in stride(from: 0, to: halfHeight, by: 1) {
+            finalImage.append(decodedLines.subdata(in: step * width ..< step * width + width))
+            let oddStepStart = (halfHeight + step + 1) * width
+            let evenStepStart = (halfHeight + step) * width
+            let start = heightOdd ? oddStepStart : evenStepStart
+            let end = heightOdd ? oddStepStart + width : evenStepStart + width
+            finalImage.append(decodedLines.subdata(in: start ..< end))
+        }
+        if height % 2 != 0 {
+            finalImage.append(decodedLines.subdata(in: halfHeight * width ..< halfHeight * width + width))
+        }
+        return finalImage
+    }
+
+    private func getNibble(currentNibbles: inout [UInt8?], nibbles: Data, i: inout Int) -> UInt16 {
+        let nibble = UInt16(currentNibbles.removeFirst()!)
+        currentNibbles.append(nibbles[i])
+        i += 1
+        return nibble
     }
 }
