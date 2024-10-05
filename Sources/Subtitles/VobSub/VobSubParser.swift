@@ -65,11 +65,11 @@ struct VobSubParser {
             let nextPSOffset = subFile.offsetInFile + UInt64(pesLength)
             logger.debug("pesLength: \(pesLength), nextPSOffset: \(nextPSOffset)")
 
+            subFile.readData(ofLength: 1) // Skip PES miscellaneous data
             let extByteOne = subFile.readData(ofLength: 1)[0]
-            let firstPacket = (extByteOne >> 2 & 0x01) == 0
+            let firstPacket = (extByteOne & 0x80) == 0x80 || (extByteOne & 0xC0) == 0xC0
             logger.debug("firstPacket: \(firstPacket)")
 
-            subFile.readData(ofLength: 1) // PTS DTS flags
             let ptsDataLength = Int(subFile.readData(ofLength: 1)[0])
             subFile.readData(ofLength: ptsDataLength) // Skip PES Header data bytes
             logger.debug("Skipped \(ptsDataLength) PTS bytes")
@@ -94,21 +94,15 @@ struct VobSubParser {
 
             let savedOffset = subFile.offsetInFile
             let difference = max(0, Int(nextPSOffset) - controlOffset! - controlHeaderCopied)
-            let copied = controlHeaderCopied
-            var i = 0
-            subFile.seek(toFileOffset: UInt64(controlOffset! + i + copied))
-            while i < difference, controlHeaderCopied < controlSize! {
-                controlHeader.append(subFile.readData(ofLength: 1)[0])
-                controlHeaderCopied += 1
-                i += 1
-            }
-            logger.debug("Obtained \(controlHeaderCopied) of \(controlSize!) bytes of control header")
-
             let rleFragmentSize = Int(nextPSOffset - savedOffset) - difference
-            subFile.seek(toFileOffset: savedOffset)
             subtitle.imageData!.append(subFile.readData(ofLength: rleFragmentSize))
             rleLengthFound += rleFragmentSize
             logger.debug("RLE fragment size: \(rleFragmentSize), Total RLE length: \(rleLengthFound)")
+
+            let bytesToCopy = max(0, min(difference, controlSize! - controlHeaderCopied))
+            controlHeader.append(subFile.readData(ofLength: bytesToCopy))
+            controlHeaderCopied += bytesToCopy
+            logger.debug("Obtained \(controlHeaderCopied) of \(controlSize!) bytes of control header")
 
             subFile.seek(toFileOffset: nextPSOffset)
         } while subFile.offsetInFile < nextOffset && controlHeaderCopied < controlSize!
@@ -205,7 +199,10 @@ struct VobSubParser {
     }
 
     private func decodeImage() {
-        let rleData = RLEData(data: subtitle.imageData!, width: subtitle.imageWidth!, height: subtitle.imageHeight!)
+        let rleData = RLEData(
+            data: subtitle.imageData ?? Data(),
+            width: subtitle.imageWidth ?? 0,
+            height: subtitle.imageHeight ?? 0)
         subtitle.imageData = rleData.decodeVobSub()
     }
 }

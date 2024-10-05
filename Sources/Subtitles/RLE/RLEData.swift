@@ -26,6 +26,9 @@ struct RLEData {
     // MARK: - Functions
 
     func decodePGS() -> Data {
+        if data.isEmpty, width == 0, height == 0 {
+            return Data()
+        }
         var pixelCount = 0
         var lineCount = 0
         var iterator = data.makeIterator()
@@ -67,6 +70,9 @@ struct RLEData {
     }
 
     func decodeVobSub() -> Data {
+        if data.isEmpty, width == 0, height == 0 {
+            return Data()
+        }
         var nibbles = Data()
         var decodedLines = Data()
         decodedLines.reserveCapacity(Int(width * height))
