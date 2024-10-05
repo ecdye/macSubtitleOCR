@@ -27,6 +27,24 @@ extension Data {
         }
     }
 
+    // Extracts and removes a certain number of bytes from the beginning of the Data object.
+    //
+    // - Parameter count: The number of bytes to extract and remove.
+    // - Returns: A Data object containing the extracted bytes, or nil if there aren't enough bytes.
+    mutating func extractBytes(count: Int) throws -> Data {
+        guard count > 0, count <= self.count else {
+            throw NSError(domain: "Data", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid count"])
+        }
+
+        // Extract the range from the beginning
+        let extractedData = subdata(in: 0 ..< count)
+
+        // Remove the extracted bytes from the original data
+        removeSubrange(0 ..< count)
+
+        return extractedData
+    }
+
     /* Useful for debugging purposes
      func hexEncodedString() -> String {
          map { String(format: "%02hhx", $0) }.joined()

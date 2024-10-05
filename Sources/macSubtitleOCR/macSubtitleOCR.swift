@@ -48,6 +48,7 @@ struct macSubtitleOCR: ParsableCommand {
         let fileManager = FileManager.default
         var intermediateFiles: [Int: String] = [:]
         var results: [macSubtitleOCRResult] = []
+        let outputDirectory = URL(fileURLWithPath: outputDirectory)
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
             let sub = try VobSub(
@@ -60,10 +61,14 @@ struct macSubtitleOCR: ParsableCommand {
             try mkvStream.parseTracks(codec: "S_HDMV/PGS")
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
-                intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(trackNumber: track.trackNumber)!
+                if saveSubtitleFile {
+                    intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(
+                        trackNumber: track.trackNumber,
+                        outputDirectory: outputDirectory)!
+                }
 
                 // Open the PGS data stream
-                let PGS = try PGS(URL(fileURLWithPath: intermediateFiles[track.trackNumber]!))
+                let PGS = try PGS(mkvStream.tracks[track.trackNumber].trackData)
 
                 let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: track.trackNumber)
                 results.append(result)
@@ -75,7 +80,6 @@ struct macSubtitleOCR: ParsableCommand {
             results.append(result)
         }
 
-        let outputDirectory = URL(fileURLWithPath: outputDirectory)
         try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true, attributes: nil)
         for result in results {
             autoreleasepool {
@@ -93,16 +97,6 @@ struct macSubtitleOCR: ParsableCommand {
                     let jsonString = (String(data: jsonData ?? Data(), encoding: .utf8) ?? "[]")
                     let jsonFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).json")
                     try? jsonString.write(to: jsonFilePath, atomically: true, encoding: .utf8)
-                }
-
-                // Save or remove intermediate files
-                if saveSubtitleFile, input.hasSuffix(".mkv") {
-                    let subtitleFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).sup")
-                    try? fileManager.moveItem(
-                        at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!),
-                        to: subtitleFilePath)
-                } else if input.hasSuffix(".mkv") {
-                    try? fileManager.removeItem(at: URL(fileURLWithPath: intermediateFiles[result.trackNumber]!))
                 }
             }
         }

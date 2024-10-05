@@ -23,20 +23,46 @@ struct PGS {
         let fileHandle = try FileHandle(forReadingFrom: url)
         defer { fileHandle.closeFile() }
 
-        let fileLength = try fileHandle.seekToEnd()
-        fileHandle.seek(toFileOffset: 0) // Ensure the file handle is at the start
-        var headerData = fileHandle.readData(ofLength: 13)
+        let fileData = try fileHandle.readToEnd()
+        guard var fileData, fileData.count > 3 else {
+            fatalError("Error: Failed to read file data from: \(url.path)")
+        }
+        fileHandle.closeFile()
 
-        while fileHandle.offsetInFile < fileLength {
-            guard let subtitle = try parseNextSubtitle(fileHandle: fileHandle, headerData: &headerData)
+        var headerData = try fileData.extractBytes(count: 13)
+
+        while fileData.count > 13 {
+            guard let subtitle = try parseNextSubtitle(pgsData: &fileData, headerData: &headerData)
             else {
-                headerData = fileHandle.readData(ofLength: 13)
+                headerData = try fileData.extractBytes(count: 13)
                 continue
             }
 
             // Find the next timestamp to use as our end timestamp
             while subtitle.endTimestamp == nil {
-                headerData = fileHandle.readData(ofLength: 13)
+                headerData = try fileData.extractBytes(count: 13)
+                subtitle.endTimestamp = parseTimestamp(headerData)
+            }
+
+            subtitles.append(subtitle)
+        }
+    }
+
+    init(_ data: Data) throws {
+        var data = data
+        var headerData = try data.extractBytes(count: 13)
+
+        while data.count > 0 {
+            guard let subtitle = try parseNextSubtitle(pgsData: &data, headerData: &headerData)
+            else {
+                if data.count < 13 { break }
+                headerData = try data.extractBytes(count: 13)
+                continue
+            }
+
+            // Find the next timestamp to use as our end timestamp
+            while subtitle.endTimestamp == nil {
+                headerData = try data.extractBytes(count: 13)
                 subtitle.endTimestamp = parseTimestamp(headerData)
             }
 
@@ -51,7 +77,7 @@ struct PGS {
         return TimeInterval(pts) / 90000.0 // 90 kHz clock
     }
 
-    private func parseNextSubtitle(fileHandle: FileHandle, headerData: inout Data) throws -> Subtitle? {
+    private func parseNextSubtitle(pgsData: inout Data, headerData: inout Data) throws -> Subtitle? {
         var multipleODS = false
         var ods: ODS?
         var pds: PDS?
@@ -68,7 +94,7 @@ struct PGS {
             guard segmentType != 0x80, segmentLength != 0 else { return nil }
 
             // Read the rest of the segment
-            let segmentData = fileHandle.readData(ofLength: segmentLength)
+            let segmentData = try pgsData.extractBytes(count: segmentLength)
             guard segmentData.count == segmentLength else {
                 fatalError(
                     "Error: Failed to read the full segment data, got: \(segmentData.count) expected: \(segmentLength)")
@@ -99,7 +125,7 @@ struct PGS {
                 logger.warning("Unknown segment type: \(segmentType, format: .hex), skipping...")
                 return nil
             }
-            headerData = fileHandle.readData(ofLength: 13)
+            headerData = try pgsData.extractBytes(count: 13)
             guard let pds, let ods else { continue }
             let startTimestamp = parseTimestamp(headerData)
             return Subtitle(
