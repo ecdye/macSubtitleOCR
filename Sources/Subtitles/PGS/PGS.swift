@@ -17,6 +17,7 @@ struct PGS {
     private(set) var subtitles = [Subtitle]()
     private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
     private var data: Data
+    private let pgsHeaderLength = 13
 
     // MARK: - Lifecycle
 
@@ -24,7 +25,7 @@ struct PGS {
         let fileHandle = try FileHandle(forReadingFrom: url)
         defer { fileHandle.closeFile() }
         data = try fileHandle.readToEnd() ?? Data()
-        guard data.count > 13 else {
+        guard data.count > pgsHeaderLength else {
             fatalError("Error: Failed to read file data from: \(url.path)")
         }
         fileHandle.closeFile()
@@ -40,18 +41,18 @@ struct PGS {
     // MARK: - Methods
 
     private mutating func parseData() throws {
-        var headerData = data.extractBytes(13)
+        var headerData = data.extractBytes(pgsHeaderLength)
         while data.count > 0 {
             guard let subtitle = try parseNextSubtitle(headerData: &headerData)
             else {
-                if data.count < 13 { break }
-                headerData = data.extractBytes(13)
+                if data.count < pgsHeaderLength { break }
+                headerData = data.extractBytes(pgsHeaderLength)
                 continue
             }
 
             // Find the next timestamp to use as our end timestamp
             while subtitle.endTimestamp == nil {
-                headerData = data.extractBytes(13)
+                headerData = data.extractBytes(pgsHeaderLength)
                 subtitle.endTimestamp = parseTimestamp(headerData)
             }
 
@@ -70,8 +71,8 @@ struct PGS {
         var pds: PDS?
 
         while true {
-            guard headerData.count == 13 else {
-                fatalError("Failed to read PGS header correctly, got header length: \(headerData.count)/13")
+            guard headerData.count == pgsHeaderLength else {
+                fatalError("Failed to read PGS header correctly, got header length: \(headerData.count)/\(pgsHeaderLength)")
             }
 
             let segmentType = headerData[10]
@@ -115,7 +116,7 @@ struct PGS {
                 logger.warning("Unknown segment type: \(segmentType, format: .hex), skipping...")
                 return nil
             }
-            headerData = data.extractBytes(13)
+            headerData = data.extractBytes(pgsHeaderLength)
             guard let pds, let ods else { continue }
             let startTimestamp = parseTimestamp(headerData)
             return Subtitle(
