@@ -27,7 +27,7 @@ struct RLEData {
 
     func decodePGS() -> Data {
         if data.isEmpty, width == 0, height == 0 {
-            return Data()
+            return data
         }
         var pixelCount = 0
         var lineCount = 0
@@ -71,7 +71,7 @@ struct RLEData {
 
     func decodeVobSub() -> Data {
         if data.isEmpty, width == 0, height == 0 {
-            return Data()
+            return data
         }
         var nibbles = Data()
         var decodedLines = Data()
