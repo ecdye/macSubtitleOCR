@@ -122,9 +122,9 @@ struct VobSubParser {
         }
         index += 2
 
-        // This is a hacky way to get the end timestamp, but it works somewhat accurately
-        let relativeEndTimestamp = controlHeader.value(ofType: UInt16.self, at: endOfControl - 1)! << 10
-        subtitle.endTimestamp = subtitle.startTimestamp! + TimeInterval(relativeEndTimestamp) / 90.0 - 9
+        // This is maybe correct for getting end timestamp? It works somewhat accurately
+        let relativeEndTimestamp = TimeInterval(controlHeader.value(ofType: UInt16.self, at: 0)!) * (1024.0 / 900000.0)
+        subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
         logger.debug("relativeEndTimestamp: \(relativeEndTimestamp), endTimestamp: \(subtitle.endTimestamp!)")
 
         while index < endOfControl {
