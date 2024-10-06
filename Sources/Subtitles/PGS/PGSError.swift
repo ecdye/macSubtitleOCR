@@ -7,6 +7,6 @@
 //
 
 enum PGSError: Error {
-    case invalidODSDataLength
+    case invalidODSDataLength(length: Int)
     case invalidPDSDataLength(length: Int)
 }

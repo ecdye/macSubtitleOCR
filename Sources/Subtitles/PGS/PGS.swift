@@ -95,15 +95,19 @@ struct PGS {
                     fatalError("Error: Invalid Palette Data Segment length: \(length)")
                 }
             case 0x15: // ODS (Object Definition Segment)
-                if segmentData[3] == 0x80 {
-                    ods = try ODS(segmentData)
-                    multipleODS = true
-                    break
-                } else if multipleODS {
-                    try ods?.appendSegment(segmentData)
-                    if segmentData[3] != 0x40 { break }
-                } else {
-                    ods = try ODS(segmentData)
+                do {
+                    if segmentData[3] == 0x80 {
+                        ods = try ODS(segmentData)
+                        multipleODS = true
+                        break
+                    } else if multipleODS {
+                        try ods?.appendSegment(segmentData)
+                        if segmentData[3] != 0x40 { break }
+                    } else {
+                        ods = try ODS(segmentData)
+                    }
+                } catch let PGSError.invalidODSDataLength(length) {
+                    fatalError("Error: Invalid Object Data Segment length: \(length)")
                 }
             case 0x16, 0x17: // PCS (Presentation Composition Segment), WDS (Window Definition Segment)
                 break // PCS and WDS parsing not required for basic rendering

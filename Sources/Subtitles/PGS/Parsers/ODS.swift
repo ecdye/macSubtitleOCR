@@ -48,17 +48,17 @@ struct ODS {
 
         // PGS includes the width and height as part of the image data length calculations
         guard data.count > 7 else {
-            throw PGSError.invalidODSDataLength
+            throw PGSError.invalidODSDataLength(length: data.count)
         }
 
         switch sequenceFlag {
         case 0x40:
-            rawImageData.append(data.advanced(by: 4))
+            rawImageData.append(data[4...])
             imageData = decodeRLEData()
         case 0x80:
-            rawImageData.append(data.advanced(by: 11))
+            rawImageData.append(data[11...])
         default:
-            rawImageData.append(data.advanced(by: 11))
+            rawImageData.append(data[11...])
             imageData = decodeRLEData()
         }
     }
