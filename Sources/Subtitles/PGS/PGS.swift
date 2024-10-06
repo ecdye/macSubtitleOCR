@@ -92,7 +92,7 @@ struct PGS {
             case 0x14: // PDS (Palette Definition Segment)
                 do {
                     pds = try PDS(segmentData)
-                } catch let PGSError.invalidPDSDataLength(length) {
+                } catch let macSubtitleOCRError.invalidPDSDataLength(length) {
                     fatalError("Error: Invalid Palette Data Segment length: \(length)")
                 }
             case 0x15: // ODS (Object Definition Segment)
@@ -107,7 +107,7 @@ struct PGS {
                     } else {
                         ods = try ODS(segmentData)
                     }
-                } catch let PGSError.invalidODSDataLength(length) {
+                } catch let macSubtitleOCRError.invalidODSDataLength(length) {
                     fatalError("Error: Invalid Object Data Segment length: \(length)")
                 }
             case 0x16, 0x17: // PCS (Presentation Composition Segment), WDS (Window Definition Segment)

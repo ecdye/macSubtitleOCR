@@ -48,7 +48,7 @@ struct ODS {
 
         // PGS includes the width and height as part of the image data length calculations
         guard data.count > 7 else {
-            throw PGSError.invalidODSDataLength(length: data.count)
+            throw macSubtitleOCRError.invalidODSDataLength(length: data.count)
         }
 
         switch sequenceFlag {

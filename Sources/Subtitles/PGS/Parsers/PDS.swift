@@ -18,9 +18,9 @@ struct PDS {
 
     init(_ data: Data) throws {
         guard data.count >= 7, (data.count - 2) % 5 == 0 else {
-            throw PGSError.invalidPDSDataLength(length: data.count)
+            throw macSubtitleOCRError.invalidPDSDataLength(length: data.count)
         }
-        parsePDS(data.advanced(by: 2))
+        parsePDS(data[2...])
     }
 
     // MARK: - Methods

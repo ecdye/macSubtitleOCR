@@ -10,4 +10,6 @@ enum macSubtitleOCRError: Error {
     case fileReadError
     case fileCreationError
     case fileWriteError
+    case invalidODSDataLength(length: Int)
+    case invalidPDSDataLength(length: Int)
 }
