@@ -40,7 +40,7 @@ struct VobSubParser {
         subFile.seek(toFileOffset: offset)
         repeat {
             let startOffset = subFile.offsetInFile
-            guard subFile.readData(ofLength: 4).value(ofType: UInt32.self, at: 0) == MPEG2PacketType.psPacket else {
+            guard subFile.readData(ofLength: 4).value(ofType: UInt32.self) == MPEG2PacketType.psPacket else {
                 fatalError("Error: Failed to find PS packet at offset \(subFile.offsetInFile)")
             }
             logger.debug("Found PS packet at offset \(startOffset)")
@@ -53,12 +53,12 @@ struct VobSubParser {
             let psHeaderLength = subFile.offsetInFile - startOffset
             logger.debug("PS header length: \(psHeaderLength)")
 
-            guard subFile.readData(ofLength: 4).value(ofType: UInt32.self, at: 0) == MPEG2PacketType.pesPacket else {
+            guard subFile.readData(ofLength: 4).value(ofType: UInt32.self) == MPEG2PacketType.pesPacket else {
                 fatalError("Error: Failed to find PES packet at offset \(subFile.offsetInFile)")
             }
             logger.debug("Found PES packet at offset \(subFile.offsetInFile - 4)")
 
-            let pesLength = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self, at: 0) ?? 0)
+            let pesLength = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
             if pesLength == 0 {
                 fatalError("Error: PES packet length is 0 at offset \(subFile.offsetInFile)")
             }
@@ -79,8 +79,8 @@ struct VobSubParser {
 
             var trueHeaderSize = Int(subFile.offsetInFile - startOffset)
             if firstPacket, ptsDataLength >= 5 {
-                let size = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self, at: 0) ?? 0)
-                relativeControlOffset = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self, at: 0) ?? 0)
+                let size = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
+                relativeControlOffset = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
                 let rleSize = relativeControlOffset - 2
                 controlSize = size - rleSize - 4 // 4 bytes for the size and control offset
                 logger.debug("Size: \(size), RLE Size: \(rleSize), Control Size: \(controlSize!)")
@@ -123,7 +123,7 @@ struct VobSubParser {
         index += 2
 
         // This is maybe correct for getting end timestamp? It works somewhat accurately
-        let relativeEndTimestamp = TimeInterval(controlHeader.value(ofType: UInt16.self, at: 0)!) * (1024.0 / 900000.0)
+        let relativeEndTimestamp = TimeInterval(controlHeader.value(ofType: UInt16.self)!) * (1024.0 / 900000.0)
         subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
         logger.debug("relativeEndTimestamp: \(relativeEndTimestamp), endTimestamp: \(subtitle.endTimestamp!)")
 
@@ -137,7 +137,7 @@ struct VobSubParser {
             case 1:
                 break // Start display
             case 2:
-                let displayDelay = controlHeader.value(ofType: UInt16.self, at: 0)
+                let displayDelay = controlHeader.value(ofType: UInt16.self)
                 logger.debug("Display delay is \(displayDelay!)")
             case 3:
                 var byte = controlHeader[index]

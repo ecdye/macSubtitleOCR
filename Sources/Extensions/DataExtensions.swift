@@ -14,7 +14,7 @@ extension Data {
         self = filter { $0 != 0x00 }
     }
 
-    func value<T: BinaryInteger>(ofType _: T.Type, at offset: Int, convertEndian: Bool = false) -> T? {
+    func value<T: BinaryInteger>(ofType _: T.Type, at offset: Int = 0, convertEndian: Bool = false) -> T? {
         let right = offset &+ MemoryLayout<T>.size
         guard offset >= 0, right > offset, right <= count else {
             return nil
@@ -30,10 +30,10 @@ extension Data {
     // Extracts and removes a certain number of bytes from the beginning of the Data object.
     //
     // - Parameter count: The number of bytes to extract and remove.
-    // - Returns: A Data object containing the extracted bytes, or nil if there aren't enough bytes.
-    mutating func extractBytes(count: Int) throws -> Data {
+    // - Returns: A Data object containing the extracted bytes, or empty if there aren't enough bytes.
+    mutating func extractBytes(_ count: Int) -> Data {
         guard count > 0, count <= self.count else {
-            throw NSError(domain: "Data", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid count"])
+            return Data()
         }
 
         // Extract the range from the beginning

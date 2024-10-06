@@ -40,18 +40,18 @@ struct PGS {
     // MARK: - Methods
 
     private mutating func parseData() throws {
-        var headerData = try data.extractBytes(count: 13)
+        var headerData = data.extractBytes(13)
         while data.count > 0 {
             guard let subtitle = try parseNextSubtitle(headerData: &headerData)
             else {
                 if data.count < 13 { break }
-                headerData = try data.extractBytes(count: 13)
+                headerData = data.extractBytes(13)
                 continue
             }
 
             // Find the next timestamp to use as our end timestamp
             while subtitle.endTimestamp == nil {
-                headerData = try data.extractBytes(count: 13)
+                headerData = data.extractBytes(13)
                 subtitle.endTimestamp = parseTimestamp(headerData)
             }
 
@@ -71,7 +71,7 @@ struct PGS {
 
         while true {
             guard headerData.count == 13 else {
-                fatalError("Failed to read PGS header correctly, got header length: \(headerData.count) expected: 13")
+                fatalError("Failed to read PGS header correctly, got header length: \(headerData.count)/13")
             }
 
             let segmentType = headerData[10]
@@ -81,10 +81,9 @@ struct PGS {
             guard segmentType != 0x80, segmentLength != 0 else { return nil }
 
             // Read the rest of the segment
-            let segmentData = try data.extractBytes(count: segmentLength)
+            let segmentData = data.extractBytes(segmentLength)
             guard segmentData.count == segmentLength else {
-                fatalError(
-                    "Error: Failed to read the full segment data, got: \(segmentData.count) expected: \(segmentLength)")
+                fatalError("Error: Failed to read the full segment data, got: \(segmentData.count)/\(segmentLength)")
             }
 
             // Parse the segment based on the type (0x14 for PCS, 0x15 for WDS, 0x16 for PDS, 0x17 for ODS)
@@ -112,7 +111,7 @@ struct PGS {
                 logger.warning("Unknown segment type: \(segmentType, format: .hex), skipping...")
                 return nil
             }
-            headerData = try data.extractBytes(count: 13)
+            headerData = data.extractBytes(13)
             guard let pds, let ods else { continue }
             let startTimestamp = parseTimestamp(headerData)
             return Subtitle(
