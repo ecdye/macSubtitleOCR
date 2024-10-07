@@ -169,6 +169,9 @@ struct VobSubParser {
                 subtitle.imageAlpha![0] = byte & 0x0F
                 logger.debug("Alpha: \(subtitle.imageAlpha!)")
             case 5:
+                if subtitle.imageXOffset != nil || subtitle.imageYOffset != nil {
+                    break // Don't overwrite the offsets if they're already set, only happens in bad files
+                }
                 subtitle.imageXOffset = Int(controlHeader[index]) << 4 | Int(controlHeader[index + 1] >> 4)
                 subtitle.imageWidth = (Int(controlHeader[index + 1] & 0x0F) << 8 | Int(controlHeader[index + 2])) - subtitle
                     .imageXOffset! + 1

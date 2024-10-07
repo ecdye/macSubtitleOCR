@@ -26,7 +26,7 @@ struct RLEData {
     // MARK: - Functions
 
     func decodePGS() -> Data {
-        if data.isEmpty, width == 0, height == 0 {
+        if data.isEmpty || width <= 0 || height <= 0 {
             return data
         }
         var pixelCount = 0
@@ -70,7 +70,7 @@ struct RLEData {
     }
 
     func decodeVobSub() -> Data {
-        if data.isEmpty, width == 0, height == 0 {
+        if data.isEmpty || width <= 0 || height <= 0 {
             return data
         }
         var nibbles = Data()
