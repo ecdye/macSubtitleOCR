@@ -145,7 +145,7 @@ struct RLEData {
             let end = heightOdd ? oddStepStart + width : evenStepStart + width
             finalImage.append(decodedLines.subdata(in: start ..< end))
         }
-        if height % 2 != 0 {
+        if heightOdd {
             finalImage.append(decodedLines.subdata(in: halfHeight * width ..< halfHeight * width + width))
         }
         return finalImage
