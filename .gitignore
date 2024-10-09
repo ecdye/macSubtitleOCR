@@ -3,4 +3,4 @@
 /.swiftpm/
 /.vscode/
 Tests/Resources/testFiles/*
-Tests/Resources/testFiles/test.*
+!Tests/Resources/testFiles/test.*
