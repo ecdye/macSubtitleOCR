@@ -181,6 +181,12 @@ struct VobSubParser {
                     .imageYOffset! + 1
                 index += 3
                 logger.debug("Image size: \(subtitle.imageWidth!)x\(subtitle.imageHeight!)")
+                logger.debug("X Offset: \(subtitle.imageXOffset!), Y Offset: \(subtitle.imageYOffset!)")
+            case 6:
+                subtitle.evenOffset = Int(controlHeader.value(ofType: UInt16.self, at: index)! - 4)
+                subtitle.oddOffset = Int(controlHeader.value(ofType: UInt16.self, at: index + 2)! - 4)
+                index += 4
+                logger.debug("Even offset: \(subtitle.evenOffset!), Odd offset: \(subtitle.oddOffset!)")
             default:
                 break
             }
@@ -202,10 +208,11 @@ struct VobSubParser {
     }
 
     private func decodeImage() {
-        let rleData = RLEData(
+        var rleData = RLEData(
             data: subtitle.imageData ?? Data(),
             width: subtitle.imageWidth ?? 0,
-            height: subtitle.imageHeight ?? 0)
+            height: subtitle.imageHeight ?? 0,
+            evenOffset: subtitle.evenOffset ?? 0)
         subtitle.imageData = rleData.decodeVobSub()
     }
 }

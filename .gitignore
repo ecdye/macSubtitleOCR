@@ -2,6 +2,5 @@
 /.build/
 /.swiftpm/
 /.vscode/
-tests/images
-tests/*.json
-tests/*.srt
+Tests/Resources/testFiles/*
+Tests/Resources/testFiles/test.*

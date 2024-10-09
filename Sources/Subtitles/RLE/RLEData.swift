@@ -14,13 +14,15 @@ struct RLEData {
     private var width: Int
     private var height: Int
     private var data: Data
+    private var evenOffset: Int?
 
     // MARK: - Lifecycle
 
-    init(data: Data, width: Int, height: Int) {
+    init(data: Data, width: Int, height: Int, evenOffset: Int? = nil) {
         self.width = width
         self.height = height
         self.data = data
+        self.evenOffset = evenOffset
     }
 
     // MARK: - Functions
@@ -69,7 +71,7 @@ struct RLEData {
         return image
     }
 
-    func decodeVobSub() -> Data {
+    mutating func decodeVobSub() -> Data {
         if data.isEmpty || width <= 0 || height <= 0 {
             return data
         }
@@ -91,6 +93,7 @@ struct RLEData {
         var i = 0
         var y = 0
         var x = 0
+        var corrected = false
         var currentNibbles: [UInt8?] = [nibbles[i], nibbles[i + 1]]
         i += 2
         while currentNibbles[1] != nil, y < height {
@@ -123,10 +126,15 @@ struct RLEData {
                 if i % 2 != 0 {
                     _ = getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
                 }
+                if y > (height / 2), height % 2 != 0, !corrected {
+                    corrected = true
+                    decodedLines.removeLast(width * 2 * evenOffset!)
+                }
             }
 
             decodedLines.append(contentsOf: repeatElement(color, count: run))
         }
+        height = decodedLines.count / width
 
         return interleaveLines(decodedLines)
     }
