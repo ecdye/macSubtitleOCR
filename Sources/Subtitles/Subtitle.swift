@@ -22,10 +22,13 @@ class Subtitle {
     var imageAlpha: [UInt8]?
     var numberOfColors: Int?
     var endTimestamp: TimeInterval?
+    var evenOffset: Int?
+    var oddOffset: Int?
 
     init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil,
          imageXOffset: Int? = nil, imageYOffset: Int? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil,
-         imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, numberOfColors: Int? = nil) {
+         imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, numberOfColors: Int? = nil,
+         evenOffset: Int? = nil, oddOffset: Int? = nil) {
         self.index = index
         self.text = text
         self.startTimestamp = startTimestamp
@@ -38,6 +41,8 @@ class Subtitle {
         self.imagePalette = imagePalette
         self.imageAlpha = imageAlpha
         self.numberOfColors = numberOfColors
+        self.evenOffset = evenOffset
+        self.oddOffset = oddOffset
     }
 
     // MARK: - Functions
@@ -75,6 +80,7 @@ class Subtitle {
     // Converts the image data to RGBA format using the palette
     private func imageDataToRGBA() -> Data {
         let bytesPerPixel = 4
+        imageHeight = imageData!.count / imageWidth!
         var rgbaData = Data(capacity: imageWidth! * imageHeight! * bytesPerPixel)
 
         for y in 0 ..< imageHeight! {
