@@ -19,16 +19,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install FFmpeg
+        run: brew install ffmpeg
+
       - name: Select Xcode
         uses: mxcl/xcodebuild@v3
         with:
-          xcode: 16.0
           swift: 6.0
           action: none
 
       - name: Test
-        timeout-minutes: 10
-        run: xcrun swift test --parallel --skip "macSubtitleOCRTests.vobSubSUB()"
+        timeout-minutes: 5
+        run: xcrun swift test --parallel
 
       - name: Periphery
         run: |
@@ -45,10 +47,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Install FFmpeg
+      run: brew install ffmpeg
+
     - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
-        xcode: 16.0
         swift: 6.0
         action: none
 
