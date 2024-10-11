@@ -85,8 +85,11 @@ struct macSubtitleOCR: ParsableCommand {
             }
         } else {
             let ffmpeg = try FFmpeg(input)
-            let result = try processSubtitles(subtitles: ffmpeg.subtitles, trackNumber: 0)
-            results.append(result)
+            for result in ffmpeg.subtitleTracks {
+                logger.debug("Processing subtitle track: \(result.key)")
+                let result = try processSubtitles(subtitles: result.value, trackNumber: result.key)
+                results.append(result)
+            }
         }
 
         try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true, attributes: nil)
