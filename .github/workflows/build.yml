@@ -19,10 +19,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Dependencies
+        run: brew install ffmpeg peripheryapp/periphery/periphery
+
       - name: Select Xcode
         uses: mxcl/xcodebuild@v3
         with:
-          xcode: 16.0
           swift: 6.0
           action: none
 
@@ -31,9 +33,7 @@ jobs:
         run: xcrun swift test --parallel --skip "macSubtitleOCRTests.vobSubSUB()"
 
       - name: Periphery
-        run: |
-          brew install peripheryapp/periphery/periphery
-          periphery scan --skip-build --index-store-path .build/debug/index/store
+        run: periphery scan --skip-build --index-store-path .build/debug/index/store
 
   build:
     name: Build
@@ -45,17 +45,19 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Install FFmpeg
+      run: brew install ffmpeg
+
     - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
-        xcode: 16.0
         swift: 6.0
         action: none
 
     - name: Build
       run: |
-        xcrun swift build --configuration release --arch arm64 --arch x86_64
-        tar -cvJf macSubtitleOCR.tar.xz -C .build/apple/Products/Release macSubtitleOCR
+        xcrun swift build --configuration release --arch arm64
+        tar -cvJf macSubtitleOCR.tar.xz -C .build/release/ macSubtitleOCR
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4

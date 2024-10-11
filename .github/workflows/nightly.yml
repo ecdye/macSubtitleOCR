@@ -32,10 +32,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Install FFmpeg
+      run: brew install ffmpeg
+
     - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
-        xcode: 16.0
         swift: 6.0
         action: none
 
@@ -43,8 +45,8 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        xcrun swift build --configuration release --arch arm64 --arch x86_64
-        tar -cvJf macSubtitleOCR.tar.xz -C .build/apple/Products/Release macSubtitleOCR
+        xcrun swift build --configuration release --arch arm64
+        tar -cvJf macSubtitleOCR.tar.xz -C .build/release/ macSubtitleOCR
         gh release delete --yes --cleanup-tag nightly
 
     - name: Publish
