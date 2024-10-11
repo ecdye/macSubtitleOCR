@@ -33,88 +33,61 @@ struct FFmpeg {
         }
 
         // Iterate over all streams and find subtitle tracks
-        var streamsToProcess: [Int] = []
+        var streamsToProcess: [FFStream] = []
         for i in 0 ..< Int(fmtCtx!.pointee.nb_streams) {
             let stream = fmtCtx!.pointee.streams[i]
             if stream!.pointee.codecpar.pointee.codec_type == AVMEDIA_TYPE_SUBTITLE {
-                // Handle subtitle stream
-                streamsToProcess.append(i)
+                let codecParameters = stream!.pointee.codecpar
+                let timeBase = stream!.pointee.time_base
+                let stream = FFStream(index: i, codecParameters: codecParameters, timeBase: timeBase)
+                streamsToProcess.append(stream)
             }
         }
 
-        try processSubtitleTracks(fmtCtx: fmtCtx, streamIndex: streamsToProcess)
-        // Clean up
-        avformat_close_input(&fmtCtx)
+        processSubtitleTracks(fmtCtx: fmtCtx, streams: streamsToProcess)
     }
 
-    // MARK: - Private Methods
+    // MARK: - Methods
 
-    private mutating func processSubtitleTracks(fmtCtx: UnsafeMutablePointer<AVFormatContext>?, streamIndex: [Int]) throws {
-        logger.debug("Processing subtitle track \(streamIndex)")
-        var codecCtx: UnsafeMutablePointer<AVCodecContext>?
-        let stream = fmtCtx!.pointee.streams[streamIndex[0]]!
-        let codecId = stream.pointee.codecpar.pointee.codec_id
-
-        guard let codec = avcodec_find_decoder(codecId) else {
-            fatalError("Could not find subtitle decoder")
-        }
-
-        // Allocate codec context
-        codecCtx = avcodec_alloc_context3(codec)
-        guard codecCtx != nil else {
-            fatalError("Could not allocate codec context")
-        }
-        defer { avcodec_free_context(&codecCtx) }
-
-        // Copy codec parameters to codec context
-        if avcodec_parameters_to_context(codecCtx, stream.pointee.codecpar) < 0 {
-            fatalError("Failed to copy codec parameters")
-        }
-        if avcodec_open2(codecCtx, codec, nil) < 0 {
-            fatalError("Could not open codec")
-        }
-
-        let subtitleTimeBase = stream.pointee.time_base
-
+    private mutating func processSubtitleTracks(fmtCtx: UnsafeMutablePointer<AVFormatContext>?, streams: [FFStream]) {
         // Allocate packet
         var packet = av_packet_alloc()
         defer { av_packet_free(&packet) }
-
         var subtitle = AVSubtitle()
-        let timeBase: Double = (codecId == AV_CODEC_ID_DVD_SUBTITLE) ? 1000 : 900000000
 
         // Read frames for the specific subtitle stream
         while av_read_frame(fmtCtx, packet) >= 0 {
             defer { av_packet_unref(packet) }
-            logger.debug("Got packet for stream \(packet!.pointee.stream_index)")
-            if streamIndex.contains(Int(packet!.pointee.stream_index)) {
-                let streamIndex = Int(packet!.pointee.stream_index)
-                var gotSubtitle: Int32 = 0
+            let streamNumber = Int(packet!.pointee.stream_index)
+            let stream = streams[streamNumber]
+            logger.debug("Got packet for stream \(streamNumber)")
 
-                // Decode subtitle packet
-                let ret = avcodec_decode_subtitle2(codecCtx, &subtitle, &gotSubtitle, packet)
-                if ret < 0 {
-                    logger.warning("Error decoding subtitle for stream \(streamIndex), skipping...")
-                    continue
+            let codecId = stream.codecID
+            let timeBase: Double = (codecId == AV_CODEC_ID_DVD_SUBTITLE) ? 1000 : 900000000
+            var gotSubtitle: Int32 = 0
+
+            // Decode subtitle packet
+            let ret = avcodec_decode_subtitle2(stream.codecContext, &subtitle, &gotSubtitle, packet)
+            if ret < 0 {
+                logger.warning("Error decoding subtitle for stream \(streamNumber), skipping...")
+                continue
+            }
+
+            if gotSubtitle != 0 {
+                defer { avsubtitle_free(&subtitle) }
+                var trackSubtitles = subtitleTracks[streamNumber] ?? []
+                for i in 0 ..< Int(subtitle.num_rects) {
+                    let rect = subtitle.rects[i]!
+                    let sub = extractImageData(from: rect)
+                    let pts = convertPTSToTimeInterval(
+                        pts: packet!.pointee.pts,
+                        timeBase: stream.timeBase)
+                    sub.startTimestamp = pts + TimeInterval(subtitle.start_display_time) / timeBase
+                    sub.endTimestamp = pts + TimeInterval(subtitle.end_display_time) / timeBase
+                    logger.debug("Track \(streamNumber) - Times: \(sub.startTimestamp!) --> \(sub.endTimestamp!)")
+                    trackSubtitles.append(sub)
                 }
-
-                if gotSubtitle != 0 {
-                    var trackSubtitles = subtitleTracks[streamIndex] ?? []
-                    for i in 0 ..< Int(subtitle.num_rects) {
-                        let rect = subtitle.rects[i]!
-                        let sub = extractImageData(from: rect)
-                        let pts = convertPTSToTimeInterval(
-                            pts: packet!.pointee.pts,
-                            timeBase: subtitleTimeBase)
-                        sub.startTimestamp = pts + TimeInterval(subtitle.start_display_time) / timeBase
-                        sub.endTimestamp = pts + TimeInterval(subtitle.end_display_time) / timeBase
-                        logger.debug("Track \(streamIndex) - Times: \(sub.startTimestamp!) --> \(sub.endTimestamp!)")
-                        trackSubtitles.append(sub)
-                    }
-                    subtitleTracks[streamIndex] = trackSubtitles
-
-                    avsubtitle_free(&subtitle)
-                }
+                subtitleTracks[streamNumber] = trackSubtitles
             }
         }
     }
