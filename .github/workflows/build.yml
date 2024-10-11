@@ -57,7 +57,7 @@ jobs:
     - name: Build
       run: |
         xcrun swift build --configuration release --arch arm64
-        tar -cvJf macSubtitleOCR.tar.xz -C .build/apple/Products/Release macSubtitleOCR
+        tar -cvJf macSubtitleOCR.tar.xz -C .build/release/ macSubtitleOCR
 
     - name: Save artifacts
       uses: actions/upload-artifact@v4
