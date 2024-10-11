@@ -36,7 +36,10 @@ jobs:
       uses: github/codeql-action/init@v3
       with:
         languages: swift
-        build-mode: autobuild
+        build-mode: manual
+
+    - name: Build
+      run: xcrun swift build --configuration release --arch arm64
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
