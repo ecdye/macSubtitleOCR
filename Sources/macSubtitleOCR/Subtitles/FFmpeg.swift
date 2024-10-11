@@ -39,7 +39,7 @@ struct FFmpeg {
             if stream!.pointee.codecpar.pointee.codec_type == AVMEDIA_TYPE_SUBTITLE {
                 let codecParameters = stream!.pointee.codecpar
                 let timeBase = stream!.pointee.time_base
-                let stream = FFStream(index: i, codecParameters: codecParameters, timeBase: timeBase)
+                let stream = FFStream(codecParameters: codecParameters, timeBase: timeBase)
                 streamsToProcess.append(stream)
             }
         }
