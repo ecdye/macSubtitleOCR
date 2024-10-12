@@ -71,8 +71,17 @@ struct VobSubParser {
             logger.debug("firstPacket: \(firstPacket)")
 
             let ptsDataLength = Int(subFile.readData(ofLength: 1)[0])
-            subFile.readData(ofLength: ptsDataLength) // Skip PES Header data bytes
-            logger.debug("Skipped \(ptsDataLength) PTS bytes")
+            let buffer = subFile.readData(ofLength: ptsDataLength)
+            if ptsDataLength == 5 {
+                var presentationTimestamp: UInt64 = 0
+                presentationTimestamp = UInt64(buffer[4]) >> 1
+                presentationTimestamp += UInt64(buffer[3]) << 7
+                presentationTimestamp += UInt64(buffer[2] & 0b11111110) << 14
+                presentationTimestamp += UInt64(buffer[1]) << 22
+                presentationTimestamp += UInt64(buffer[0] & 0b00001110) << 29
+                subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90 / 1000
+                logger.debug("Got \(subtitle.startTimestamp!) as timestamp")
+            }
 
             let streamID = Int(subFile.readData(ofLength: 1)[0] - 0x20)
             logger.debug("Stream ID: \(streamID)")
@@ -114,45 +123,40 @@ struct VobSubParser {
             }
         }
 
-        var index = 0
-        var endOfControl = Int(controlHeader.value(ofType: UInt16.self, at: index)!) - relativeControlOffset - 4
-        if endOfControl < 0 || endOfControl > controlSize! {
-            logger.warning("Invalid control header size \(endOfControl). Setting to \(controlSize!)")
-            endOfControl = Int(controlSize! - 1)
-        }
-        index += 2
+        parseCommandHeader(controlHeader, offset: relativeControlOffset)
+    }
 
-        // This is maybe correct for getting end timestamp? It works somewhat accurately
-        let relativeEndTimestamp = TimeInterval(controlHeader.value(ofType: UInt16.self)!) * (1024.0 / 900000.0)
+    private func parseCommandHeader(_ header: Data, offset: Int) {
+        let endOfControl = Int(header.value(ofType: UInt16.self)!) - offset - 4
+        let relativeEndTimestamp = TimeInterval(header.value(ofType: UInt16.self)!) / 900
         subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
-        logger.debug("relativeEndTimestamp: \(relativeEndTimestamp), endTimestamp: \(subtitle.endTimestamp!)")
+
+        var index = 2
 
         while index < endOfControl {
-            let command = controlHeader[index]
+            let command = header[index]
             index += 1
 
             switch command {
             case 0:
                 break // Set subtitle as forced
-            case 1:
-                break // Start display
-            case 2:
-                let displayDelay = controlHeader.value(ofType: UInt16.self)
-                logger.debug("Display delay is \(displayDelay!)")
+            case 1, 2:
+                // Start and stop display commands
+                break
             case 3:
-                var byte = controlHeader[index]
+                var byte = header[index]
                 index += 1
                 if subtitle.imagePalette == nil {
                     subtitle.imagePalette = [UInt8](repeating: 0, count: 4)
                 }
                 subtitle.imagePalette![3] = byte >> 4
                 subtitle.imagePalette![2] = byte & 0x0F
-                byte = controlHeader[index]
+                byte = header[index]
                 index += 1
                 subtitle.imagePalette![1] = byte >> 4
                 subtitle.imagePalette![0] = byte & 0x0F
             case 4:
-                var byte = controlHeader[index]
+                var byte = header[index]
                 index += 1
                 if subtitle.imageAlpha == nil {
                     subtitle.imageAlpha = [UInt8](repeating: 0, count: 4)
@@ -163,7 +167,7 @@ struct VobSubParser {
                 }
                 subtitle.imageAlpha![3] = byte >> 4
                 subtitle.imageAlpha![2] = byte & 0x0F
-                byte = controlHeader[index]
+                byte = header[index]
                 index += 1
                 subtitle.imageAlpha![1] = byte >> 4
                 subtitle.imageAlpha![0] = byte & 0x0F
@@ -172,19 +176,19 @@ struct VobSubParser {
                 if subtitle.imageXOffset != nil || subtitle.imageYOffset != nil {
                     break // Don't overwrite the offsets if they're already set, only happens in bad files
                 }
-                subtitle.imageXOffset = Int(controlHeader[index]) << 4 | Int(controlHeader[index + 1] >> 4)
-                subtitle.imageWidth = (Int(controlHeader[index + 1] & 0x0F) << 8 | Int(controlHeader[index + 2])) - subtitle
+                subtitle.imageXOffset = Int(header[index]) << 4 | Int(header[index + 1] >> 4)
+                subtitle.imageWidth = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2])) - subtitle
                     .imageXOffset! + 1
                 index += 3
-                subtitle.imageYOffset = Int(controlHeader[index]) << 4 | Int(controlHeader[index + 1] >> 4)
-                subtitle.imageHeight = (Int(controlHeader[index + 1] & 0x0F) << 8 | Int(controlHeader[index + 2])) - subtitle
+                subtitle.imageYOffset = Int(header[index]) << 4 | Int(header[index + 1] >> 4)
+                subtitle.imageHeight = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2])) - subtitle
                     .imageYOffset! + 1
                 index += 3
                 logger.debug("Image size: \(subtitle.imageWidth!)x\(subtitle.imageHeight!)")
                 logger.debug("X Offset: \(subtitle.imageXOffset!), Y Offset: \(subtitle.imageYOffset!)")
             case 6:
-                subtitle.evenOffset = Int(controlHeader.value(ofType: UInt16.self, at: index)! - 4)
-                subtitle.oddOffset = Int(controlHeader.value(ofType: UInt16.self, at: index + 2)! - 4)
+                subtitle.evenOffset = Int(header.value(ofType: UInt16.self, at: index)! - 4)
+                subtitle.oddOffset = Int(header.value(ofType: UInt16.self, at: index + 2)! - 4)
                 index += 4
                 logger.debug("Even offset: \(subtitle.evenOffset!), Odd offset: \(subtitle.oddOffset!)")
             default:
