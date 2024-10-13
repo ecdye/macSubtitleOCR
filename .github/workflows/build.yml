@@ -25,12 +25,12 @@ jobs:
       - name: Select Xcode
         uses: mxcl/xcodebuild@v3
         with:
-          swift: 6.0
+          swift: '6.0'
           action: none
 
       - name: Test
-        timeout-minutes: 10
-        run: xcrun swift test --parallel --skip "macSubtitleOCRTests.vobSubSUB()"
+        timeout-minutes: 5
+        run: xcrun swift test --no-parallel
 
       - name: Periphery
         run: periphery scan --skip-build --index-store-path .build/debug/index/store
@@ -51,7 +51,7 @@ jobs:
     - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
-        swift: 6.0
+        swift: '6.0'
         action: none
 
     - name: Build

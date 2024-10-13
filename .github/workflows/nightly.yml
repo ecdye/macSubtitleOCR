@@ -18,7 +18,19 @@ jobs:
         id: should_run
         continue-on-error: true
         if: ${{ github.event_name == 'schedule' }}
-        run: test -z $(git rev-list  --after="24 hours"  ${{ github.sha }}) && echo "::set-output name=should_run::false"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STATUS="$(gh api -H "Accept: application/vnd.github+json" \
+                    -H "X-GitHub-Api-Version: 2022-11-28" \
+                    "/repos/ecdye/macSubtitleOCR/actions/runs?branch=main&head_sha=${{ github.sha }}&status=completed" | \
+                    jq '.workflow_runs[] | select(.name == "Build") | if .conclusion == "success" then .conclusion end')"
+          test -n $(git rev-list  --after="24 hours" ${{ github.sha }}) &&
+          if [[ $STATUS == "success" ]]; then
+            echo "::set-output name=should_run::true"
+          else
+            echo "::set-output name=should_run::false"
+          fi
 
   build:
     name: Build
@@ -38,7 +50,7 @@ jobs:
     - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
-        swift: 6.0
+        swift: '6.0'
         action: none
 
     - name: Build
