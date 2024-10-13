@@ -39,8 +39,8 @@ struct macSubtitleOCR: ParsableCommand {
     @Flag(help: "Enable fast mode (less accurate)")
     var fastMode = false
 
-    @Flag(help: "Enable language correction")
-    var languageCorrection = false
+    @Flag(help: "Disable language correction (less accurate)")
+    var disableLanguageCorrection = false
 
     @Flag(help: "Save extracted subtitle file to disk (MKV input only)")
     var saveSubtitleFile = false
@@ -147,8 +147,8 @@ struct macSubtitleOCR: ParsableCommand {
         var srtSubtitles: [Subtitle] = []
 
         for subtitle in subtitles {
-            if subtitle.imageWidth == 0, subtitle.imageHeight == 0 {
-                logger.debug("Skipping subtitle index \(subIndex) with empty image data!")
+            if subtitle.imageWidth == 0 || subtitle.imageHeight == 0 {
+                logger.warning("Skipping subtitle index \(subIndex) with empty image data!")
                 continue
             }
 
@@ -224,7 +224,7 @@ struct macSubtitleOCR: ParsableCommand {
             }
 
             request.recognitionLevel = getOCRMode()
-            request.usesLanguageCorrection = languageCorrection
+            request.usesLanguageCorrection = !disableLanguageCorrection
             request.revision = VNRecognizeTextRequestRevision3
             request.recognitionLanguages = language.split(separator: ",").map { String($0) }
 
