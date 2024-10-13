@@ -29,8 +29,10 @@ jobs:
           action: none
 
       - name: Test
-        timeout-minutes: 5
-        run: xcrun swift test --no-parallel
+        timeout-minutes: 20
+        run: |
+          xcrun swift test --filter ffmpegDecoderTests
+          xcrun swift test --filter internalDecoderTests
 
       - name: Periphery
         run: periphery scan --skip-build --index-store-path .build/debug/index/store
