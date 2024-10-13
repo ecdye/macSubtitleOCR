@@ -154,6 +154,9 @@ struct macSubtitleOCR: ParsableCommand {
 
             if subIndex < subtitles.count, subtitles[subIndex].startTimestamp! <= subtitle.endTimestamp! {
                 logger.warning("Fixing subtitle index \(subIndex) end timestamp!")
+                if subtitles[subIndex].startTimestamp! - subtitle.startTimestamp! > 5 {
+                    subtitle.endTimestamp = subtitle.startTimestamp! + 5
+                }
                 subtitle.endTimestamp = subtitles[subIndex].startTimestamp! - 0.1
             }
 

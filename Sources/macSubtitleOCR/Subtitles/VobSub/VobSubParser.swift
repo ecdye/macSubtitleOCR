@@ -15,6 +15,7 @@ struct VobSubParser {
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "VobSubParser")
     private(set) var subtitle: Subtitle = .init(imageData: .init(), numberOfColors: 16)
     private let masterPalette: [UInt8]
+    private let fps = 24.0 // TODO: Make this configurable / dynamic
 
     // MARK: - Lifecycle
 
@@ -43,48 +44,40 @@ struct VobSubParser {
             guard subFile.readData(ofLength: 4).value(ofType: UInt32.self) == MPEG2PacketType.psPacket else {
                 fatalError("Failed to find PS packet at offset \(subFile.offsetInFile)")
             }
-            logger.debug("Found PS packet at offset \(startOffset)")
 
             subFile.readData(ofLength: 6) // System clock reference
             subFile.readData(ofLength: 3) // Multiplexer rate
             let stuffingLength = Int(subFile.readData(ofLength: 1)[0] & 7)
             subFile.readData(ofLength: stuffingLength) // Stuffing bytes
-            logger.debug("Skipped \(stuffingLength) stuffing bytes")
-            let psHeaderLength = subFile.offsetInFile - startOffset
-            logger.debug("PS header length: \(psHeaderLength)")
 
             guard subFile.readData(ofLength: 4).value(ofType: UInt32.self) == MPEG2PacketType.pesPacket else {
                 fatalError("Failed to find PES packet at offset \(subFile.offsetInFile)")
             }
-            logger.debug("Found PES packet at offset \(subFile.offsetInFile - 4)")
 
             let pesLength = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
             if pesLength == 0 {
                 fatalError("PES packet length is 0 at offset \(subFile.offsetInFile)")
             }
             let nextPSOffset = subFile.offsetInFile + UInt64(pesLength)
-            logger.debug("pesLength: \(pesLength), nextPSOffset: \(nextPSOffset)")
 
             subFile.readData(ofLength: 1) // Skip PES miscellaneous data
             let extByteOne = subFile.readData(ofLength: 1)[0]
             let firstPacket = (extByteOne & 0x80) == 0x80 || (extByteOne & 0xC0) == 0xC0
-            logger.debug("firstPacket: \(firstPacket)")
 
             let ptsDataLength = Int(subFile.readData(ofLength: 1)[0])
-            let buffer = subFile.readData(ofLength: ptsDataLength)
+            let ptsData = subFile.readData(ofLength: ptsDataLength)
             if ptsDataLength == 5 {
                 var presentationTimestamp: UInt64 = 0
-                presentationTimestamp = UInt64(buffer[4]) >> 1
-                presentationTimestamp += UInt64(buffer[3]) << 7
-                presentationTimestamp += UInt64(buffer[2] & 0b11111110) << 14
-                presentationTimestamp += UInt64(buffer[1]) << 22
-                presentationTimestamp += UInt64(buffer[0] & 0b00001110) << 29
+                presentationTimestamp = UInt64(ptsData[4]) >> 1
+                presentationTimestamp += UInt64(ptsData[3]) << 7
+                presentationTimestamp += UInt64(ptsData[2] & 0xFE) << 14
+                presentationTimestamp += UInt64(ptsData[1]) << 22
+                presentationTimestamp += UInt64(ptsData[0] & 0x0E) << 29
                 subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90 / 1000
                 logger.debug("Got \(subtitle.startTimestamp!) as timestamp")
             }
 
-            let streamID = Int(subFile.readData(ofLength: 1)[0] - 0x20)
-            logger.debug("Stream ID: \(streamID)")
+            subFile.readData(ofLength: 1) // Stream ID
 
             var trueHeaderSize = Int(subFile.offsetInFile - startOffset)
             if firstPacket, ptsDataLength >= 5 {
@@ -92,8 +85,6 @@ struct VobSubParser {
                 relativeControlOffset = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
                 let rleSize = relativeControlOffset - 2
                 controlSize = size - rleSize - 4 // 4 bytes for the size and control offset
-                logger.debug("Size: \(size), RLE Size: \(rleSize), Control Size: \(controlSize!)")
-
                 controlOffset = Int(subFile.offsetInFile) + rleSize
                 trueHeaderSize = Int(subFile.offsetInFile - startOffset)
                 firstPacketFound = true
@@ -106,12 +97,10 @@ struct VobSubParser {
             let rleFragmentSize = Int(nextPSOffset - savedOffset) - difference
             subtitle.imageData!.append(subFile.readData(ofLength: rleFragmentSize))
             rleLengthFound += rleFragmentSize
-            logger.debug("RLE fragment size: \(rleFragmentSize), Total RLE length: \(rleLengthFound)")
 
             let bytesToCopy = max(0, min(difference, controlSize! - controlHeaderCopied))
             controlHeader.append(subFile.readData(ofLength: bytesToCopy))
             controlHeaderCopied += bytesToCopy
-            logger.debug("Obtained \(controlHeaderCopied) of \(controlSize!) bytes of control header")
 
             subFile.seek(toFileOffset: nextPSOffset)
         } while subFile.offsetInFile < nextOffset && controlHeaderCopied < controlSize!
@@ -127,8 +116,8 @@ struct VobSubParser {
     }
 
     private func parseCommandHeader(_ header: Data, offset: Int) {
-        let endOfControl = Int(header.value(ofType: UInt16.self)!) - offset - 4
-        let relativeEndTimestamp = TimeInterval(header.value(ofType: UInt16.self)!) / 900
+        let relativeEndTimestamp = TimeInterval(Int(header.value(ofType: UInt16.self)!)) * 1024 / 90000 / fps
+        let endOfControl = Int(header.value(ofType: UInt16.self)!) - 4 - offset
         subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
 
         var index = 2
@@ -216,7 +205,8 @@ struct VobSubParser {
             data: subtitle.imageData ?? Data(),
             width: subtitle.imageWidth ?? 0,
             height: subtitle.imageHeight ?? 0,
-            evenOffset: subtitle.evenOffset ?? 0)
+            evenOffset: subtitle.evenOffset ?? 0,
+            oddOffset: subtitle.oddOffset ?? 0)
         subtitle.imageData = rleData.decodeVobSub()
     }
 }

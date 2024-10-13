@@ -15,14 +15,16 @@ struct RLEData {
     private var height: Int
     private var data: Data
     private var evenOffset: Int?
+    private var oddOffset: Int?
 
     // MARK: - Lifecycle
 
-    init(data: Data, width: Int, height: Int, evenOffset: Int? = nil) {
+    init(data: Data, width: Int, height: Int, evenOffset: Int? = nil, oddOffset: Int? = nil) {
         self.width = width
         self.height = height
         self.data = data
         self.evenOffset = evenOffset
+        self.oddOffset = oddOffset
     }
 
     // MARK: - Functions
@@ -93,7 +95,6 @@ struct RLEData {
         var i = 0
         var y = 0
         var x = 0
-        var corrected = false
         var currentNibbles: [UInt8?] = [nibbles[i], nibbles[i + 1]]
         i += 2
         while currentNibbles[1] != nil, y < height {
@@ -126,9 +127,8 @@ struct RLEData {
                 if i % 2 != 0 {
                     _ = getNibble(currentNibbles: &currentNibbles, nibbles: nibbles, i: &i)
                 }
-                if y > (height / 2), height % 2 != 0, !corrected {
-                    corrected = true
-                    decodedLines.removeLast(width * 2 * evenOffset!)
+                if y >= (height / 2), i / 2 < oddOffset!, evenOffset != 0 {
+                    continue // Skip extra lines until we reach the oddOffset
                 }
             }
 

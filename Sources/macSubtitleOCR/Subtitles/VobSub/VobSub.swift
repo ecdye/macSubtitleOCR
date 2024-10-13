@@ -2,7 +2,7 @@
 // VobSub.swift
 // macSubtitleOCR
 //
-// Created by Ethan Dye on 10/9/24.
+// Created by Ethan Dye on 10/4/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
@@ -18,7 +18,6 @@ struct VobSub {
     // MARK: - Lifecycle
 
     init(_ sub: String, _ idx: String) throws {
-        logger.debug("Extracting VobSub subtitles from \(sub) and \(idx)")
         let subFile = try FileHandle(forReadingFrom: URL(filePath: sub))
         defer { subFile.closeFile() }
         let idx = VobSubIDX(URL(filePath: idx))
@@ -43,7 +42,6 @@ struct VobSub {
                 offset: offset,
                 nextOffset: nextOffset,
                 idxPalette: idx.palette).subtitle
-            logger.debug("Found image at offset \(offset) with timestamp \(timestamp)")
             subtitles.append(subtitle)
         }
     }
