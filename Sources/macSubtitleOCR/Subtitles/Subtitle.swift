@@ -105,58 +105,74 @@ class Subtitle {
         return rgbaData
     }
 
+    /// Crops the image to the visible (non-transparent) area and adds a buffer around it.
+    /// - Parameter image: The original CGImage to crop.
+    /// - Returns: A cropped CGImage, or nil if the image is fully transparent.
     private func cropImageToVisibleArea(_ image: CGImage) -> CGImage? {
-        guard let dataProvider = image.dataProvider,
-              let data = dataProvider.data
-        else {
+        let buffer = 5 // Buffer size around the non-transparent area
+        let width = image.width
+        let height = image.height
+        let newWidth = width + buffer * 2
+        let newHeight = height + buffer * 2
+
+        // Create a new image context with extended dimensions
+        guard let context = CGContext(data: nil,
+                                      width: newWidth,
+                                      height: newHeight,
+                                      bitsPerComponent: image.bitsPerComponent,
+                                      bytesPerRow: 0,
+                                      space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: image.bitmapInfo.rawValue) else {
             return nil
         }
 
-        let width = image.width
-        let height = image.height
-        let buffer = 1 // Buffer around the non-transparent pixels
-        let bytesPerPixel = image.bitsPerPixel / 8
-        let bytesPerRow = image.bytesPerRow
+        // Clear the context (set a transparent background)
+        context.clear(CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
 
-        let pixelData = CFDataGetBytePtr(data)
+        // Draw the original image onto the new context at the center
+        context.draw(image, in: CGRect(x: buffer, y: buffer, width: width, height: height))
 
-        var minX = width
-        var maxX = 0
-        var minY = height
-        var maxY = 0
+        guard let extendedImage = context.makeImage(),
+              let dataProvider = extendedImage.dataProvider,
+              let data = dataProvider.data,
+              let pixelData = CFDataGetBytePtr(data) else {
+            return nil
+        }
 
-        // Iterate over each pixel to find the non-transparent bounding box
-        for y in 0 ..< height {
-            for x in 0 ..< width {
+        let bytesPerPixel = extendedImage.bitsPerPixel / 8
+        let bytesPerRow = extendedImage.bytesPerRow
+
+        // Initialize variables to track the non-transparent bounds
+        var minX = newWidth, maxX = 0, minY = newHeight, maxY = 0
+
+        // Scan the image to find the non-transparent pixels
+        for y in 0 ..< newHeight {
+            for x in 0 ..< newWidth {
                 let pixelIndex = y * bytesPerRow + x * bytesPerPixel
-                let alpha = pixelData![pixelIndex + 3] // Assuming RGBA format
+                let alpha = pixelData[pixelIndex + 3] // Assuming RGBA format
 
-                if alpha > 0 { // Non-transparent pixel
-                    if x < minX { minX = x }
-                    if x > maxX { maxX = x }
-                    if y < minY { minY = y }
-                    if y > maxY { maxY = y }
+                if alpha > 0 { // Non-transparent pixel found
+                    minX = min(minX, x)
+                    maxX = max(maxX, x)
+                    minY = min(minY, y)
+                    maxY = max(maxY, y)
                 }
             }
         }
 
-        // Check if the image is fully transparent, return nil if so
-        if minX == width || maxX == 0 || minY == height || maxY == 0 {
-            return nil // Fully transparent image
+        // If the image is fully transparent, return nil
+        if minX == newWidth || maxX == 0 || minY == newHeight || maxY == 0 {
+            return nil
         }
 
-        // Add buffer to the bounding box, ensuring it's clamped within the image bounds
+        // Apply buffer to the bounding box, ensuring it's within image bounds
         minX = max(0, minX - buffer)
-        maxX = min(width - 1, maxX + buffer)
+        maxX = min(newWidth - 1, maxX + buffer)
         minY = max(0, minY - buffer)
-        maxY = min(height - 1, maxY + buffer)
+        maxY = min(newHeight - 1, maxY + buffer)
 
-        let croppedWidth = maxX - minX + 1
-        let croppedHeight = maxY - minY + 1
-
-        let croppedRect = CGRect(x: minX, y: minY, width: croppedWidth, height: croppedHeight)
-
-        // Create a cropped image from the original image
-        return image.cropping(to: croppedRect)
+        // Crop the image to the visible (non-transparent) area with the buffer
+        let croppedRect = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+        return extendedImage.cropping(to: croppedRect)
     }
 }
