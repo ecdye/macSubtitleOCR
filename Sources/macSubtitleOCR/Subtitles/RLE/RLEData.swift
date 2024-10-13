@@ -57,7 +57,7 @@ struct RLEData {
             } else if run == 0 {
                 // New Line: Check if pixels align correctly
                 if pixelCount % width > 0 {
-                    fatalError("Error: Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.")
+                    fatalError("Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.")
                 }
                 lineCount += 1
             }
@@ -65,7 +65,7 @@ struct RLEData {
 
         // Check if we decoded enough pixels
         if pixelCount < width * height {
-            fatalError("Error: Insufficient RLE data for subtitle.")
+            fatalError("Insufficient RLE data for subtitle.")
         }
 
         return image
@@ -87,7 +87,7 @@ struct RLEData {
         }
         guard nibbles.count == 2 * data.count
         else {
-            fatalError("Error: Failed to create nibbles from RLE data.")
+            fatalError("Failed to create nibbles from RLE data.")
         }
 
         var i = 0

@@ -17,7 +17,7 @@ class MKVSubtitleExtractor: MKVTrackParser {
             logger.debug("Created file at path: \(trackPath).")
             return trackPath
         } else {
-            fatalError("Error: Failed to create file at path: \(trackPath).")
+            fatalError("Failed to create file at path: \(trackPath).")
         }
     }
 }

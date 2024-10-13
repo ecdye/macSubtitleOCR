@@ -22,7 +22,7 @@ struct VobSubIDX {
             let idxData = try String(contentsOf: url, encoding: .utf8)
             try parseIdxFile(idxData: idxData)
         } catch {
-            fatalError("Error: Failed to parse IDX file: \(error)")
+            fatalError("Failed to parse IDX file: \(error)")
         }
     }
 

@@ -41,7 +41,7 @@ struct VobSubParser {
         repeat {
             let startOffset = subFile.offsetInFile
             guard subFile.readData(ofLength: 4).value(ofType: UInt32.self) == MPEG2PacketType.psPacket else {
-                fatalError("Error: Failed to find PS packet at offset \(subFile.offsetInFile)")
+                fatalError("Failed to find PS packet at offset \(subFile.offsetInFile)")
             }
             logger.debug("Found PS packet at offset \(startOffset)")
 
@@ -54,13 +54,13 @@ struct VobSubParser {
             logger.debug("PS header length: \(psHeaderLength)")
 
             guard subFile.readData(ofLength: 4).value(ofType: UInt32.self) == MPEG2PacketType.pesPacket else {
-                fatalError("Error: Failed to find PES packet at offset \(subFile.offsetInFile)")
+                fatalError("Failed to find PES packet at offset \(subFile.offsetInFile)")
             }
             logger.debug("Found PES packet at offset \(subFile.offsetInFile - 4)")
 
             let pesLength = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
             if pesLength == 0 {
-                fatalError("Error: PES packet length is 0 at offset \(subFile.offsetInFile)")
+                fatalError("PES packet length is 0 at offset \(subFile.offsetInFile)")
             }
             let nextPSOffset = subFile.offsetInFile + UInt64(pesLength)
             logger.debug("pesLength: \(pesLength), nextPSOffset: \(nextPSOffset)")

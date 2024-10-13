@@ -23,12 +23,12 @@ class MKVFileHandler {
     init(filePath: String) {
         self.filePath = filePath
         guard FileManager.default.fileExists(atPath: filePath) else {
-            fatalError("Error: File does not exist at path: \(filePath)")
+            fatalError("File does not exist at path: \(filePath)")
         }
         do {
             try fileHandle = FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
         } catch {
-            fatalError("Error: Failed to open file for file at path: \(filePath), error: \(error.localizedDescription)")
+            fatalError("Failed to open file for file at path: \(filePath), error: \(error.localizedDescription)")
         }
         endOfFile = fileHandle.seekToEndOfFile()
         fileHandle.seek(toFileOffset: 0)

@@ -26,7 +26,7 @@ struct PGS {
         defer { fileHandle.closeFile() }
         data = try fileHandle.readToEnd() ?? Data()
         guard data.count > pgsHeaderLength else {
-            fatalError("Error: Failed to read file data from: \(url.path)")
+            fatalError("Failed to read file data from: \(url.path)")
         }
         fileHandle.closeFile()
 
@@ -84,7 +84,7 @@ struct PGS {
             // Read the rest of the segment
             let segmentData = data.extractBytes(segmentLength)
             guard segmentData.count == segmentLength else {
-                fatalError("Error: Failed to read the full segment data, got: \(segmentData.count)/\(segmentLength)")
+                fatalError("Failed to read the full segment data, got: \(segmentData.count)/\(segmentLength)")
             }
 
             // Parse the segment based on the type (0x14 for PCS, 0x15 for WDS, 0x16 for PDS, 0x17 for ODS)
@@ -93,7 +93,7 @@ struct PGS {
                 do {
                     pds = try PDS(segmentData)
                 } catch let macSubtitleOCRError.invalidPDSDataLength(length) {
-                    fatalError("Error: Invalid Palette Data Segment length: \(length)")
+                    fatalError("Invalid Palette Data Segment length: \(length)")
                 }
             case 0x15: // ODS (Object Definition Segment)
                 do {
@@ -108,7 +108,7 @@ struct PGS {
                         ods = try ODS(segmentData)
                     }
                 } catch let macSubtitleOCRError.invalidODSDataLength(length) {
-                    fatalError("Error: Invalid Object Data Segment length: \(length)")
+                    fatalError("Invalid Object Data Segment length: \(length)")
                 }
             case 0x16, 0x17: // PCS (Presentation Composition Segment), WDS (Window Definition Segment)
                 break // PCS and WDS parsing not required for basic rendering
