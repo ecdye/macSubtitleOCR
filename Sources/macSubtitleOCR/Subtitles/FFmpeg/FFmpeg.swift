@@ -33,14 +33,14 @@ struct FFmpeg {
         }
 
         // Iterate over all streams and find subtitle tracks
-        var streamsToProcess: [FFStream] = []
+        var streamsToProcess = [Int: FFStream]()
         for i in 0 ..< Int(fmtCtx!.pointee.nb_streams) {
-            let stream = fmtCtx!.pointee.streams[i]
-            if stream!.pointee.codecpar.pointee.codec_type == AVMEDIA_TYPE_SUBTITLE {
-                let codecParameters = stream!.pointee.codecpar
-                let timeBase = stream!.pointee.time_base
-                let stream = FFStream(codecParameters: codecParameters, timeBase: timeBase)
-                streamsToProcess.append(stream)
+            let stream = fmtCtx!.pointee.streams[i]!.pointee
+            if stream.codecpar.pointee.codec_type == AVMEDIA_TYPE_SUBTITLE {
+                let codecParameters = stream.codecpar
+                let timeBase = stream.time_base
+                let ffStream = FFStream(codecParameters: codecParameters, timeBase: timeBase)
+                streamsToProcess[i] = ffStream
             }
         }
 
@@ -49,7 +49,7 @@ struct FFmpeg {
 
     // MARK: - Methods
 
-    private mutating func processSubtitleTracks(fmtCtx: UnsafeMutablePointer<AVFormatContext>?, streams: [FFStream]) {
+    private mutating func processSubtitleTracks(fmtCtx: UnsafeMutablePointer<AVFormatContext>?, streams: [Int: FFStream]) {
         // Allocate packet
         var packet = av_packet_alloc()
         defer { av_packet_free(&packet) }
@@ -59,16 +59,28 @@ struct FFmpeg {
         while av_read_frame(fmtCtx, packet) >= 0 {
             defer { av_packet_unref(packet) }
             let streamNumber = Int(packet!.pointee.stream_index)
-            let stream = streams[streamNumber]
+            if streams[streamNumber] == nil {
+                continue // Skip if stream is not a subtitle stream
+            }
+            let stream = streams[streamNumber]!
             logger.debug("Got packet for stream \(streamNumber)")
 
             let codecId = stream.codecID
-            let timeBase: Double = (codecId == AV_CODEC_ID_DVD_SUBTITLE) ? 1000 : 900000000
-            var gotSubtitle: Int32 = 0
+            let timeBase: AVRational
+            if codecId == AV_CODEC_ID_HDMV_PGS_SUBTITLE {
+                // This fix is assuming that the tracks were from MKV files and so were encoded with a double timebase
+                // first of the normal MKV timebase (1/1000) and then the normal PGS timebase (1/90000)
+                // for some reason, it seems like there is an extra 0 in the timebase, so we need to divide by 10.
+                // This is a hacky fix and should be replaced with a better solution in the future.
+                timeBase = av_mul_q(AVRational(num: 1, den: 1000), AVRational(num: 1, den: 900000))
+                logger.debug("Fixed Stream TB to: \(timeBase.num)/\(timeBase.den)")
+            } else {
+                timeBase = stream.timeBase
+            }
 
             // Decode subtitle packet
-            let ret = avcodec_decode_subtitle2(stream.codecContext, &subtitle, &gotSubtitle, packet)
-            if ret < 0 {
+            var gotSubtitle: Int32 = 0
+            guard avcodec_decode_subtitle2(stream.codecContext, &subtitle, &gotSubtitle, packet) > 0 else {
                 logger.warning("Error decoding subtitle for stream \(streamNumber), skipping...")
                 continue
             }
@@ -79,11 +91,9 @@ struct FFmpeg {
                 for i in 0 ..< Int(subtitle.num_rects) {
                     let rect = subtitle.rects[i]!
                     let sub = extractImageData(from: rect)
-                    let pts = convertPTSToTimeInterval(
-                        pts: packet!.pointee.pts,
-                        timeBase: stream.timeBase)
-                    sub.startTimestamp = pts + TimeInterval(subtitle.start_display_time) / timeBase
-                    sub.endTimestamp = pts + TimeInterval(subtitle.end_display_time) / timeBase
+                    let pts = convertToTimeInterval(packet!.pointee.pts, timeBase: stream.timeBase)
+                    sub.startTimestamp = pts + convertToTimeInterval(subtitle.start_display_time, timeBase: timeBase)
+                    sub.endTimestamp = pts + convertToTimeInterval(subtitle.end_display_time, timeBase: timeBase)
                     logger.debug("Track \(streamNumber) - Times: \(sub.startTimestamp!) --> \(sub.endTimestamp!)")
                     trackSubtitles.append(sub)
                 }
@@ -128,7 +138,7 @@ struct FFmpeg {
         return subtitle
     }
 
-    private func convertPTSToTimeInterval(pts: Int64, timeBase: AVRational) -> TimeInterval {
+    private func convertToTimeInterval(_ pts: some BinaryInteger, timeBase: AVRational) -> TimeInterval {
         let seconds = Double(pts) * av_q2d(timeBase)
         return TimeInterval(seconds)
     }
