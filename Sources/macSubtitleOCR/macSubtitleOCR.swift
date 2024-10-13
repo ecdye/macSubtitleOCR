@@ -180,16 +180,17 @@ struct macSubtitleOCR: ParsableCommand {
                 guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
 
                 var subtitleLines: [[String: Any]] = []
-                var subtitleText = ""
-                var index = 0
-                for observation in observations {
-                    let candidate = observation.topCandidates(1).first
-                    let string = candidate?.string ?? ""
-                    let confidence = candidate?.confidence ?? 0.0
+                let subtitleText = observations.compactMap { observation in
+                    guard let candidate = observation.topCandidates(1).first else { return nil }
+
+                    let string = candidate.string
+                    let confidence = candidate.confidence
                     let stringRange = string.startIndex ..< string.endIndex
-                    let boxObservation = try? candidate?.boundingBox(for: stringRange)
-                    let boundingBox = boxObservation?.boundingBox ?? .zero
-                    let rect = VNImageRectForNormalizedRect(boundingBox, subtitle.imageWidth!, subtitle.imageHeight!)
+                    let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox ?? .zero
+                    let rect = VNImageRectForNormalizedRect(
+                        boundingBox ?? .zero,
+                        subtitle.imageWidth!,
+                        subtitle.imageHeight!)
 
                     let line: [String: Any] = [
                         "text": string,
@@ -199,26 +200,20 @@ struct macSubtitleOCR: ParsableCommand {
                         "y": Int(CGFloat(subtitle.imageHeight!) - rect.minY - rect.size.height),
                         "height": Int(rect.size.height)
                     ]
-
                     subtitleLines.append(line)
-                    subtitleText += string
-                    index += 1
-                    if index != observations.count {
-                        subtitleText += "\n"
-                    }
-                }
+
+                    return string
+                }.joined(separator: "\n")
 
                 if self.json {
-                    let subtitleData: [String: Any] = [
+                    json.append([
                         "image": subIndex,
                         "lines": subtitleLines,
                         "text": subtitleText
-                    ]
-                    json.append(subtitleData)
+                    ])
                 }
 
-                srtSubtitles.append(Subtitle(index: subIndex,
-                                             text: subtitleText,
+                srtSubtitles.append(Subtitle(index: subIndex, text: subtitleText,
                                              startTimestamp: subtitle.startTimestamp,
                                              endTimestamp: subtitle.endTimestamp))
             }
