@@ -28,11 +28,16 @@ jobs:
           swift: '6.0'
           action: none
 
-      - name: Test
-        timeout-minutes: 20
-        run: |
-          xcrun swift test --filter ffmpegDecoderTests
-          xcrun swift test --filter internalDecoderTests
+      - name: Build Tests
+        run: xcrun swift test list
+
+      - name: Test FFmpeg Decoder
+        timeout-minutes: 5
+        run: xcrun swift test --skip-build --no-parallel --filter ffmpegDecoderTests
+
+      - name: Test Internal Decoder
+        timeout-minutes: 5
+        run: xcrun swift test --skip-build --no-parallel --filter internalDecoderTests
 
       - name: Periphery
         run: periphery scan --skip-build --index-store-path .build/debug/index/store
