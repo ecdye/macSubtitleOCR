@@ -100,14 +100,31 @@ struct macSubtitleOCR: AsyncParsableCommand {
             autoreleasepool {
                 // Save srt file
                 let srtFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).srt")
-                let srt = SRT(subtitles: result.srt)
+                let srt = SRT(subtitles: result.srt.values.sorted { $0.index! < $1.index! })
                 srt.write(toFileAt: srtFilePath)
 
                 // Save json file
                 if json {
                     // Convert subtitle data to JSON
+                    // Convert subtitle data to JSON
+                    let jsonResults = result.json.values.sorted { $0.image < $1.image }.map { jsonResult in
+                        [
+                            "image": jsonResult.image,
+                            "lines": jsonResult.lines.map { line in
+                                [
+                                    "text": line.text,
+                                    "confidence": line.confidence,
+                                    "x": line.x,
+                                    "width": line.width,
+                                    "y": line.y,
+                                    "height": line.height
+                                ] as [String: Any]
+                            },
+                            "text": jsonResult.text
+                        ] as [String: Any]
+                    }
                     let jsonData = try? JSONSerialization.data(
-                        withJSONObject: result.json,
+                        withJSONObject: jsonResults,
                         options: [.prettyPrinted, .sortedKeys])
                     let jsonString = (String(data: jsonData ?? Data(), encoding: .utf8) ?? "[]")
                     let jsonFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).json")
@@ -153,121 +170,156 @@ struct macSubtitleOCR: AsyncParsableCommand {
         }
     }
 
+    actor SubtitleAccumulator {
+        var srtSubtitles: [Int: Subtitle] = [:]
+        var json: [Int: SubtitleJSONResult] = [:]
+
+        func appendSubtitle(_ subtitle: Subtitle) {
+            srtSubtitles[subtitle.index!] = subtitle
+        }
+
+        func appendJSON(_ jsonOut: SubtitleJSONResult) {
+            json[jsonOut.image] = jsonOut
+        }
+    }
+
+    actor AsyncSemaphore {
+        private var permits: Int
+
+        init(limit: Int) {
+            permits = limit
+        }
+
+        func wait() async {
+            while permits <= 0 {
+                // Wait until there's a permit available
+                await Task.yield()
+            }
+            permits -= 1
+        }
+
+        func signal() {
+            permits += 1
+        }
+    }
+
     private func processSubtitles(subtitles: [Subtitle], trackNumber: Int,
                                   invert: Bool = true) async throws -> macSubtitleOCRResult {
-        var subIndex = 1
-        var json: [Any] = []
-        var srtSubtitles: [Subtitle] = []
+        let accumulator = SubtitleAccumulator()
+        let semaphore = AsyncSemaphore(limit: 5) // Limit concurrent tasks to 5
 
-        for subtitle in subtitles {
-            if subtitle.imageWidth == 0 || subtitle.imageHeight == 0 {
-                logger.warning("Skipping subtitle index \(subIndex) with empty image data!")
-                continue
-            }
+        try await withThrowingDiscardingTaskGroup { group in
+            for (subIndex, var subtitle) in subtitles.enumerated() {
+                group.addTask {
+                    // Wait for permission to start the task
+                    await semaphore.wait()
 
-            if subIndex < subtitles.count, subtitles[subIndex].startTimestamp! <= subtitle.endTimestamp! {
-                logger.warning("Fixing subtitle index \(subIndex) end timestamp!")
-                if subtitles[subIndex].startTimestamp! - subtitle.startTimestamp! > 5 {
-                    subtitle.endTimestamp = subtitle.startTimestamp! + 5
+                    if subtitle.imageWidth == 0 || subtitle.imageHeight == 0 {
+                        logger.warning("Skipping subtitle index \(subIndex + 1) with empty image data!")
+                        await semaphore.signal()
+                        return
+                    }
+
+                    guard let subImage = subtitle.createImage(invert) else {
+                        logger.info("Could not create image for index \(subIndex + 1)! Skipping...")
+                        await semaphore.signal()
+                        return
+                    }
+
+                    // Save subtitle image as PNG if requested
+                    if saveImages {
+                        do {
+                            try saveImages(image: subImage, trackNumber: trackNumber, index: subIndex)
+                        } catch {
+                            logger.error("Error saving image \(trackNumber)-\(subIndex): \(error.localizedDescription)")
+                        }
+                    }
+
+                    var subtitleLines: [SubtitleLine] = []
+                    var subtitleText = ""
+
+                    // Perform text recognition
+                    if !forceOldAPI, #available(macOS 15.0, *) {
+                        var request = RecognizeTextRequest()
+                        request.recognitionLevel = getOCRMode()
+                        request.usesLanguageCorrection = !disableLanguageCorrection
+                        request.recognitionLanguages = language.split(separator: ",")
+                            .map { Locale.Language(identifier: String($0)) }
+                        let result = try await request.perform(on: subImage) as [RecognizedTextObservation]
+
+                        subtitleText = result.compactMap { observation in
+                            guard let candidate = observation.topCandidates(1).first else { return "" }
+
+                            let string = candidate.string
+                            let confidence = candidate.confidence
+                            let stringRange = string.startIndex ..< string.endIndex
+                            let boundingBox = candidate.boundingBox(for: stringRange)!.boundingBox
+                            let rect = boundingBox.toImageCoordinates(
+                                CGSize(width: subImage.width, height: subImage.height),
+                                origin: .upperLeft)
+                            let line = SubtitleLine(
+                                text: string,
+                                confidence: confidence,
+                                x: max(0, Int(rect.minX)),
+                                width: Int(rect.size.width),
+                                y: max(0, Int(CGFloat(subImage.height) - rect.minY - rect.size.height)),
+                                height: Int(rect.size.height))
+                            subtitleLines.append(line)
+
+                            return string
+                        }.joined(separator: "\n")
+                    } else {
+                        let request = VNRecognizeTextRequest()
+                        request.recognitionLevel = getOCRMode()
+                        request.usesLanguageCorrection = !disableLanguageCorrection
+                        request.revision = VNRecognizeTextRequestRevision3
+                        request.recognitionLanguages = language.split(separator: ",").map { String($0) }
+
+                        try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
+                        let observations = request.results! as [VNRecognizedTextObservation]
+
+                        subtitleText = observations.compactMap { observation in
+                            guard let candidate = observation.topCandidates(1).first else { return "" }
+
+                            let string = candidate.string
+                            let confidence = candidate.confidence
+                            let stringRange = string.startIndex ..< string.endIndex
+                            let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox ?? .zero
+                            let rect = VNImageRectForNormalizedRect(
+                                boundingBox ?? .zero,
+                                subtitle.imageWidth!,
+                                subtitle.imageHeight!)
+
+                            let line = SubtitleLine(
+                                text: string,
+                                confidence: confidence,
+                                x: max(0, Int(rect.minX)),
+                                width: Int(rect.size.width),
+                                y: max(0, Int(CGFloat(subImage.height) - rect.minY - rect.size.height)),
+                                height: Int(rect.size.height))
+                            subtitleLines.append(line)
+
+                            return string
+                        }.joined(separator: "\n")
+                    }
+
+                    let subtitleOut = Subtitle(index: subIndex + 1, text: subtitleText,
+                                               startTimestamp: subtitle.startTimestamp,
+                                               endTimestamp: subtitle.endTimestamp)
+                    let jsonOut = SubtitleJSONResult(
+                        image: subIndex + 1,
+                        lines: subtitleLines,
+                        text: subtitleText)
+
+                    // Safely append to the arrays using the actor
+                    await accumulator.appendSubtitle(subtitleOut)
+                    await accumulator.appendJSON(jsonOut)
+                    await semaphore.signal()
                 }
-                subtitle.endTimestamp = subtitles[subIndex].startTimestamp! - 0.1
             }
-
-            guard let subImage = subtitle.createImage(invert)
-            else {
-                logger.info("Could not create image for index \(subIndex)! Skipping...")
-                continue
-            }
-
-            // Save subtitle image as PNG if requested
-            if saveImages {
-                do {
-                    try saveImages(image: subImage, trackNumber: trackNumber, index: subIndex)
-                } catch {
-                    logger.error("Error saving image \(trackNumber)-\(subIndex): \(error.localizedDescription)")
-                }
-            }
-
-            var subtitleLines: [[String: Any]] = []
-            var subtitleText = ""
-
-            // Perform text recognition
-            if !forceOldAPI, #available(macOS 15.0, *) {
-                var request = RecognizeTextRequest()
-                request.recognitionLevel = getOCRMode()
-                request.usesLanguageCorrection = !disableLanguageCorrection
-                request.recognitionLanguages = language.split(separator: ",").map { Locale.Language(identifier: String($0)) }
-                let result = try await request.perform(on: subImage) as [RecognizedTextObservation]
-
-                subtitleText = result.compactMap { observation in
-                    guard let candidate = observation.topCandidates(1).first else { return "" }
-
-                    let string = candidate.string
-                    let confidence = candidate.confidence
-                    let stringRange = string.startIndex ..< string.endIndex
-                    let boundingBox = candidate.boundingBox(for: stringRange)!.boundingBox
-                    let rect = boundingBox.toImageCoordinates(CGSize(width: subImage.width, height: subImage.height))
-                    let line: [String: Any] = [
-                        "text": string,
-                        "confidence": confidence,
-                        "x": max(0, Int(rect.minX)),
-                        "width": Int(rect.size.width),
-                        "y": max(0, Int(CGFloat(subImage.height) - rect.minY - rect.size.height)),
-                        "height": Int(rect.size.height)
-                    ]
-                    subtitleLines.append(line)
-
-                    return string
-                }.joined(separator: "\n")
-            } else { // Fallback on earlier versions
-                let request = VNRecognizeTextRequest()
-                request.recognitionLevel = getOCRMode()
-                request.usesLanguageCorrection = !disableLanguageCorrection
-                request.revision = VNRecognizeTextRequestRevision3
-                request.recognitionLanguages = language.split(separator: ",").map { String($0) }
-
-                try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
-                let observations = request.results! as [VNRecognizedTextObservation]
-
-                subtitleText = observations.compactMap { observation in
-                    guard let candidate = observation.topCandidates(1).first else { return "" }
-
-                    let string = candidate.string
-                    let confidence = candidate.confidence
-                    let stringRange = string.startIndex ..< string.endIndex
-                    let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox ?? .zero
-                    let rect = VNImageRectForNormalizedRect(
-                        boundingBox ?? .zero,
-                        subtitle.imageWidth!,
-                        subtitle.imageHeight!)
-
-                    let line: [String: Any] = [
-                        "text": string,
-                        "confidence": confidence,
-                        "x": Int(rect.minX),
-                        "width": Int(rect.size.width),
-                        "y": Int(CGFloat(subtitle.imageHeight!) - rect.minY - rect.size.height),
-                        "height": Int(rect.size.height)
-                    ]
-                    subtitleLines.append(line)
-
-                    return string
-                }.joined(separator: "\n")
-            }
-
-            srtSubtitles.append(Subtitle(index: subIndex, text: subtitleText,
-                                         startTimestamp: subtitle.startTimestamp,
-                                         endTimestamp: subtitle.endTimestamp))
-            if self.json {
-                json.append([
-                    "image": subIndex,
-                    "lines": subtitleLines,
-                    "text": subtitleText
-                ])
-            }
-
-            subIndex += 1
         }
-        return macSubtitleOCRResult(trackNumber: trackNumber, srt: srtSubtitles, json: json)
+
+        // Return results from the accumulator
+        return await macSubtitleOCRResult(trackNumber: trackNumber, srt: accumulator.srtSubtitles, json: accumulator.json)
     }
 }

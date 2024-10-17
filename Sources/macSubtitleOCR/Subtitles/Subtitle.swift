@@ -9,7 +9,7 @@
 import CoreGraphics
 import Foundation
 
-class Subtitle {
+struct Subtitle {
     var index: Int?
     var text: String?
     var startTimestamp: TimeInterval?
@@ -48,7 +48,7 @@ class Subtitle {
     // MARK: - Functions
 
     // Converts the RGBA data to a CGImage
-    func createImage(_ invert: Bool) -> CGImage? {
+    mutating func createImage(_ invert: Bool) -> CGImage? {
         // Convert the image data to RGBA format using the palette
         let rgbaData = imageDataToRGBA()
 
@@ -81,7 +81,7 @@ class Subtitle {
     // MARK: - Methods
 
     // Converts the image data to RGBA format using the palette
-    private func imageDataToRGBA() -> Data {
+    private mutating func imageDataToRGBA() -> Data {
         let bytesPerPixel = 4
         imageHeight = imageData!.count / imageWidth!
         var rgbaData = Data(capacity: imageWidth! * imageHeight! * bytesPerPixel)

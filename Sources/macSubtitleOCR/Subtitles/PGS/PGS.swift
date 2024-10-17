@@ -43,7 +43,7 @@ struct PGS {
     private mutating func parseData() throws {
         var headerData = data.extractBytes(pgsHeaderLength)
         while data.count > 0 {
-            guard let subtitle = try parseNextSubtitle(headerData: &headerData)
+            guard var subtitle = try parseNextSubtitle(headerData: &headerData)
             else {
                 if data.count < pgsHeaderLength { break }
                 headerData = data.extractBytes(pgsHeaderLength)

@@ -29,7 +29,7 @@ struct VobSubParser {
 
     // MARK: - Methods
 
-    func readSubFrame(subFile: FileHandle, offset: UInt64, nextOffset: UInt64, idxPalette _: [UInt8]) {
+    mutating func readSubFrame(subFile: FileHandle, offset: UInt64, nextOffset: UInt64, idxPalette _: [UInt8]) {
         var firstPacketFound = false
         var controlOffset: Int?
         var controlSize: Int?
@@ -74,7 +74,6 @@ struct VobSubParser {
                 presentationTimestamp += UInt64(ptsData[1]) << 22
                 presentationTimestamp += UInt64(ptsData[0] & 0x0E) << 29
                 subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90 / 1000
-                logger.debug("Got \(subtitle.startTimestamp!) as timestamp")
             }
 
             subFile.readData(ofLength: 1) // Stream ID
@@ -115,7 +114,7 @@ struct VobSubParser {
         parseCommandHeader(controlHeader, offset: relativeControlOffset)
     }
 
-    private func parseCommandHeader(_ header: Data, offset: Int) {
+    private mutating func parseCommandHeader(_ header: Data, offset: Int) {
         let relativeEndTimestamp = TimeInterval(Int(header.value(ofType: UInt16.self)!)) * 1024 / 90000 / fps
         let endOfControl = Int(header.value(ofType: UInt16.self)!) - 4 - offset
         subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
@@ -160,7 +159,6 @@ struct VobSubParser {
                 index += 1
                 subtitle.imageAlpha![1] = byte >> 4
                 subtitle.imageAlpha![0] = byte & 0x0F
-                logger.debug("Alpha: \(subtitle.imageAlpha!)")
             case 5:
                 if subtitle.imageXOffset != nil || subtitle.imageYOffset != nil {
                     break // Don't overwrite the offsets if they're already set, only happens in bad files
@@ -173,20 +171,17 @@ struct VobSubParser {
                 subtitle.imageHeight = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2])) - subtitle
                     .imageYOffset! + 1
                 index += 3
-                logger.debug("Image size: \(subtitle.imageWidth!)x\(subtitle.imageHeight!)")
-                logger.debug("X Offset: \(subtitle.imageXOffset!), Y Offset: \(subtitle.imageYOffset!)")
             case 6:
                 subtitle.evenOffset = Int(header.value(ofType: UInt16.self, at: index)! - 4)
                 subtitle.oddOffset = Int(header.value(ofType: UInt16.self, at: index + 2)! - 4)
                 index += 4
-                logger.debug("Even offset: \(subtitle.evenOffset!), Odd offset: \(subtitle.oddOffset!)")
             default:
                 break
             }
         }
     }
 
-    private func decodePalette() {
+    private mutating func decodePalette() {
         var palette = [UInt8](repeating: 0, count: 4 * 4)
 
         for i in 0 ..< 4 {
@@ -200,7 +195,7 @@ struct VobSubParser {
         subtitle.imagePalette = palette
     }
 
-    private func decodeImage() {
+    private mutating func decodeImage() {
         var rleData = RLEData(
             data: subtitle.imageData ?? Data(),
             width: subtitle.imageWidth ?? 0,
