@@ -125,10 +125,9 @@ struct FFmpeg {
             // Extract image data (bitmap)
             subtitle.imageWidth = Int(rect.pointee.w)
             subtitle.imageHeight = Int(rect.pointee.h)
-            subtitle.imageXOffset = Int(rect.pointee.linesize.0)
             logger.debug("Image size: \(subtitle.imageWidth!)x\(subtitle.imageHeight!)")
 
-            let imageSize = (subtitle.imageXOffset ?? 0) * (subtitle.imageHeight ?? 0)
+            let imageSize = Int(rect.pointee.linesize.0) * (subtitle.imageHeight ?? 0)
             if let bitmapData = rect.pointee.data.0 {
                 let buffer = UnsafeBufferPointer(start: bitmapData, count: imageSize)
                 subtitle.imageData = Data(buffer)

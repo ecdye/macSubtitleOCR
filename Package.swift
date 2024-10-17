@@ -26,7 +26,6 @@ let package = Package(
         .testTarget(
             name: "macSubtitleOCRTests",
             dependencies: [
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .target(name: "macSubtitleOCR")
             ],
             resources: [
