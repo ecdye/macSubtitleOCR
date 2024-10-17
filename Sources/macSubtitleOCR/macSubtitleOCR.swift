@@ -12,43 +12,56 @@ import UniformTypeIdentifiers
 
 private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
 
+struct ExperimentalOptions: ParsableArguments {
+    @Flag(help: "Use internal decoder (experimental)")
+    var internalDecoder = false
+
+    @Flag(help: "Force old API (experimental)")
+    var forceOldAPI = false
+
+    @Flag(help: "Save extracted subtitle file to disk (experimental)")
+    var saveSubtitleFile = false
+
+    @Flag(help: "Enable fast mode (experimental)")
+    var fastMode = false
+
+    @Flag(help: "Disable language correction (experimental)")
+    var disableLanguageCorrection = false
+}
+
 // The main struct representing the macSubtitleOCR command-line tool.
 @main
 struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Properties
 
-    @Argument(help: "Input file containing the subtitle stream (.sup, .sub, .idx, or .mkv)")
+    static let configuration = CommandConfiguration(
+        commandName: "macSubtitleOCR",
+        abstract: "macSubtitleOCR - Convert bitmap subtitles into SubRip format using the macOS OCR engine")
+
+    @Argument(help: "Input subtitle file (supported formats: .sup, .sub, .idx, .mkv)")
     var input: String
 
-    @Argument(help: "Directory to output files to")
+    @Argument(help: "Directory to save the output files")
     var outputDirectory: String
 
-    @Option(wrappedValue: "en", help: "The input image language(s)")
-    var language: String
+    @Option(wrappedValue: "en", name: [.customShort("l"), .long],
+            help: ArgumentHelp(
+                "Comma-separated list of languages for OCR (ISO 639-1 codes)",
+                valueName: "l"))
+    var languages: String
 
-    @Option(wrappedValue: 4, help: "The maximum number threads to use for OCR")
+    @Option(wrappedValue: 4, name: [.customShort("t"), .long],
+            help: ArgumentHelp("Maximum number of threads to use for OCR", valueName: "n"))
     var maxThreads: Int
 
-    @Flag(help: "Use internal decoder (experimental)")
-    var internalDecoder = false
-
-    @Flag(help: "Save image files for subtitle track (optional)")
+    @Flag(name: [.customShort("s"), .long], help: "Save extracted subtitle images to disk")
     var saveImages = false
 
-    @Flag(help: "Save the raw json results from OCR (optional)")
+    @Flag(name: [.customShort("j"), .long], help: "Save OCR results as raw JSON files")
     var json = false
 
-    @Flag(help: "Enable fast mode (less accurate)")
-    var fastMode = false
-
-    @Flag(help: "Disable language correction (less accurate)")
-    var disableLanguageCorrection = false
-
-    @Flag(help: "Force old API (VNRecognizeTextRequest)")
-    var forceOldAPI = false
-
-    @Flag(help: "Save extracted subtitle file to disk (MKV input only)")
-    var saveSubtitleFile = false
+    @OptionGroup(title: "Experimental Options", visibility: .hidden)
+    var experimentalOptions: ExperimentalOptions
 
     // MARK: - Entrypoint
 
@@ -61,7 +74,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Methods
 
     private func processInput(fileHandler: FileHandler) async throws -> [macSubtitleOCRResult] {
-        if internalDecoder {
+        if experimentalOptions.internalDecoder {
             try await processInternalDecoder(fileHandler: fileHandler)
         } else {
             try await processFFmpegDecoder(fileHandler: fileHandler)
@@ -83,7 +96,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
             try mkvStream.parseTracks(codec: "S_HDMV/PGS")
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
-                if saveSubtitleFile {
+                if experimentalOptions.saveSubtitleFile {
                     intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(
                         trackNumber: track.trackNumber,
                         outputDirectory: URL(string: fileHandler.outputDirectory)!)!
@@ -133,10 +146,10 @@ struct macSubtitleOCR: AsyncParsableCommand {
             trackNumber: trackNumber,
             invert: false,
             saveImages: saveImages,
-            language: language,
-            fastMode: fastMode,
-            disableLanguageCorrection: disableLanguageCorrection,
-            forceOldAPI: forceOldAPI,
+            language: languages,
+            fastMode: experimentalOptions.fastMode,
+            disableLanguageCorrection: experimentalOptions.disableLanguageCorrection,
+            forceOldAPI: experimentalOptions.forceOldAPI,
             outputDirectory: outputDirectory,
             maxConcurrentTasks: maxThreads)
     }
