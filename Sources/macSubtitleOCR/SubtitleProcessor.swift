@@ -56,10 +56,11 @@ struct SubtitleProcessor {
     let disableLanguageCorrection: Bool
     let forceOldAPI: Bool
     let outputDirectory: String
+    let maxConcurrentTasks: Int
 
     func process() async throws -> macSubtitleOCRResult {
         let accumulator = SubtitleAccumulator()
-        let semaphore = AsyncSemaphore(limit: 5) // Limit concurrent tasks to 5
+        let semaphore = AsyncSemaphore(limit: maxConcurrentTasks) // Limit concurrent tasks to 5
 
         try await withThrowingDiscardingTaskGroup { group in
             for (subIndex, var subtitle) in subtitles.enumerated() {

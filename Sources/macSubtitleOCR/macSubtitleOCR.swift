@@ -26,6 +26,9 @@ struct macSubtitleOCR: AsyncParsableCommand {
     @Option(wrappedValue: "en", help: "The input image language(s)")
     var language: String
 
+    @Option(wrappedValue: 4, help: "The maximum number threads to use for OCR")
+    var maxThreads: Int
+
     @Flag(help: "Use internal decoder (experimental)")
     var internalDecoder = false
 
@@ -134,7 +137,8 @@ struct macSubtitleOCR: AsyncParsableCommand {
             fastMode: fastMode,
             disableLanguageCorrection: disableLanguageCorrection,
             forceOldAPI: forceOldAPI,
-            outputDirectory: outputDirectory)
+            outputDirectory: outputDirectory,
+            maxConcurrentTasks: maxThreads)
     }
 
     private func saveResults(fileHandler: FileHandler, results: [macSubtitleOCRResult]) async throws {
