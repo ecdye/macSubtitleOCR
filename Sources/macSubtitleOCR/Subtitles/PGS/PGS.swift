@@ -15,7 +15,7 @@ struct PGS {
     // MARK: - Properties
 
     private(set) var subtitles = [Subtitle]()
-    private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
+    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
     private var data: Data
     private let pgsHeaderLength = 13
 
