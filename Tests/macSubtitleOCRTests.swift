@@ -27,13 +27,13 @@ let internalOptions = ["--json", "--internal-decoder"]
         jsonExpectedOutput = try String(contentsOfFile: goodJSONPath, encoding: .utf8)
     }
 
-    @Test func ffmpegMKV_PGS() throws {
+    @Test func ffmpegMKV_PGS() async throws {
         let outputPath = URL.temporaryDirectory.path
 
         // Run tests
         let options = [mkvPath, outputPath] + ffmpegOptions
-        var runner = try macSubtitleOCR.parseAsRoot(options)
-        try runner.run()
+        let runner = try macSubtitleOCR.parse(options)
+        try await runner.run()
 
         // Compare output
         let srt0ActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
@@ -53,13 +53,13 @@ let internalOptions = ["--json", "--internal-decoder"]
         #expect(json1Match >= 95.0)
     }
 
-    @Test func ffmpegPGS() throws {
+    @Test func ffmpegPGS() async throws {
         let outputPath = URL.temporaryDirectory.path
 
         // Run tests
         let options = [supPath, outputPath] + ffmpegOptions
-        var runner = try macSubtitleOCR.parseAsRoot(options)
-        try runner.run()
+        let runner = try macSubtitleOCR.parse(options)
+        try await runner.run()
 
         // Compare output
         let srtActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
@@ -72,13 +72,13 @@ let internalOptions = ["--json", "--internal-decoder"]
         #expect(jsonMatch >= 95.0)
     }
 
-    @Test func ffmpegVobSub() throws {
+    @Test func ffmpegVobSub() async throws {
         let outputPath = URL.temporaryDirectory.path
 
         // Run tests
         let options = [subPath, outputPath] + ffmpegOptions
-        var runner = try macSubtitleOCR.parseAsRoot(options)
-        try runner.run()
+        let runner = try macSubtitleOCR.parse(options)
+        try await runner.run()
 
         // Compare output
         let srtActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
@@ -101,13 +101,13 @@ let internalOptions = ["--json", "--internal-decoder"]
         jsonExpectedOutput = try String(contentsOfFile: goodJSONPath, encoding: .utf8)
     }
 
-    @Test func internalMKV_PGS() throws {
+    @Test func internalMKV_PGS() async throws {
         let outputPath = URL.temporaryDirectory.path
 
         // Run tests
         let options = [mkvPath, outputPath] + internalOptions
-        var runner = try macSubtitleOCR.parseAsRoot(options)
-        try runner.run()
+        let runner = try macSubtitleOCR.parse(options)
+        try await runner.run()
 
         // Compare output
         let srt0ActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
@@ -127,13 +127,13 @@ let internalOptions = ["--json", "--internal-decoder"]
         #expect(json1Match >= 95.0)
     }
 
-    @Test func internalPGS() throws {
+    @Test func internalPGS() async throws {
         let outputPath = URL.temporaryDirectory.path
 
         // Run tests
         let options = [supPath, outputPath] + internalOptions
-        var runner = try macSubtitleOCR.parseAsRoot(options)
-        try runner.run()
+        let runner = try macSubtitleOCR.parse(options)
+        try await runner.run()
 
         // Compare output
         let srtActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
@@ -146,13 +146,13 @@ let internalOptions = ["--json", "--internal-decoder"]
         #expect(jsonMatch >= 95.0)
     }
 
-    @Test func internalVobSub() throws {
+    @Test func internalVobSub() async throws {
         let outputPath = URL.temporaryDirectory.path
 
         // Run tests
         let options = [subPath, outputPath] + internalOptions
-        var runner = try macSubtitleOCR.parseAsRoot(options)
-        try runner.run()
+        let runner = try macSubtitleOCR.parse(options)
+        try await runner.run()
 
         // Compare output
         let srtActualOutput = try String(contentsOfFile: outputPath + "/track_0.srt", encoding: .utf8)
