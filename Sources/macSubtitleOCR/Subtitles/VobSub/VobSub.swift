@@ -19,14 +19,19 @@ struct VobSub {
 
     init(_ sub: String, _ idx: String) throws {
         let subFile = try FileHandle(forReadingFrom: URL(filePath: sub))
-        defer { subFile.closeFile() }
+        var subData = try subFile.readToEnd()!
+        subFile.closeFile()
         let idx = VobSubIDX(URL(filePath: idx))
-        extractSubtitleImages(subFile: subFile, idx: idx)
+        subData.withUnsafeMutableBytes { (pointer: UnsafeMutableRawBufferPointer) in
+            var pointer = pointer
+            extractSubtitleImages(subData: &pointer, idx: idx)
+        }
+        // extractSubtitleImages(subData: subData, idx: idx)
     }
 
     // MARK: - Methods
 
-    private mutating func extractSubtitleImages(subFile: FileHandle, idx: VobSubIDX) {
+    private mutating func extractSubtitleImages(subData: inout UnsafeMutableRawBufferPointer, idx: VobSubIDX) {
         for index in idx.offsets.indices {
             logger.debug("Index \(index), offset: \(idx.offsets[index]), timestamp: \(idx.timestamps[index])")
             let offset = idx.offsets[index]
@@ -34,11 +39,11 @@ struct VobSub {
             let nextOffset: UInt64 = if index + 1 < idx.offsets.count {
                 idx.offsets[index + 1]
             } else {
-                subFile.seekToEndOfFile()
+                UInt64(subData.count)
             }
             let subtitle = VobSubParser(
                 index: index + 1,
-                subFile: subFile,
+                subData: &subData,
                 timestamp: timestamp,
                 offset: offset,
                 nextOffset: nextOffset,
