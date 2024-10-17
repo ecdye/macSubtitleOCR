@@ -24,9 +24,9 @@ jobs:
           STATUS="$(gh api -H "Accept: application/vnd.github+json" \
                     -H "X-GitHub-Api-Version: 2022-11-28" \
                     "/repos/ecdye/macSubtitleOCR/actions/runs?branch=main&head_sha=${{ github.sha }}&status=completed" | \
-                    jq '.workflow_runs[] | select(.name == "Build") | if .conclusion == "success" then .conclusion end')"
-          test -n $(git rev-list  --after="24 hours" ${{ github.sha }}) &&
-          if [[ $STATUS == "success" ]]; then
+                    jq '.workflow_runs[] | select(.name == "Build") | .conclusion')"
+          COMMIT="$(git rev-list  --after="24 hours" ${{ github.sha }})""
+          if [[ $STATUS == "\"success\"" ]] && [[ -n $COMMIT ]]; then
             echo "::set-output name=should_run::true"
           else
             echo "::set-output name=should_run::false"
