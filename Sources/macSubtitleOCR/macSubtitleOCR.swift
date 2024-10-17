@@ -15,7 +15,7 @@ private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", cat
 
 // The main struct representing the macSubtitleOCR command-line tool.
 @main
-struct macSubtitleOCR: ParsableCommand {
+struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Properties
 
     @Argument(help: "Input file containing the subtitle stream (.sup, .sub, .idx, or .mkv)")
@@ -42,12 +42,15 @@ struct macSubtitleOCR: ParsableCommand {
     @Flag(help: "Disable language correction (less accurate)")
     var disableLanguageCorrection = false
 
+    @Flag(help: "Force old API (VNRecognizeTextRequest)")
+    var forceOldAPI = false
+
     @Flag(help: "Save extracted subtitle file to disk (MKV input only)")
     var saveSubtitleFile = false
 
     // MARK: - Entrypoint
 
-    func run() throws {
+    func run() async throws {
         let fileManager = FileManager.default
         var intermediateFiles: [Int: String] = [:]
         var results: [macSubtitleOCRResult] = []
@@ -58,7 +61,7 @@ struct macSubtitleOCR: ParsableCommand {
                 let sub = try VobSub(
                     input.replacingOccurrences(of: ".idx", with: ".sub"),
                     input.replacingOccurrences(of: ".sub", with: ".idx"))
-                let result = try processSubtitles(subtitles: sub.subtitles, trackNumber: 0)
+                let result = try await processSubtitles(subtitles: sub.subtitles, trackNumber: 0)
                 results.append(result)
             } else if input.hasSuffix(".mkv") {
                 let mkvStream = MKVSubtitleExtractor(filePath: input)
@@ -74,20 +77,20 @@ struct macSubtitleOCR: ParsableCommand {
                     // Open the PGS data stream
                     let PGS = try PGS(mkvStream.tracks[track.trackNumber].trackData)
 
-                    let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: track.trackNumber)
+                    let result = try await processSubtitles(subtitles: PGS.subtitles, trackNumber: track.trackNumber)
                     results.append(result)
                 }
             } else if input.hasSuffix(".sup") {
                 // Open the PGS data stream
                 let PGS = try PGS(URL(fileURLWithPath: input))
-                let result = try processSubtitles(subtitles: PGS.subtitles, trackNumber: 0)
+                let result = try await processSubtitles(subtitles: PGS.subtitles, trackNumber: 0)
                 results.append(result)
             }
         } else {
             let ffmpeg = try FFmpeg(input)
             for result in ffmpeg.subtitleTracks {
                 logger.debug("Processing subtitle track: \(result.key)")
-                let result = try processSubtitles(subtitles: result.value, trackNumber: result.key)
+                let result = try await processSubtitles(subtitles: result.value, trackNumber: result.key, invert: false)
                 results.append(result)
             }
         }
@@ -116,11 +119,20 @@ struct macSubtitleOCR: ParsableCommand {
 
     // MARK: - Methods
 
+    @available(macOS 15.0, *)
+    private func getOCRMode() -> RecognizeTextRequest.RecognitionLevel {
+        if fastMode {
+            .fast
+        } else {
+            .accurate
+        }
+    }
+
     private func getOCRMode() -> VNRequestTextRecognitionLevel {
         if fastMode {
-            VNRequestTextRecognitionLevel.fast
+            .fast
         } else {
-            VNRequestTextRecognitionLevel.accurate
+            .accurate
         }
     }
 
@@ -141,7 +153,8 @@ struct macSubtitleOCR: ParsableCommand {
         }
     }
 
-    private func processSubtitles(subtitles: [Subtitle], trackNumber: Int) throws -> macSubtitleOCRResult {
+    private func processSubtitles(subtitles: [Subtitle], trackNumber: Int,
+                                  invert: Bool = true) async throws -> macSubtitleOCRResult {
         var subIndex = 1
         var json: [Any] = []
         var srtSubtitles: [Subtitle] = []
@@ -160,7 +173,7 @@ struct macSubtitleOCR: ParsableCommand {
                 subtitle.endTimestamp = subtitles[subIndex].startTimestamp! - 0.1
             }
 
-            guard let subImage = subtitle.createImage()
+            guard let subImage = subtitle.createImage(invert)
             else {
                 logger.info("Could not create image for index \(subIndex)! Skipping...")
                 continue
@@ -175,13 +188,49 @@ struct macSubtitleOCR: ParsableCommand {
                 }
             }
 
-            // Perform text recognition
-            let request = VNRecognizeTextRequest { request, _ in
-                guard let observations = request.results as? [VNRecognizedTextObservation] else { return }
+            var subtitleLines: [[String: Any]] = []
+            var subtitleText = ""
 
-                var subtitleLines: [[String: Any]] = []
-                let subtitleText = observations.compactMap { observation in
-                    guard let candidate = observation.topCandidates(1).first else { return nil }
+            // Perform text recognition
+            if !forceOldAPI, #available(macOS 15.0, *) {
+                var request = RecognizeTextRequest()
+                request.recognitionLevel = getOCRMode()
+                request.usesLanguageCorrection = !disableLanguageCorrection
+                request.recognitionLanguages = language.split(separator: ",").map { Locale.Language(identifier: String($0)) }
+                let result = try await request.perform(on: subImage) as [RecognizedTextObservation]
+
+                subtitleText = result.compactMap { observation in
+                    guard let candidate = observation.topCandidates(1).first else { return "" }
+
+                    let string = candidate.string
+                    let confidence = candidate.confidence
+                    let stringRange = string.startIndex ..< string.endIndex
+                    let boundingBox = candidate.boundingBox(for: stringRange)!.boundingBox
+                    let rect = boundingBox.toImageCoordinates(CGSize(width: subImage.width, height: subImage.height))
+                    let line: [String: Any] = [
+                        "text": string,
+                        "confidence": confidence,
+                        "x": max(0, Int(rect.minX)),
+                        "width": Int(rect.size.width),
+                        "y": max(0, Int(CGFloat(subImage.height) - rect.minY - rect.size.height)),
+                        "height": Int(rect.size.height)
+                    ]
+                    subtitleLines.append(line)
+
+                    return string
+                }.joined(separator: "\n")
+            } else { // Fallback on earlier versions
+                let request = VNRecognizeTextRequest()
+                request.recognitionLevel = getOCRMode()
+                request.usesLanguageCorrection = !disableLanguageCorrection
+                request.revision = VNRecognizeTextRequestRevision3
+                request.recognitionLanguages = language.split(separator: ",").map { String($0) }
+
+                try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
+                let observations = request.results! as [VNRecognizedTextObservation]
+
+                subtitleText = observations.compactMap { observation in
+                    guard let candidate = observation.topCandidates(1).first else { return "" }
 
                     let string = candidate.string
                     let confidence = candidate.confidence
@@ -204,26 +253,18 @@ struct macSubtitleOCR: ParsableCommand {
 
                     return string
                 }.joined(separator: "\n")
-
-                if self.json {
-                    json.append([
-                        "image": subIndex,
-                        "lines": subtitleLines,
-                        "text": subtitleText
-                    ])
-                }
-
-                srtSubtitles.append(Subtitle(index: subIndex, text: subtitleText,
-                                             startTimestamp: subtitle.startTimestamp,
-                                             endTimestamp: subtitle.endTimestamp))
             }
 
-            request.recognitionLevel = getOCRMode()
-            request.usesLanguageCorrection = !disableLanguageCorrection
-            request.revision = VNRecognizeTextRequestRevision3
-            request.recognitionLanguages = language.split(separator: ",").map { String($0) }
-
-            try? VNImageRequestHandler(cgImage: subImage, options: [:]).perform([request])
+            srtSubtitles.append(Subtitle(index: subIndex, text: subtitleText,
+                                         startTimestamp: subtitle.startTimestamp,
+                                         endTimestamp: subtitle.endTimestamp))
+            if self.json {
+                json.append([
+                    "image": subIndex,
+                    "lines": subtitleLines,
+                    "text": subtitleText
+                ])
+            }
 
             subIndex += 1
         }

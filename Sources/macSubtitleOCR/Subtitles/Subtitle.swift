@@ -48,7 +48,7 @@ class Subtitle {
     // MARK: - Functions
 
     // Converts the RGBA data to a CGImage
-    func createImage() -> CGImage? {
+    func createImage(_ invert: Bool) -> CGImage? {
         // Convert the image data to RGBA format using the palette
         let rgbaData = imageDataToRGBA()
 
@@ -72,7 +72,10 @@ class Subtitle {
                             shouldInterpolate: false,
                             intent: .defaultIntent)
 
-        return cropImageToVisibleArea(image!)
+        if !invert {
+            return cropImageToVisibleArea(image!)!
+        }
+        return invertColors(of: cropImageToVisibleArea(image!)!)
     }
 
     // MARK: - Methods
@@ -109,7 +112,7 @@ class Subtitle {
     /// - Parameter image: The original CGImage to crop.
     /// - Returns: A cropped CGImage, or nil if the image is fully transparent.
     private func cropImageToVisibleArea(_ image: CGImage) -> CGImage? {
-        let buffer = 5 // Buffer size around the non-transparent area
+        let buffer = 10 // Buffer size around the non-transparent area
         let width = image.width
         let height = image.height
         let newWidth = width + buffer * 2
@@ -174,5 +177,47 @@ class Subtitle {
         // Crop the image to the visible (non-transparent) area with the buffer
         let croppedRect = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
         return extendedImage.cropping(to: croppedRect)
+    }
+
+    func invertColors(of image: CGImage) -> CGImage? {
+        // Get the width, height, and color space of the image
+        let width = image.width
+        let height = image.height
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        // Create a context with the same dimensions as the image
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return nil
+        }
+
+        // Draw the image into the context
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        // Get the pixel data from the context
+        guard let pixelBuffer = context.data else {
+            return nil
+        }
+
+        let pixelData = pixelBuffer.bindMemory(to: UInt8.self, capacity: width * height * 4)
+
+        // Iterate through the pixel data and invert the colors
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let pixelIndex = (y * width + x) * 4
+                pixelData[pixelIndex] = 255 - pixelData[pixelIndex] // Red
+                pixelData[pixelIndex + 1] = 255 - pixelData[pixelIndex + 1] // Green
+                pixelData[pixelIndex + 2] = 255 - pixelData[pixelIndex + 2] // Blue
+            }
+        }
+
+        // Create a new CGImage from the modified pixel data
+        return context.makeImage()
     }
 }
