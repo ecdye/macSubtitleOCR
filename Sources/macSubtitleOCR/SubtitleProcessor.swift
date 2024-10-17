@@ -148,7 +148,8 @@ struct SubtitleProcessor {
     }
 
     @available(macOS 15.0, *)
-    private func processRecognizedText(_ result: [RecognizedTextObservation]?, _ text: inout String, _ lines: inout [SubtitleLine], _ size: CGSize) {
+    private func processRecognizedText(_ result: [RecognizedTextObservation]?, _ text: inout String,
+                                       _ lines: inout [SubtitleLine], _ size: CGSize) {
         text = result?.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return "" }
 
@@ -170,7 +171,8 @@ struct SubtitleProcessor {
         }.joined(separator: "\n") ?? ""
     }
 
-    private func processVNRecognizedText(_ observations: [VNRecognizedTextObservation], _ text: inout String, _ lines: inout [SubtitleLine], _ width: Int, _ height: Int) {
+    private func processVNRecognizedText(_ observations: [VNRecognizedTextObservation], _ text: inout String,
+                                         _ lines: inout [SubtitleLine], _ width: Int, _ height: Int) {
         text = observations.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return "" }
 
