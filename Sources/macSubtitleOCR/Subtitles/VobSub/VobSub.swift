@@ -37,6 +37,7 @@ struct VobSub {
                 subFile.seekToEndOfFile()
             }
             let subtitle = VobSubParser(
+                index: index + 1,
                 subFile: subFile,
                 timestamp: timestamp,
                 offset: offset,

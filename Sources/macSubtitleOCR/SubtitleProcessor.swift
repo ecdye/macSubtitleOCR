@@ -2,7 +2,7 @@
 // SubtitleProcessor.swift
 // macSubtitleOCR
 //
-// Created by Ethan Dye on 9/2/24.
+// Created by Ethan Dye on 10/16/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
@@ -12,18 +12,18 @@ import os
 import UniformTypeIdentifiers
 import Vision
 
-private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", category: "SubtitleProcessor")
+private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SubtitleProcessor")
 
 actor SubtitleAccumulator {
-    var srtSubtitles: [Int: Subtitle] = [:]
-    var json: [Int: SubtitleJSONResult] = [:]
+    var subtitles: [Subtitle] = []
+    var json: [SubtitleJSONResult] = []
 
     func appendSubtitle(_ subtitle: Subtitle) {
-        srtSubtitles[subtitle.index!] = subtitle
+        subtitles.append(subtitle)
     }
 
     func appendJSON(_ jsonOut: SubtitleJSONResult) {
-        json[jsonOut.image] = jsonOut
+        json.append(jsonOut)
     }
 }
 
@@ -60,13 +60,14 @@ struct SubtitleProcessor {
 
     func process() async throws -> macSubtitleOCRResult {
         let accumulator = SubtitleAccumulator()
-        let semaphore = AsyncSemaphore(limit: maxConcurrentTasks) // Limit concurrent tasks to 5
+        let semaphore = AsyncSemaphore(limit: maxConcurrentTasks) // Limit concurrent tasks
 
         try await withThrowingDiscardingTaskGroup { group in
-            for (subIndex, var subtitle) in subtitles.enumerated() {
+            for subtitle in subtitles {
                 group.addTask {
                     // Wait for permission to start the task
                     await semaphore.wait()
+                    let subIndex = subtitle.index
 
                     guard !shouldSkipSubtitle(subtitle, at: subIndex) else {
                         await semaphore.signal()
@@ -74,7 +75,7 @@ struct SubtitleProcessor {
                     }
 
                     guard let subImage = subtitle.createImage(invert) else {
-                        logger.info("Could not create image for index \(subIndex + 1)! Skipping...")
+                        logger.warning("Could not create image for index \(subIndex)! Skipping...")
                         await semaphore.signal()
                         return
                     }
@@ -82,54 +83,46 @@ struct SubtitleProcessor {
                     // Save subtitle image as PNG if requested
                     if saveImages {
                         do {
-                            try saveImages(image: subImage, trackNumber: trackNumber, index: subIndex)
+                            try saveImage(subImage, index: subIndex)
                         } catch {
                             logger.error("Error saving image \(trackNumber)-\(subIndex): \(error.localizedDescription)")
                         }
                     }
 
                     let (subtitleText, subtitleLines) = await recognizeText(from: subImage, at: subIndex)
+                    subtitle.text = subtitleText
+                    subtitle.imageData = nil // Clear the image data to save memory
 
-                    let subtitleOut = Subtitle(index: subIndex + 1, text: subtitleText,
-                                               startTimestamp: subtitle.startTimestamp,
-                                               endTimestamp: subtitle.endTimestamp)
-                    let jsonOut = SubtitleJSONResult(
-                        image: subIndex + 1,
-                        lines: subtitleLines,
-                        text: subtitleText)
+                    let jsonOut = SubtitleJSONResult(index: subIndex, lines: subtitleLines, text: subtitleText)
 
                     // Safely append to the arrays using the actor
-                    await accumulator.appendSubtitle(subtitleOut)
+                    await accumulator.appendSubtitle(subtitle)
                     await accumulator.appendJSON(jsonOut)
                     await semaphore.signal()
                 }
             }
         }
 
-        // Return results from the accumulator
-        return await macSubtitleOCRResult(trackNumber: trackNumber, srt: accumulator.srtSubtitles, json: accumulator.json)
+        return await macSubtitleOCRResult(trackNumber: trackNumber, srt: accumulator.subtitles, json: accumulator.json)
     }
 
     private func shouldSkipSubtitle(_ subtitle: Subtitle, at index: Int) -> Bool {
         if subtitle.imageWidth == 0 || subtitle.imageHeight == 0 {
-            logger.warning("Skipping subtitle index \(index + 1) with empty image data!")
+            logger.warning("Skipping subtitle index \(index) with empty image data!")
             return true
         }
         return false
     }
 
     private func recognizeText(from image: CGImage, at _: Int) async -> (String, [SubtitleLine]) {
-        var subtitleLines: [SubtitleLine] = []
-        var subtitleText = ""
+        var text = ""
+        var lines: [SubtitleLine] = []
 
         if !forceOldAPI, #available(macOS 15.0, *) {
             let request = createRecognizeTextRequest()
-            let result = try? await request.perform(on: image) as [RecognizedTextObservation]
-            subtitleText = processRecognizedText(
-                result,
-                subtitleLines: &subtitleLines,
-                imageWidth: image.width,
-                imageHeight: image.height)
+            let observations = try? await request.perform(on: image) as [RecognizedTextObservation]
+            let size = CGSize(width: image.width, height: image.height)
+            processRecognizedText(observations, &text, &lines, size)
         } else {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = getOCRMode()
@@ -139,14 +132,10 @@ struct SubtitleProcessor {
 
             try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
             let observations = request.results! as [VNRecognizedTextObservation]
-            subtitleText = processVNRecognizedText(
-                observations,
-                subtitleLines: &subtitleLines,
-                imageWidth: image.width,
-                imageHeight: image.height)
+            processVNRecognizedText(observations, &text, &lines, image.width, image.height)
         }
 
-        return (subtitleText, subtitleLines)
+        return (text, lines)
     }
 
     @available(macOS 15.0, *)
@@ -159,54 +148,52 @@ struct SubtitleProcessor {
     }
 
     @available(macOS 15.0, *)
-    private func processRecognizedText(_ result: [RecognizedTextObservation]?, subtitleLines: inout [SubtitleLine],
-                                       imageWidth: Int, imageHeight: Int) -> String {
-        result?.compactMap { observation in
+    private func processRecognizedText(_ result: [RecognizedTextObservation]?, _ text: inout String, _ lines: inout [SubtitleLine], _ size: CGSize) {
+        text = result?.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return "" }
 
             let string = candidate.string
             let confidence = candidate.confidence
             let stringRange = string.startIndex ..< string.endIndex
             let boundingBox = candidate.boundingBox(for: stringRange)!.boundingBox
-            let rect = boundingBox.toImageCoordinates(CGSize(width: imageWidth, height: imageHeight), origin: .upperLeft)
+            let rect = boundingBox.toImageCoordinates(size, origin: .upperLeft)
             let line = SubtitleLine(
                 text: string,
                 confidence: confidence,
                 x: max(0, Int(rect.minX)),
                 width: Int(rect.size.width),
-                y: max(0, Int(CGFloat(imageHeight) - rect.minY - rect.size.height)),
+                y: max(0, Int(size.height - rect.minY - rect.size.height)),
                 height: Int(rect.size.height))
-            subtitleLines.append(line)
+            lines.append(line)
 
             return string
         }.joined(separator: "\n") ?? ""
     }
 
-    private func processVNRecognizedText(_ observations: [VNRecognizedTextObservation], subtitleLines: inout [SubtitleLine],
-                                         imageWidth: Int, imageHeight: Int) -> String {
-        observations.compactMap { observation in
+    private func processVNRecognizedText(_ observations: [VNRecognizedTextObservation], _ text: inout String, _ lines: inout [SubtitleLine], _ width: Int, _ height: Int) {
+        text = observations.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return "" }
 
             let string = candidate.string
             let confidence = candidate.confidence
             let stringRange = string.startIndex ..< string.endIndex
             let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox ?? .zero
-            let rect = VNImageRectForNormalizedRect(boundingBox ?? .zero, imageWidth, imageHeight)
+            let rect = VNImageRectForNormalizedRect(boundingBox ?? .zero, width, height)
 
             let line = SubtitleLine(
                 text: string,
                 confidence: confidence,
                 x: max(0, Int(rect.minX)),
                 width: Int(rect.size.width),
-                y: max(0, Int(CGFloat(imageHeight) - rect.minY - rect.size.height)),
+                y: max(0, Int(CGFloat(height) - rect.minY - rect.size.height)),
                 height: Int(rect.size.height))
-            subtitleLines.append(line)
+            lines.append(line)
 
             return string
         }.joined(separator: "\n")
     }
 
-    private func saveImages(image: CGImage, trackNumber: Int = 0, index: Int) throws {
+    private func saveImage(_ image: CGImage, index: Int) throws {
         let outputDirectory = URL(fileURLWithPath: outputDirectory)
         let imageDirectory = outputDirectory.appendingPathComponent("images/" + "track_\(trackNumber)/")
         let pngPath = imageDirectory.appendingPathComponent("subtitle_\(index).png")

@@ -10,7 +10,7 @@ import ArgumentParser
 import os
 import UniformTypeIdentifiers
 
-private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
+private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
 
 // The main struct representing the macSubtitleOCR command-line tool.
 @main

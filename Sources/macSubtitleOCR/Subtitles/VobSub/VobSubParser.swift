@@ -13,15 +13,15 @@ struct VobSubParser {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "VobSubParser")
-    private(set) var subtitle: Subtitle = .init(imageData: .init(), numberOfColors: 16)
+    let subtitle: Subtitle
     private let masterPalette: [UInt8]
     private let fps = 24.0 // TODO: Make this configurable / dynamic
 
     // MARK: - Lifecycle
 
-    init(subFile: FileHandle, timestamp: TimeInterval, offset: UInt64, nextOffset: UInt64, idxPalette: [UInt8]) {
+    init(index: Int, subFile: FileHandle, timestamp: TimeInterval, offset: UInt64, nextOffset: UInt64, idxPalette: [UInt8]) {
+        subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
-        subtitle.startTimestamp = timestamp
         readSubFrame(subFile: subFile, offset: offset, nextOffset: nextOffset, idxPalette: idxPalette)
         decodeImage()
         decodePalette()
@@ -29,7 +29,7 @@ struct VobSubParser {
 
     // MARK: - Methods
 
-    mutating func readSubFrame(subFile: FileHandle, offset: UInt64, nextOffset: UInt64, idxPalette _: [UInt8]) {
+    func readSubFrame(subFile: FileHandle, offset: UInt64, nextOffset: UInt64, idxPalette _: [UInt8]) {
         var firstPacketFound = false
         var controlOffset: Int?
         var controlSize: Int?
@@ -114,7 +114,7 @@ struct VobSubParser {
         parseCommandHeader(controlHeader, offset: relativeControlOffset)
     }
 
-    private mutating func parseCommandHeader(_ header: Data, offset: Int) {
+    private func parseCommandHeader(_ header: Data, offset: Int) {
         let relativeEndTimestamp = TimeInterval(Int(header.value(ofType: UInt16.self)!)) * 1024 / 90000 / fps
         let endOfControl = Int(header.value(ofType: UInt16.self)!) - 4 - offset
         subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
@@ -181,7 +181,7 @@ struct VobSubParser {
         }
     }
 
-    private mutating func decodePalette() {
+    private func decodePalette() {
         var palette = [UInt8](repeating: 0, count: 4 * 4)
 
         for i in 0 ..< 4 {
@@ -195,7 +195,7 @@ struct VobSubParser {
         subtitle.imagePalette = palette
     }
 
-    private mutating func decodeImage() {
+    private func decodeImage() {
         var rleData = RLEData(
             data: subtitle.imageData ?? Data(),
             width: subtitle.imageWidth ?? 0,

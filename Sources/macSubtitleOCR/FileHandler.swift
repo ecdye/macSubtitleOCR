@@ -17,14 +17,14 @@ struct FileHandler {
 
     func saveSRTFile(for result: macSubtitleOCRResult) throws {
         let srtFilePath = URL(fileURLWithPath: outputDirectory).appendingPathComponent("track_\(result.trackNumber).srt")
-        let srt = SRT(subtitles: result.srt.values.sorted { $0.index! < $1.index! })
+        let srt = SRT(subtitles: result.srt.sorted { $0.index < $1.index })
         srt.write(toFileAt: srtFilePath)
     }
 
     func saveJSONFile(for result: macSubtitleOCRResult) throws {
-        let jsonResults = result.json.values.sorted { $0.image < $1.image }.map { jsonResult in
+        let jsonResults = result.json.sorted { $0.index < $1.index }.map { jsonResult in
             [
-                "image": jsonResult.image,
+                "image": jsonResult.index,
                 "lines": jsonResult.lines.map { line in
                     [
                         "text": line.text,

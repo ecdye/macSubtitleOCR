@@ -8,12 +8,12 @@
 
 struct macSubtitleOCRResult {
     var trackNumber: Int
-    var srt: [Int: Subtitle]
-    var json: [Int: SubtitleJSONResult]
+    var srt: [Subtitle]
+    var json: [SubtitleJSONResult]
 }
 
 struct SubtitleJSONResult: Sendable {
-    let image: Int
+    let index: Int
     let lines: [SubtitleLine]
     let text: String
 }

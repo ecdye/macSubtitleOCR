@@ -15,7 +15,7 @@ struct PGS {
     // MARK: - Properties
 
     private(set) var subtitles = [Subtitle]()
-    private let logger: Logger = .init(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
+    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
     private var data: Data
     private let pgsHeaderLength = 13
 
@@ -43,7 +43,7 @@ struct PGS {
     private mutating func parseData() throws {
         var headerData = data.extractBytes(pgsHeaderLength)
         while data.count > 0 {
-            guard var subtitle = try parseNextSubtitle(headerData: &headerData)
+            guard let subtitle = try parseNextSubtitle(headerData: &headerData)
             else {
                 if data.count < pgsHeaderLength { break }
                 headerData = data.extractBytes(pgsHeaderLength)
@@ -120,6 +120,7 @@ struct PGS {
             guard let pds, let ods else { continue }
             let startTimestamp = parseTimestamp(headerData)
             return Subtitle(
+                index: subtitles.count + 1,
                 startTimestamp: startTimestamp,
                 imageWidth: ods.objectWidth,
                 imageHeight: ods.objectHeight,

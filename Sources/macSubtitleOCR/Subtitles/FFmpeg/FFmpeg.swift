@@ -90,7 +90,7 @@ struct FFmpeg {
                 var trackSubtitles = subtitleTracks[streamNumber] ?? []
                 for i in 0 ..< Int(subtitle.num_rects) {
                     let rect = subtitle.rects[i]!
-                    var sub = extractImageData(from: rect)
+                    let sub = extractImageData(from: rect, index: trackSubtitles.count + 1)
                     let pts = convertToTimeInterval(packet!.pointee.pts, timeBase: stream.timeBase)
                     sub.startTimestamp = pts + convertToTimeInterval(subtitle.start_display_time, timeBase: timeBase)
                     sub.endTimestamp = pts + convertToTimeInterval(subtitle.end_display_time, timeBase: timeBase)
@@ -102,8 +102,8 @@ struct FFmpeg {
         }
     }
 
-    private func extractImageData(from rect: UnsafeMutablePointer<AVSubtitleRect>) -> Subtitle {
-        var subtitle = Subtitle(numberOfColors: Int(rect.pointee.nb_colors))
+    private func extractImageData(from rect: UnsafeMutablePointer<AVSubtitleRect>, index: Int) -> Subtitle {
+        let subtitle = Subtitle(index: index, numberOfColors: Int(rect.pointee.nb_colors))
 
         // Check if the subtitle is an image (bitmap)
         if rect.pointee.type == SUBTITLE_BITMAP {

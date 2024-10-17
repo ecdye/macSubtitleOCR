@@ -9,8 +9,8 @@
 import CoreGraphics
 import Foundation
 
-struct Subtitle {
-    var index: Int?
+class Subtitle: @unchecked Sendable {
+    var index: Int
     var text: String?
     var startTimestamp: TimeInterval?
     var imageXOffset: Int?
@@ -25,7 +25,7 @@ struct Subtitle {
     var evenOffset: Int?
     var oddOffset: Int?
 
-    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil,
+    init(index: Int, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil,
          imageXOffset: Int? = nil, imageYOffset: Int? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil,
          imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, numberOfColors: Int? = nil,
          evenOffset: Int? = nil, oddOffset: Int? = nil) {
@@ -48,7 +48,7 @@ struct Subtitle {
     // MARK: - Functions
 
     // Converts the RGBA data to a CGImage
-    mutating func createImage(_ invert: Bool) -> CGImage? {
+    func createImage(_ invert: Bool) -> CGImage? {
         // Convert the image data to RGBA format using the palette
         let rgbaData = imageDataToRGBA()
 
@@ -81,7 +81,7 @@ struct Subtitle {
     // MARK: - Methods
 
     // Converts the image data to RGBA format using the palette
-    private mutating func imageDataToRGBA() -> Data {
+    private func imageDataToRGBA() -> Data {
         let bytesPerPixel = 4
         imageHeight = imageData!.count / imageWidth!
         var rgbaData = Data(capacity: imageWidth! * imageHeight! * bytesPerPixel)
