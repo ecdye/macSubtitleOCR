@@ -15,8 +15,8 @@ let subPath = Bundle.module.url(forResource: "test.sub", withExtension: nil)!.pa
 let mkvPath = Bundle.module.url(forResource: "test.mkv", withExtension: nil)!.path
 let goodSRTPath = Bundle.module.url(forResource: "test.srt", withExtension: nil)!.path
 let goodJSONPath = Bundle.module.url(forResource: "test.json", withExtension: nil)!.path
-let ffmpegOptions = ["--json"]
-let internalOptions = ["--json", "--internal-decoder"]
+let ffmpegOptions = ["--json", "--max-threads", "1"]
+let internalOptions = ["--json", "--internal-decoder", "--max-threads", "1"]
 
 @Suite struct ffmpegDecoderTests {
     let srtExpectedOutput: String

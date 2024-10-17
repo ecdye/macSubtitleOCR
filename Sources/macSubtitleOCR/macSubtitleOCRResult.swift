@@ -9,5 +9,20 @@
 struct macSubtitleOCRResult {
     var trackNumber: Int
     var srt: [Subtitle]
-    var json: [Any]
+    var json: [SubtitleJSONResult]
+}
+
+struct SubtitleJSONResult: Sendable {
+    let index: Int
+    let lines: [SubtitleLine]
+    let text: String
+}
+
+struct SubtitleLine: Sendable {
+    let text: String
+    let confidence: Float
+    let x: Int
+    let width: Int
+    let y: Int
+    let height: Int
 }

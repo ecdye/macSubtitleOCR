@@ -13,15 +13,15 @@ struct VobSubParser {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "VobSubParser")
-    private(set) var subtitle: Subtitle = .init(imageData: .init(), numberOfColors: 16)
+    let subtitle: Subtitle
     private let masterPalette: [UInt8]
     private let fps = 24.0 // TODO: Make this configurable / dynamic
 
     // MARK: - Lifecycle
 
-    init(subFile: FileHandle, timestamp: TimeInterval, offset: UInt64, nextOffset: UInt64, idxPalette: [UInt8]) {
+    init(index: Int, subFile: FileHandle, timestamp: TimeInterval, offset: UInt64, nextOffset: UInt64, idxPalette: [UInt8]) {
+        subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
-        subtitle.startTimestamp = timestamp
         readSubFrame(subFile: subFile, offset: offset, nextOffset: nextOffset, idxPalette: idxPalette)
         decodeImage()
         decodePalette()
@@ -74,7 +74,6 @@ struct VobSubParser {
                 presentationTimestamp += UInt64(ptsData[1]) << 22
                 presentationTimestamp += UInt64(ptsData[0] & 0x0E) << 29
                 subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90 / 1000
-                logger.debug("Got \(subtitle.startTimestamp!) as timestamp")
             }
 
             subFile.readData(ofLength: 1) // Stream ID
@@ -160,7 +159,6 @@ struct VobSubParser {
                 index += 1
                 subtitle.imageAlpha![1] = byte >> 4
                 subtitle.imageAlpha![0] = byte & 0x0F
-                logger.debug("Alpha: \(subtitle.imageAlpha!)")
             case 5:
                 if subtitle.imageXOffset != nil || subtitle.imageYOffset != nil {
                     break // Don't overwrite the offsets if they're already set, only happens in bad files
@@ -173,13 +171,10 @@ struct VobSubParser {
                 subtitle.imageHeight = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2])) - subtitle
                     .imageYOffset! + 1
                 index += 3
-                logger.debug("Image size: \(subtitle.imageWidth!)x\(subtitle.imageHeight!)")
-                logger.debug("X Offset: \(subtitle.imageXOffset!), Y Offset: \(subtitle.imageYOffset!)")
             case 6:
                 subtitle.evenOffset = Int(header.value(ofType: UInt16.self, at: index)! - 4)
                 subtitle.oddOffset = Int(header.value(ofType: UInt16.self, at: index + 2)! - 4)
                 index += 4
-                logger.debug("Even offset: \(subtitle.evenOffset!), Odd offset: \(subtitle.oddOffset!)")
             default:
                 break
             }

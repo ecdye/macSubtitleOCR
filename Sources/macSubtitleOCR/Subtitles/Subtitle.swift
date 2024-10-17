@@ -9,8 +9,8 @@
 import CoreGraphics
 import Foundation
 
-class Subtitle {
-    var index: Int?
+class Subtitle: @unchecked Sendable {
+    var index: Int
     var text: String?
     var startTimestamp: TimeInterval?
     var imageXOffset: Int?
@@ -25,7 +25,7 @@ class Subtitle {
     var evenOffset: Int?
     var oddOffset: Int?
 
-    init(index: Int? = nil, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil,
+    init(index: Int, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil,
          imageXOffset: Int? = nil, imageYOffset: Int? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil,
          imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, numberOfColors: Int? = nil,
          evenOffset: Int? = nil, oddOffset: Int? = nil) {

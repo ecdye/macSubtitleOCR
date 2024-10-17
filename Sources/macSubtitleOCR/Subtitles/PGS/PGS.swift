@@ -120,6 +120,7 @@ struct PGS {
             guard let pds, let ods else { continue }
             let startTimestamp = parseTimestamp(headerData)
             return Subtitle(
+                index: subtitles.count + 1,
                 startTimestamp: startTimestamp,
                 imageWidth: ods.objectWidth,
                 imageHeight: ods.objectHeight,
