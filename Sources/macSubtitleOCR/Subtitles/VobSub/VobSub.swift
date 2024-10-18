@@ -26,7 +26,6 @@ struct VobSub {
             var pointer = pointer
             extractSubtitleImages(subData: &pointer, idx: idx)
         }
-        // extractSubtitleImages(subData: subData, idx: idx)
     }
 
     // MARK: - Methods
