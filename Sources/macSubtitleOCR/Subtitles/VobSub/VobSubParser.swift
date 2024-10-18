@@ -23,15 +23,14 @@ struct VobSubParser {
          nextOffset: UInt64, idxPalette: [UInt8]) {
         subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
-        readSubFrame(subData: &subData, offset: offset, nextOffset: nextOffset, idxPalette: idxPalette)
+        readSubFrame(subData: &subData, offset: offset, nextOffset: nextOffset)
         decodeImage()
         decodePalette()
     }
 
     // MARK: - Methods
 
-    func readSubFrame(subData: inout UnsafeRawBufferPointer, offset: UInt64, nextOffset: UInt64,
-                      idxPalette _: [UInt8]) {
+    func readSubFrame(subData: inout UnsafeRawBufferPointer, offset: UInt64, nextOffset: UInt64) {
         var firstPacketFound = false
         var controlOffset: Int?
         var controlSize: Int?
