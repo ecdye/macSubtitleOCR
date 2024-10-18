@@ -18,12 +18,12 @@ struct ODS {
 
     // MARK: - Lifecycle
 
-    init(_ data: Data) throws {
-        try parseODS(data)
+    init(_ data: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+        try parseODS(data, offset, segmentLength)
     }
 
-    mutating func appendSegment(_ data: Data) throws {
-        try parseODS(data)
+    mutating func appendSegment(_ data: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+        try parseODS(data, offset, segmentLength)
     }
 
     // MARK: - Methods
@@ -39,26 +39,26 @@ struct ODS {
     //   2 bytes: Object width
     //   2 bytes: Object height
     //   Rest: Image data (run-length encoded, RLE)
-    private mutating func parseODS(_ data: Data) throws {
-        let sequenceFlag = data[3]
+    private mutating func parseODS(_ data: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+        let sequenceFlag = data[offset + 3]
         if sequenceFlag != 0x40 {
-            objectWidth = Int(data.value(ofType: UInt16.self, at: 7) ?? 0)
-            objectHeight = Int(data.value(ofType: UInt16.self, at: 9) ?? 0)
+            objectWidth = Int(data.loadUnaligned(fromByteOffset: offset + 7, as: UInt16.self).bigEndian)
+            objectHeight = Int(data.loadUnaligned(fromByteOffset: offset + 9, as: UInt16.self).bigEndian)
         }
 
         // PGS includes the width and height as part of the image data length calculations
-        guard data.count > 7 else {
-            throw macSubtitleOCRError.invalidODSDataLength(length: data.count)
+        guard data.count - offset > 7 else {
+            throw macSubtitleOCRError.invalidODSDataLength(length: data.count - offset)
         }
 
         switch sequenceFlag {
         case 0x40:
-            rawImageData.append(data[4...])
+            rawImageData.append(contentsOf: data[(offset + 4)..<(offset + segmentLength)])
             imageData = decodeRLEData()
         case 0x80:
-            rawImageData.append(data[11...])
+            rawImageData.append(contentsOf: data[(offset + 11)..<(offset + segmentLength)])
         default:
-            rawImageData.append(data[11...])
+            rawImageData.append(contentsOf: data[(offset + 11)..<(offset + segmentLength)])
             imageData = decodeRLEData()
         }
     }

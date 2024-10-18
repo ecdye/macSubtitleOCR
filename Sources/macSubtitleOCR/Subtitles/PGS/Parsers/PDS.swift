@@ -16,11 +16,12 @@ struct PDS {
 
     // MARK: - Lifecycle
 
-    init(_ data: Data) throws {
-        guard data.count >= 7, (data.count - 2) % 5 == 0 else {
-            throw macSubtitleOCRError.invalidPDSDataLength(length: data.count)
+    init(_ data: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+        let count = data.count - offset
+        guard count >= 7, (segmentLength - 2) % 5 == 0 else {
+            throw macSubtitleOCRError.invalidPDSDataLength(length: count)
         }
-        parsePDS(data.advanced(by: 2))
+        parsePDS(data, offset, segmentLength)
     }
 
     // MARK: - Methods
@@ -32,10 +33,10 @@ struct PDS {
     //   1 byte: Palette Version (unused by us)
     //   Followed by a series of palette entries:
     //       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
-    private mutating func parsePDS(_ data: Data) {
+    private mutating func parsePDS(_ data: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) {
         // Start reading after the first 2 bytes (Palette ID and Version)
-        var i = 0
-        while i + 4 <= data.count {
+        var i = offset + 2
+        while i + 4 <= (offset + segmentLength) {
             let index = data[i]
             let y = data[i + 1]
             let cr = data[i + 2]

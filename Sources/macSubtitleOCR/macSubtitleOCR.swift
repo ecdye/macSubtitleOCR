@@ -106,8 +106,10 @@ struct macSubtitleOCR: AsyncParsableCommand {
                 }
 
                 // Open the PGS data stream
-                let PGS = try PGS(mkvStream.tracks[track.trackNumber].trackData)
-                let result = try await processSubtitle(PGS.subtitles, trackNumber: track.trackNumber)
+                let pgs: PGS = try mkvStream.tracks[track.trackNumber].trackData.withUnsafeBytes { (pointer: UnsafeRawBufferPointer) in
+                    try PGS(pointer)
+                }
+                let result = try await processSubtitle(pgs.subtitles, trackNumber: track.trackNumber)
                 results.append(result)
             }
         } else if input.hasSuffix(".sup") {
