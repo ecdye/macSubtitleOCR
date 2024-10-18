@@ -77,7 +77,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
         if experimentalOptions.internalDecoder {
             try await processInternalDecoder(fileHandler: fileHandler)
         } else {
-            try await processFFmpegDecoder(fileHandler: fileHandler)
+            try await processFFmpegDecoder()
         }
     }
 
@@ -89,7 +89,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
             let sub = try VobSub(
                 input.replacingOccurrences(of: ".idx", with: ".sub"),
                 input.replacingOccurrences(of: ".sub", with: ".idx"))
-            let result = try await processSubtitle(sub.subtitles, trackNumber: 0, fileHandler: fileHandler)
+            let result = try await processSubtitle(sub.subtitles, trackNumber: 0)
             results.append(result)
         } else if input.hasSuffix(".mkv") {
             let mkvStream = MKVSubtitleExtractor(filePath: input)
@@ -104,23 +104,20 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
                 // Open the PGS data stream
                 let PGS = try PGS(mkvStream.tracks[track.trackNumber].trackData)
-                let result = try await processSubtitle(
-                    PGS.subtitles,
-                    trackNumber: track.trackNumber,
-                    fileHandler: fileHandler)
+                let result = try await processSubtitle(PGS.subtitles, trackNumber: track.trackNumber)
                 results.append(result)
             }
         } else if input.hasSuffix(".sup") {
             // Open the PGS data stream
             let PGS = try PGS(URL(fileURLWithPath: input))
-            let result = try await processSubtitle(PGS.subtitles, trackNumber: 0, fileHandler: fileHandler)
+            let result = try await processSubtitle(PGS.subtitles, trackNumber: 0)
             results.append(result)
         }
 
         return results
     }
 
-    private func processFFmpegDecoder(fileHandler _: FileHandler) async throws -> [macSubtitleOCRResult] {
+    private func processFFmpegDecoder() async throws -> [macSubtitleOCRResult] {
         var results: [macSubtitleOCRResult] = []
         let ffmpeg = try FFmpeg(input)
 
@@ -134,8 +131,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
         return results
     }
 
-    private func processSubtitle(_ subtitles: [Subtitle], trackNumber: Int,
-                                 fileHandler _: FileHandler) async throws -> macSubtitleOCRResult {
+    private func processSubtitle(_ subtitles: [Subtitle], trackNumber: Int) async throws -> macSubtitleOCRResult {
         let processor = createSubtitleProcessor(subtitles: subtitles, trackNumber: trackNumber)
         return try await processor.process()
     }
