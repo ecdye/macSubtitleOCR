@@ -19,7 +19,7 @@ struct VobSubParser {
 
     // MARK: - Lifecycle
 
-    init(index: Int, subData: inout UnsafeMutableRawBufferPointer, timestamp: TimeInterval, offset: UInt64,
+    init(index: Int, subData: inout UnsafeRawBufferPointer, timestamp: TimeInterval, offset: UInt64,
          nextOffset: UInt64, idxPalette: [UInt8]) {
         subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
@@ -30,7 +30,7 @@ struct VobSubParser {
 
     // MARK: - Methods
 
-    func readSubFrame(subData: inout UnsafeMutableRawBufferPointer, offset: UInt64, nextOffset: UInt64,
+    func readSubFrame(subData: inout UnsafeRawBufferPointer, offset: UInt64, nextOffset: UInt64,
                       idxPalette _: [UInt8]) {
         var firstPacketFound = false
         var controlOffset: Int?
