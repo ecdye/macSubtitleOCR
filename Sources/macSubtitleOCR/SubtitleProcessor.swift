@@ -89,7 +89,7 @@ struct SubtitleProcessor {
                         }
                     }
 
-                    let (subtitleText, subtitleLines) = await recognizeText(from: subImage, at: subIndex)
+                    let (subtitleText, subtitleLines) = await recognizeText(from: subImage)
                     subtitle.text = subtitleText
                     subtitle.imageData = nil // Clear the image data to save memory
 
@@ -114,7 +114,7 @@ struct SubtitleProcessor {
         return false
     }
 
-    private func recognizeText(from image: CGImage, at _: Int) async -> (String, [SubtitleLine]) {
+    private func recognizeText(from image: CGImage) async -> (String, [SubtitleLine]) {
         var text = ""
         var lines: [SubtitleLine] = []
 
