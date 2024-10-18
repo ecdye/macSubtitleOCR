@@ -54,6 +54,9 @@ struct macSubtitleOCR: AsyncParsableCommand {
             help: ArgumentHelp("Maximum number of threads to use for OCR", valueName: "n"))
     var maxThreads: Int
 
+    @Flag(name: [.customShort("i"), .long], help: "Invert images before OCR")
+    var invert = false
+
     @Flag(name: [.customShort("s"), .long], help: "Save extracted subtitle images to disk")
     var saveImages = false
 
@@ -123,8 +126,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
         for result in ffmpeg.subtitleTracks {
             logger.debug("Processing subtitle track: \(result.key)")
-            let processor = createSubtitleProcessor(subtitles: result.value, trackNumber: result.key)
-            let result = try await processor.process()
+            let result = try await processSubtitle(result.value, trackNumber: result.key)
             results.append(result)
         }
 
@@ -132,15 +134,15 @@ struct macSubtitleOCR: AsyncParsableCommand {
     }
 
     private func processSubtitle(_ subtitles: [Subtitle], trackNumber: Int) async throws -> macSubtitleOCRResult {
-        let processor = createSubtitleProcessor(subtitles: subtitles, trackNumber: trackNumber)
+        let processor = createSubtitleProcessor(subtitles, trackNumber)
         return try await processor.process()
     }
 
-    private func createSubtitleProcessor(subtitles: [Subtitle], trackNumber: Int) -> SubtitleProcessor {
+    private func createSubtitleProcessor(_ subtitles: [Subtitle], _ trackNumber: Int) -> SubtitleProcessor {
         SubtitleProcessor(
             subtitles: subtitles,
             trackNumber: trackNumber,
-            invert: false,
+            invert: invert,
             saveImages: saveImages,
             language: languages,
             fastMode: experimentalOptions.fastMode,
