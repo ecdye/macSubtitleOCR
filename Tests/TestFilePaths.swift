@@ -1,3 +1,11 @@
+//
+// TestFilePaths.swift
+// macSubtitleOCR
+//
+// Created by Ethan Dye on 10/19/24.
+// Copyright © 2024 Ethan Dye. All rights reserved.
+//
+
 import Foundation
 
 enum TestFilePaths: CaseIterable {
@@ -8,11 +16,11 @@ enum TestFilePaths: CaseIterable {
     var path: String {
         switch self {
         case .sup:
-            return Bundle.module.url(forResource: "sintel.sup", withExtension: nil)!.path
+            Bundle.module.url(forResource: "sintel.sup", withExtension: nil)!.path
         case .sub:
-            return Bundle.module.url(forResource: "sintel.sub", withExtension: nil)!.path
+            Bundle.module.url(forResource: "sintel.sub", withExtension: nil)!.path
         case .mkv:
-            return Bundle.module.url(forResource: "sintel.mkv", withExtension: nil)!.path
+            Bundle.module.url(forResource: "sintel.mkv", withExtension: nil)!.path
         }
     }
 }

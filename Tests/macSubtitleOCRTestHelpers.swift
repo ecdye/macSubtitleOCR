@@ -8,8 +8,8 @@
 
 // Function to compute the Levenshtein Distance between two strings
 func levenshteinDistance(_ lhs: String, _ rhs: String) -> Int {
-    let empty = [Int](repeating:0, count: rhs.count)
-    var last = [Int](0...rhs.count)
+    let empty = [Int](repeating: 0, count: rhs.count)
+    var last = [Int](0 ... rhs.count)
 
     for (i, char1) in lhs.enumerated() {
         var cur = [i + 1] + empty
