@@ -19,17 +19,18 @@ struct VobSubParser {
 
     // MARK: - Lifecycle
 
-    init(index: Int, subFile: FileHandle, timestamp: TimeInterval, offset: UInt64, nextOffset: UInt64, idxPalette: [UInt8]) {
+    init(index: Int, buffer: UnsafeRawBufferPointer, timestamp: TimeInterval, offset: UInt64,
+         nextOffset: UInt64, idxPalette: [UInt8]) {
         subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
-        readSubFrame(subFile: subFile, offset: offset, nextOffset: nextOffset, idxPalette: idxPalette)
+        readSubFrame(buffer: buffer, offset: offset, nextOffset: nextOffset)
         decodeImage()
         decodePalette()
     }
 
     // MARK: - Methods
 
-    func readSubFrame(subFile: FileHandle, offset: UInt64, nextOffset: UInt64, idxPalette _: [UInt8]) {
+    func readSubFrame(buffer: UnsafeRawBufferPointer, offset: UInt64, nextOffset: UInt64) {
         var firstPacketFound = false
         var controlOffset: Int?
         var controlSize: Int?
@@ -38,71 +39,80 @@ struct VobSubParser {
         var relativeControlOffset = 0
         var rleLengthFound = 0
 
-        subFile.seek(toFileOffset: offset)
+        var offset = Int(offset)
         repeat {
-            let startOffset = subFile.offsetInFile
-            guard subFile.readData(ofLength: 4).value(ofType: UInt32.self) == MPEG2PacketType.psPacket else {
-                fatalError("Failed to find PS packet at offset \(subFile.offsetInFile)")
+            let startOffset = offset
+            guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.psPacket else {
+                fatalError("Failed to find PS packet at offset \(offset)")
             }
+            offset += 4
 
-            subFile.readData(ofLength: 6) // System clock reference
-            subFile.readData(ofLength: 3) // Multiplexer rate
-            let stuffingLength = Int(subFile.readData(ofLength: 1)[0] & 7)
-            subFile.readData(ofLength: stuffingLength) // Stuffing bytes
+            offset += 6 // System clock reference
+            offset += 3 // Multiplexer rate
+            let stuffingLength = buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self) & 7
+            offset += 1 + Int(stuffingLength)
 
-            guard subFile.readData(ofLength: 4).value(ofType: UInt32.self) == MPEG2PacketType.pesPacket else {
-                fatalError("Failed to find PES packet at offset \(subFile.offsetInFile)")
+            guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.pesPacket
+            else {
+                fatalError("Failed to find PES packet at offset \(offset)")
             }
+            offset += 4
 
-            let pesLength = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
+            let pesLength = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
             if pesLength == 0 {
-                fatalError("PES packet length is 0 at offset \(subFile.offsetInFile)")
+                fatalError("PES packet length is 0 at offset \(offset)")
             }
-            let nextPSOffset = subFile.offsetInFile + UInt64(pesLength)
+            offset += 2
+            let nextPSOffset = offset + pesLength
 
-            subFile.readData(ofLength: 1) // Skip PES miscellaneous data
-            let extByteOne = subFile.readData(ofLength: 1)[0]
+            offset += 1 // Skip PES miscellaneous data
+            let extByteOne = buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self)
+            offset += 1
             let firstPacket = (extByteOne & 0x80) == 0x80 || (extByteOne & 0xC0) == 0xC0
 
-            let ptsDataLength = Int(subFile.readData(ofLength: 1)[0])
-            let ptsData = subFile.readData(ofLength: ptsDataLength)
+            let ptsDataLength = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self))
+            offset += 1
             if ptsDataLength == 5 {
                 var presentationTimestamp: UInt64 = 0
-                presentationTimestamp = UInt64(ptsData[4]) >> 1
-                presentationTimestamp += UInt64(ptsData[3]) << 7
-                presentationTimestamp += UInt64(ptsData[2] & 0xFE) << 14
-                presentationTimestamp += UInt64(ptsData[1]) << 22
-                presentationTimestamp += UInt64(ptsData[0] & 0x0E) << 29
+                presentationTimestamp = UInt64(buffer[offset + ptsDataLength - 1]) >> 1
+                presentationTimestamp += UInt64(buffer[offset + ptsDataLength - 2]) << 7
+                presentationTimestamp += UInt64(buffer[offset + ptsDataLength - 3] & 0xFE) << 14
+                presentationTimestamp += UInt64(buffer[offset + ptsDataLength - 4]) << 22
+                presentationTimestamp += UInt64(buffer[offset] & 0x0E) << 29
                 subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90 / 1000
             }
+            offset += ptsDataLength
 
-            subFile.readData(ofLength: 1) // Stream ID
+            offset += 1 // Stream ID
 
-            var trueHeaderSize = Int(subFile.offsetInFile - startOffset)
+            var trueHeaderSize = offset - startOffset
             if firstPacket, ptsDataLength >= 5 {
-                let size = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
-                relativeControlOffset = Int(subFile.readData(ofLength: 2).value(ofType: UInt16.self) ?? 0)
+                let size = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
+                offset += 2
+                relativeControlOffset = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
+                offset += 2
                 let rleSize = relativeControlOffset - 2
                 controlSize = size - rleSize - 4 // 4 bytes for the size and control offset
-                controlOffset = Int(subFile.offsetInFile) + rleSize
-                trueHeaderSize = Int(subFile.offsetInFile - startOffset)
+                controlOffset = offset + rleSize
+                trueHeaderSize = startOffset - offset
                 firstPacketFound = true
             } else if firstPacketFound {
                 controlOffset! += trueHeaderSize
             }
 
-            let savedOffset = subFile.offsetInFile
-            let difference = max(0, Int(nextPSOffset) - controlOffset! - controlHeaderCopied)
-            let rleFragmentSize = Int(nextPSOffset - savedOffset) - difference
-            subtitle.imageData!.append(subFile.readData(ofLength: rleFragmentSize))
+            let difference = max(0, nextPSOffset - controlOffset! - controlHeaderCopied)
+            let rleFragmentSize = nextPSOffset - offset - difference
+            subtitle.imageData!.append(contentsOf: buffer[offset ..< offset + rleFragmentSize])
             rleLengthFound += rleFragmentSize
+            offset += rleFragmentSize
 
             let bytesToCopy = max(0, min(difference, controlSize! - controlHeaderCopied))
-            controlHeader.append(subFile.readData(ofLength: bytesToCopy))
+            controlHeader.append(contentsOf: buffer[offset ..< offset + bytesToCopy])
             controlHeaderCopied += bytesToCopy
+            offset += bytesToCopy
 
-            subFile.seek(toFileOffset: nextPSOffset)
-        } while subFile.offsetInFile < nextOffset && controlHeaderCopied < controlSize!
+            offset = nextPSOffset
+        } while offset < nextOffset && controlHeaderCopied < controlSize!
 
         if controlHeaderCopied < controlSize! {
             logger.warning("Failed to read control header completely")
@@ -115,8 +125,8 @@ struct VobSubParser {
     }
 
     private func parseCommandHeader(_ header: Data, offset: Int) {
-        let relativeEndTimestamp = TimeInterval(Int(header.value(ofType: UInt16.self)!)) * 1024 / 90000 / fps
-        let endOfControl = Int(header.value(ofType: UInt16.self)!) - 4 - offset
+        let relativeEndTimestamp = TimeInterval(Int(header.getUInt16BE()!)) * 1024 / 90000 / fps
+        let endOfControl = Int(header.getUInt16BE()!) - 4 - offset
         subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
 
         var index = 2
@@ -172,8 +182,8 @@ struct VobSubParser {
                     .imageYOffset! + 1
                 index += 3
             case 6:
-                subtitle.evenOffset = Int(header.value(ofType: UInt16.self, at: index)! - 4)
-                subtitle.oddOffset = Int(header.value(ofType: UInt16.self, at: index + 2)! - 4)
+                subtitle.evenOffset = Int(header.getUInt16BE(at: index)! - 4)
+                subtitle.oddOffset = Int(header.getUInt16BE(at: index + 2)! - 4)
                 index += 4
             default:
                 break

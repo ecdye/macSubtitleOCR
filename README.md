@@ -15,10 +15,9 @@ For more details on performance, refer to the [Accuracy](#accuracy) section belo
 
 ### Features
 
-- Export `.png` images of subtitles for manual correction of OCR output.
-- Use the macOS OCR engine's language recognition feature to enhance accuracy by validating character sequences as real words.
+- Optional FFmpeg decoder for any issues with internal decoder
 - Export raw JSON output from the OCR engine for further analysis.
-- Experimental internal decoder for development (mostly working, VobSub gives occasional errors)
+- Export `.png` images of subtitles for manual correction of OCR output.
 
 #### Supported Formats
 
@@ -28,9 +27,7 @@ For more details on performance, refer to the [Accuracy](#accuracy) section belo
 ### Building the Project
 
 > [!IMPORTANT]
-> This project requires Swift 6 to compile and run correctly.
-> This project also requires FFmpeg to be installed on your system.
-> Currently only arm64 is supported, PR adding support welcome.
+> macSubtitleOCR requires Swift 6, FFmpeg, and an M series processor.
 
 To build macSubtitleOCR, follow these steps:
 
@@ -38,10 +35,10 @@ To build macSubtitleOCR, follow these steps:
 brew install ffmpeg
 git clone https://github.com/ecdye/macSubtitleOCR
 cd macSubtitleOCR
-swift build
+swift build --configuration release
 ```
 
-The compiled build will be available in the `.build/debug` directory.
+The compiled build will be available in the `.build/release` directory.
 
 ### Running Tests
 
@@ -54,8 +51,8 @@ swift test
 
 ### Accuracy
 
-In tests comparing macSubtitleOCR with the Tesseract OCR engine, the macOS OCR engine often outperforms Tesseract, particularly with challenging cases like the letter 'I'.
-While methods like binary image comparison, used by tools such as [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit), may offer slightly better accuracy in some cases, the macOS OCR engine provides excellent results for most use cases.
+In tests comparing macSubtitleOCR with the Tesseract OCR engine, the macOS Vision framework often outperforms Tesseract, particularly with challenging cases like the letter 'I'.
+While methods like binary image comparison, used by tools such as [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit), may offer slightly better accuracy in some cases, the Vision framework provides excellent results for most use cases.
 
 ## Contribution and TODO
 

@@ -13,17 +13,28 @@ struct ODS {
 
     private(set) var objectWidth: Int = 0
     private(set) var objectHeight: Int = 0
-    private var rawImageData: Data = .init()
-    private(set) var imageData: Data = .init()
+    private var encodedImageData: Data = .init()
 
     // MARK: - Lifecycle
 
-    init(_ data: Data) throws {
-        try parseODS(data)
+    init(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+        guard segmentLength > 11 else {
+            throw macSubtitleOCRError.invalidODSDataLength(length: segmentLength)
+        }
+        try parseODS(buffer, offset, segmentLength)
     }
 
-    mutating func appendSegment(_ data: Data) throws {
-        try parseODS(data)
+    mutating func appendSegment(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+        guard segmentLength > 11 else {
+            throw macSubtitleOCRError.invalidODSDataLength(length: segmentLength)
+        }
+        try parseODS(buffer, offset, segmentLength)
+    }
+
+    // Decodes the run-length encoded (RLE) image data
+    func decodeRLEData() -> Data {
+        let rleImageData = RLEData(data: encodedImageData, width: objectWidth, height: objectHeight)
+        return rleImageData.decodePGS()
     }
 
     // MARK: - Methods
@@ -39,32 +50,17 @@ struct ODS {
     //   2 bytes: Object width
     //   2 bytes: Object height
     //   Rest: Image data (run-length encoded, RLE)
-    private mutating func parseODS(_ data: Data) throws {
-        let sequenceFlag = data[3]
+    private mutating func parseODS(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+        let sequenceFlag = buffer[offset + 3]
+
+        // Only update object dimensions if this is the first part of the sequence
         if sequenceFlag != 0x40 {
-            objectWidth = Int(data.value(ofType: UInt16.self, at: 7) ?? 0)
-            objectHeight = Int(data.value(ofType: UInt16.self, at: 9) ?? 0)
+            objectWidth = Int(buffer.loadUnaligned(fromByteOffset: offset + 7, as: UInt16.self).bigEndian)
+            objectHeight = Int(buffer.loadUnaligned(fromByteOffset: offset + 9, as: UInt16.self).bigEndian)
         }
 
-        // PGS includes the width and height as part of the image data length calculations
-        guard data.count > 7 else {
-            throw macSubtitleOCRError.invalidODSDataLength(length: data.count)
-        }
-
-        switch sequenceFlag {
-        case 0x40:
-            rawImageData.append(data[4...])
-            imageData = decodeRLEData()
-        case 0x80:
-            rawImageData.append(data[11...])
-        default:
-            rawImageData.append(data[11...])
-            imageData = decodeRLEData()
-        }
-    }
-
-    private func decodeRLEData() -> Data {
-        let rleImageData = RLEData(data: rawImageData, width: objectWidth, height: objectHeight)
-        return rleImageData.decodePGS()
+        // Append image data to the encoded image data buffer
+        let dataOffset = sequenceFlag == 0x40 ? offset + 4 : offset + 11
+        encodedImageData.append(contentsOf: buffer[dataOffset ..< (offset + segmentLength)])
     }
 }

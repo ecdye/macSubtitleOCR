@@ -29,15 +29,15 @@ jobs:
           action: none
 
       - name: Build Tests
-        run: xcrun swift test list
+        run: xcrun swift test -Xswiftc -DGITHUB_ACTIONS list
 
       - name: Test FFmpeg Decoder
-        timeout-minutes: 10
-        run: xcrun swift test --skip-build --no-parallel --filter ffmpegDecoderTests
+        timeout-minutes: 5
+        run: xcrun swift test --skip-build --filter ffmpegDecoder
 
       - name: Test Internal Decoder
-        timeout-minutes: 10
-        run: xcrun swift test --skip-build --no-parallel --filter internalDecoderTests
+        timeout-minutes: 5
+        run: xcrun swift test --skip-build --filter internalDecoder
 
       - name: Periphery
         run: periphery scan --skip-build --index-store-path .build/debug/index/store

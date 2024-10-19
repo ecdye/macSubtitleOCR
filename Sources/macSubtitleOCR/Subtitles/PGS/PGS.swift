@@ -6,9 +6,7 @@
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 
-import CoreGraphics
 import Foundation
-import ImageIO
 import os
 
 struct PGS {
@@ -16,7 +14,7 @@ struct PGS {
 
     private(set) var subtitles = [Subtitle]()
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
-    private var data: Data
+    private var data: Data?
     private let pgsHeaderLength = 13
 
     // MARK: - Lifecycle
@@ -25,108 +23,113 @@ struct PGS {
         let fileHandle = try FileHandle(forReadingFrom: url)
         defer { fileHandle.closeFile() }
         data = try fileHandle.readToEnd() ?? Data()
-        guard data.count > pgsHeaderLength else {
-            fatalError("Failed to read file data from: \(url.path)")
+        guard data!.count > pgsHeaderLength else {
+            fatalError("Failed to read valid subtitle data from: \(url.path)")
         }
         fileHandle.closeFile()
-
-        try parseData()
+        try data!.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            try parseData(buffer)
+        }
     }
 
-    init(_ data: Data) throws {
-        self.data = data
-        try parseData()
+    init(_ buffer: UnsafeRawBufferPointer) throws {
+        try parseData(buffer)
     }
 
     // MARK: - Methods
 
-    private mutating func parseData() throws {
-        var headerData = data.extractBytes(pgsHeaderLength)
-        while data.count > 0 {
-            guard let subtitle = try parseNextSubtitle(headerData: &headerData)
+    private mutating func parseData(_ buffer: UnsafeRawBufferPointer) throws {
+        var offset = 0
+        while offset + pgsHeaderLength < buffer.count {
+            logger.debug("Parsing subtitle at offset: \(offset)")
+            guard let subtitle = try parseNextSubtitle(buffer, &offset)
             else {
-                if data.count < pgsHeaderLength { break }
-                headerData = data.extractBytes(pgsHeaderLength)
+                if offset + pgsHeaderLength > buffer.count { break }
                 continue
             }
 
             // Find the next timestamp to use as our end timestamp
-            while subtitle.endTimestamp == nil {
-                headerData = data.extractBytes(pgsHeaderLength)
-                subtitle.endTimestamp = parseTimestamp(headerData)
-            }
+            subtitle.endTimestamp = getSegmentTimestamp(from: buffer, offset: offset)
 
             subtitles.append(subtitle)
         }
     }
 
-    private func parseTimestamp(_ data: Data) -> TimeInterval {
-        let pts = data.value(ofType: UInt32.self, at: 2)!
-        return TimeInterval(pts) / 90000.0 // 90 kHz clock
-    }
-
-    private mutating func parseNextSubtitle(headerData: inout Data) throws -> Subtitle? {
-        var multipleODS = false
+    private func parseNextSubtitle(_ buffer: UnsafeRawBufferPointer, _ offset: inout Int) throws -> Subtitle? {
+        var hasMultipleODS = false
         var ods: ODS?
         var pds: PDS?
 
         while true {
-            guard headerData.count == pgsHeaderLength else {
-                fatalError("Failed to read PGS header correctly, got header length: \(headerData.count)/\(pgsHeaderLength)")
+            guard offset + pgsHeaderLength < buffer.count else {
+                return nil // End of data
             }
 
-            let segmentType = headerData[10]
-            let segmentLength = Int(headerData.value(ofType: UInt16.self, at: 11)!)
+            let segmentType = buffer[offset + 10]
+            let segmentLength = getSegmentLength(from: buffer, offset: offset)
+            let startTimestamp = getSegmentTimestamp(from: buffer, offset: offset)
+            offset += pgsHeaderLength
 
-            // Check for the end of the subtitle stream (0x80 segment type and 0 length)
+            // End of stream check
             guard segmentType != 0x80, segmentLength != 0 else { return nil }
-
-            // Read the rest of the segment
-            let segmentData = data.extractBytes(segmentLength)
-            guard segmentData.count == segmentLength else {
-                fatalError("Failed to read the full segment data, got: \(segmentData.count)/\(segmentLength)")
-            }
 
             // Parse the segment based on the type (0x14 for PCS, 0x15 for WDS, 0x16 for PDS, 0x17 for ODS)
             switch segmentType {
-            case 0x14: // PDS (Palette Definition Segment)
+            case 0x14:
                 do {
-                    pds = try PDS(segmentData)
+                    pds = try PDS(buffer, offset, segmentLength)
+                    offset += segmentLength
                 } catch let macSubtitleOCRError.invalidPDSDataLength(length) {
-                    fatalError("Invalid Palette Data Segment length: \(length)")
+                    logger.error("Invalid PDS length: \(length), abandoning remaining segments!")
+                    offset = buffer.count
+                    return nil
                 }
-            case 0x15: // ODS (Object Definition Segment)
+            case 0x15:
                 do {
-                    if segmentData[3] == 0x80 {
-                        ods = try ODS(segmentData)
-                        multipleODS = true
+                    if buffer[offset + 3] == 0x80 {
+                        ods = try ODS(buffer, offset, segmentLength)
+                        offset += segmentLength
+                        hasMultipleODS = true
                         break
-                    } else if multipleODS {
-                        try ods?.appendSegment(segmentData)
-                        if segmentData[3] != 0x40 { break }
+                    } else if hasMultipleODS {
+                        try ods!.appendSegment(buffer, offset, segmentLength)
+                        offset += segmentLength
+                        if buffer[offset - 10] != 0x40 { break }
                     } else {
-                        ods = try ODS(segmentData)
+                        ods = try ODS(buffer, offset, segmentLength)
+                        offset += segmentLength
                     }
                 } catch let macSubtitleOCRError.invalidODSDataLength(length) {
-                    fatalError("Invalid Object Data Segment length: \(length)")
+                    logger.error("Invalid ODS length: \(length), abandoning remaining segments!")
+                    offset = buffer.count
+                    return nil
                 }
-            case 0x16, 0x17: // PCS (Presentation Composition Segment), WDS (Window Definition Segment)
-                break // PCS and WDS parsing not required for basic rendering
+            case 0x16, 0x17:
+                offset += segmentLength
             default:
                 logger.warning("Unknown segment type: \(segmentType, format: .hex), skipping...")
+                offset += segmentLength
                 return nil
             }
-            headerData = data.extractBytes(pgsHeaderLength)
+
             guard let pds, let ods else { continue }
-            let startTimestamp = parseTimestamp(headerData)
+            offset += pgsHeaderLength // Skip the end segment
             return Subtitle(
                 index: subtitles.count + 1,
                 startTimestamp: startTimestamp,
                 imageWidth: ods.objectWidth,
                 imageHeight: ods.objectHeight,
-                imageData: ods.imageData,
+                imageData: ods.decodeRLEData(),
                 imagePalette: pds.palette,
                 numberOfColors: 256)
         }
+    }
+
+    private func getSegmentTimestamp(from pointer: UnsafeRawBufferPointer, offset: Int) -> TimeInterval {
+        TimeInterval(pointer.loadUnaligned(fromByteOffset: offset + 2, as: UInt32.self).bigEndian) / 90000 // 90 kHz clock
+    }
+
+    private func getSegmentLength(from pointer: UnsafeRawBufferPointer, offset: Int) -> Int {
+        Int(pointer.loadUnaligned(fromByteOffset: offset + 11, as: UInt16.self).bigEndian)
     }
 }

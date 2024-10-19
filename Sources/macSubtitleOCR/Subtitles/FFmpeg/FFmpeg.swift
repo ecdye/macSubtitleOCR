@@ -13,7 +13,7 @@ import os
 struct FFmpeg {
     // MARK: - Properties
 
-    private var logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "FFmpeg")
+    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "FFmpeg")
     private(set) var subtitleTracks = [Int: [Subtitle]]()
 
     // MARK: - Lifecycle

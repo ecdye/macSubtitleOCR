@@ -13,9 +13,6 @@ import UniformTypeIdentifiers
 private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
 
 struct ExperimentalOptions: ParsableArguments {
-    @Flag(help: "Use internal decoder (experimental)")
-    var internalDecoder = false
-
     @Flag(help: "Force old API (experimental)")
     var forceOldAPI = false
 
@@ -63,6 +60,9 @@ struct macSubtitleOCR: AsyncParsableCommand {
     @Flag(name: [.customShort("j"), .long], help: "Save OCR results as raw JSON files")
     var json = false
 
+    @Flag(help: "Use FFmpeg decoder")
+    var ffmpegDecoder = false
+
     @OptionGroup(title: "Experimental Options", visibility: .hidden)
     var experimentalOptions: ExperimentalOptions
 
@@ -70,23 +70,22 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     func run() async throws {
         let fileHandler = FileHandler(outputDirectory: outputDirectory)
-        let results = try await processInput(fileHandler: fileHandler)
+        let results = try await processInput()
         try await saveResults(fileHandler: fileHandler, results: results)
     }
 
     // MARK: - Methods
 
-    private func processInput(fileHandler: FileHandler) async throws -> [macSubtitleOCRResult] {
-        if experimentalOptions.internalDecoder {
-            try await processInternalDecoder(fileHandler: fileHandler)
-        } else {
+    private func processInput() async throws -> [macSubtitleOCRResult] {
+        if ffmpegDecoder {
             try await processFFmpegDecoder()
+        } else {
+            try await processInternalDecoder()
         }
     }
 
-    private func processInternalDecoder(fileHandler: FileHandler) async throws -> [macSubtitleOCRResult] {
+    private func processInternalDecoder() async throws -> [macSubtitleOCRResult] {
         var results: [macSubtitleOCRResult] = []
-        var intermediateFiles: [Int: String] = [:]
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
             let sub = try VobSub(
@@ -100,14 +99,17 @@ struct macSubtitleOCR: AsyncParsableCommand {
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
                 if experimentalOptions.saveSubtitleFile {
-                    intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(
+                    mkvStream.saveSubtitleTrackData(
                         trackNumber: track.trackNumber,
-                        outputDirectory: URL(string: fileHandler.outputDirectory)!)!
+                        outputDirectory: URL(fileURLWithPath: outputDirectory))
                 }
 
                 // Open the PGS data stream
-                let PGS = try PGS(mkvStream.tracks[track.trackNumber].trackData)
-                let result = try await processSubtitle(PGS.subtitles, trackNumber: track.trackNumber)
+                let pgs: PGS = try mkvStream.tracks[track.trackNumber].trackData
+                    .withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+                        try PGS(buffer)
+                    }
+                let result = try await processSubtitle(pgs.subtitles, trackNumber: track.trackNumber)
                 results.append(result)
             }
         } else if input.hasSuffix(".sup") {
