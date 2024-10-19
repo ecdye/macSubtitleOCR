@@ -84,9 +84,8 @@ struct macSubtitleOCR: AsyncParsableCommand {
         }
     }
 
-    private func processInternalDecoder(fileHandler: FileHandler) async throws -> [macSubtitleOCRResult] {
+    private func processInternalDecoder(fileHandler _: FileHandler) async throws -> [macSubtitleOCRResult] {
         var results: [macSubtitleOCRResult] = []
-        var intermediateFiles: [Int: String] = [:]
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
             let sub = try VobSub(
@@ -100,15 +99,16 @@ struct macSubtitleOCR: AsyncParsableCommand {
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
                 if experimentalOptions.saveSubtitleFile {
-                    intermediateFiles[track.trackNumber] = try mkvStream.getSubtitleTrackData(
+                    mkvStream.saveSubtitleTrackData(
                         trackNumber: track.trackNumber,
-                        outputDirectory: URL(string: fileHandler.outputDirectory)!)!
+                        outputDirectory: URL(fileURLWithPath: outputDirectory))
                 }
 
                 // Open the PGS data stream
-                let pgs: PGS = try mkvStream.tracks[track.trackNumber].trackData.withUnsafeBytes { (pointer: UnsafeRawBufferPointer) in
-                    try PGS(pointer)
-                }
+                let pgs: PGS = try mkvStream.tracks[track.trackNumber].trackData
+                    .withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+                        try PGS(buffer)
+                    }
                 let result = try await processSubtitle(pgs.subtitles, trackNumber: track.trackNumber)
                 results.append(result)
             }

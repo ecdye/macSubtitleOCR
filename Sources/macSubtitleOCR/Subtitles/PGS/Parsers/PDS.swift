@@ -16,12 +16,12 @@ struct PDS {
 
     // MARK: - Lifecycle
 
-    init(_ data: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
-        let count = data.count - offset
+    init(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+        let count = buffer.count - offset
         guard count >= 7, (segmentLength - 2) % 5 == 0 else {
             throw macSubtitleOCRError.invalidPDSDataLength(length: count)
         }
-        parsePDS(data, offset, segmentLength)
+        parsePDS(buffer, offset, segmentLength)
     }
 
     // MARK: - Methods
@@ -33,15 +33,15 @@ struct PDS {
     //   1 byte: Palette Version (unused by us)
     //   Followed by a series of palette entries:
     //       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
-    private mutating func parsePDS(_ data: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) {
+    private mutating func parsePDS(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) {
         // Start reading after the first 2 bytes (Palette ID and Version)
         var i = offset + 2
         while i + 4 <= (offset + segmentLength) {
-            let index = data[i]
-            let y = data[i + 1]
-            let cr = data[i + 2]
-            let cb = data[i + 3]
-            let alpha = data[i + 4]
+            let index = buffer[i]
+            let y = buffer[i + 1]
+            let cr = buffer[i + 2]
+            let cb = buffer[i + 3]
+            let alpha = buffer[i + 4]
 
             // Convert YCrCb to RGB
             let rgb = yCrCbToRGB(y: y, cr: cr, cb: cb)

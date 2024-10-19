@@ -23,26 +23,26 @@ struct VobSub {
         subFile.closeFile()
         let idx = VobSubIDX(URL(filePath: idx))
         subData.withUnsafeBytes { (pointer: UnsafeRawBufferPointer) in
-            var pointer = pointer
-            extractSubtitleImages(subData: &pointer, idx: idx)
+            extractSubtitleImages(buffer: pointer, idx: idx)
         }
     }
 
     // MARK: - Methods
 
-    private mutating func extractSubtitleImages(subData: inout UnsafeRawBufferPointer, idx: VobSubIDX) {
+    private mutating func extractSubtitleImages(buffer: UnsafeRawBufferPointer, idx: VobSubIDX) {
         for index in idx.offsets.indices {
-            logger.debug("Index \(index), offset: \(idx.offsets[index]), timestamp: \(idx.timestamps[index])")
             let offset = idx.offsets[index]
             let timestamp = idx.timestamps[index]
+            logger.debug("Parsing subtitle \(index + 1), offset: \(offset), timestamp: \(timestamp)")
+
             let nextOffset: UInt64 = if index + 1 < idx.offsets.count {
                 idx.offsets[index + 1]
             } else {
-                UInt64(subData.count)
+                UInt64(buffer.count)
             }
             let subtitle = VobSubParser(
                 index: index + 1,
-                subData: &subData,
+                buffer: buffer,
                 timestamp: timestamp,
                 offset: offset,
                 nextOffset: nextOffset,
