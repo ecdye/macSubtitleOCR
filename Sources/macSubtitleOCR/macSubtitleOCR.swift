@@ -13,9 +13,6 @@ import UniformTypeIdentifiers
 private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
 
 struct ExperimentalOptions: ParsableArguments {
-    @Flag(help: "Use internal decoder (experimental)")
-    var internalDecoder = false
-
     @Flag(help: "Force old API (experimental)")
     var forceOldAPI = false
 
@@ -63,6 +60,9 @@ struct macSubtitleOCR: AsyncParsableCommand {
     @Flag(name: [.customShort("j"), .long], help: "Save OCR results as raw JSON files")
     var json = false
 
+    @Flag(help: "Use FFmpeg decoder")
+    var ffmpegDecoder = false
+
     @OptionGroup(title: "Experimental Options", visibility: .hidden)
     var experimentalOptions: ExperimentalOptions
 
@@ -77,10 +77,10 @@ struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Methods
 
     private func processInput() async throws -> [macSubtitleOCRResult] {
-        if experimentalOptions.internalDecoder {
-            try await processInternalDecoder()
-        } else {
+        if ffmpegDecoder {
             try await processFFmpegDecoder()
+        } else {
+            try await processInternalDecoder()
         }
     }
 

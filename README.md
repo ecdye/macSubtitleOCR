@@ -28,9 +28,7 @@ For more details on performance, refer to the [Accuracy](#accuracy) section belo
 ### Building the Project
 
 > [!IMPORTANT]
-> This project requires Swift 6 to compile and run correctly.
-> This project also requires FFmpeg to be installed on your system.
-> Currently only arm64 is supported, PR adding support welcome.
+> macSubtitleOCR requires Swift 6, FFmpeg, and M series processors, PRs adding additional support are welcome.
 
 To build macSubtitleOCR, follow these steps:
 
@@ -38,10 +36,10 @@ To build macSubtitleOCR, follow these steps:
 brew install ffmpeg
 git clone https://github.com/ecdye/macSubtitleOCR
 cd macSubtitleOCR
-swift build
+swift build --configuration release
 ```
 
-The compiled build will be available in the `.build/debug` directory.
+The compiled build will be available in the `.build/release` directory.
 
 ### Running Tests
 
