@@ -53,11 +53,11 @@ class MKVTrackParser: MKVFileHandler {
             tracks.append(MKVTrack(trackNumber: index, codecId: codec[0], trackData: data))
         }
         /*
-        let trackDataVobSub = extractTrackDataVobSub(trackNumber: trackNumbersVobSub)
-        trackDataVobSub?.enumerated().forEach { index, data in
-            tracks.append(MKVTrack(trackNumber: index, codecId: codec[1], trackData: data))
-        }
-        */
+         let trackDataVobSub = extractTrackDataVobSub(trackNumber: trackNumbersVobSub)
+         trackDataVobSub?.enumerated().forEach { index, data in
+             tracks.append(MKVTrack(trackNumber: index, codecId: codec[1], trackData: data))
+         }
+         */
     }
 
     func extractTrackDataPGS(trackNumber: [Int]) -> [Data]? {
@@ -135,7 +135,7 @@ class MKVTrackParser: MKVFileHandler {
     }
 
     private func parseBlocksPGS(within clusterEndOffset: UInt64, trackNumber: [Int], clusterTimestamp: Int64,
-                             trackData: inout [Data]) {
+                                trackData: inout [Data]) {
         while fileHandle.offsetInFile < clusterEndOffset {
             // swiftformat:disable:next redundantSelf
             logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")

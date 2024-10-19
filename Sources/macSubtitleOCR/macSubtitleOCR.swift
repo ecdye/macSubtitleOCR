@@ -104,7 +104,6 @@ struct macSubtitleOCR: AsyncParsableCommand {
                         outputDirectory: URL(fileURLWithPath: outputDirectory))
                 }
 
-
                 if track.codecId == "S_HDMV/PGS" {
                     let pgs: PGS = try track.trackData
                         .withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in

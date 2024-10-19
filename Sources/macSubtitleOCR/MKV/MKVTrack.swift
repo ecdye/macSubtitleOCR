@@ -12,5 +12,5 @@ struct MKVTrack {
     var trackNumber: Int
     var codecId: String
     var trackData: Data
-    var idxData: String? = nil
+    var idxData: String?
 }
