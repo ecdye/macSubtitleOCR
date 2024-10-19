@@ -36,7 +36,7 @@ jobs:
         run: xcrun swift test --skip-build --filter ffmpegDecoder
 
       - name: Test Internal Decoder
-        timeout-minutes: 10
+        timeout-minutes: 5
         run: xcrun swift test --skip-build --filter internalDecoder
 
       - name: Periphery
