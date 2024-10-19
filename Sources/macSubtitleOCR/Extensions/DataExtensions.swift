@@ -16,7 +16,7 @@ extension Data {
 
     func getUInt16BE(at offset: Int = 0) -> UInt16? {
         guard count >= offset + 2 else { return nil }
-        return withUnsafeBytes { $0.load(fromByteOffset: offset, as: UInt16.self).bigEndian }
+        return withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian }
     }
 
     /* Useful for debugging purposes

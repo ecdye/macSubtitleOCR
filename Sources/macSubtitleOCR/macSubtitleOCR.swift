@@ -70,21 +70,21 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     func run() async throws {
         let fileHandler = FileHandler(outputDirectory: outputDirectory)
-        let results = try await processInput(fileHandler: fileHandler)
+        let results = try await processInput()
         try await saveResults(fileHandler: fileHandler, results: results)
     }
 
     // MARK: - Methods
 
-    private func processInput(fileHandler: FileHandler) async throws -> [macSubtitleOCRResult] {
+    private func processInput() async throws -> [macSubtitleOCRResult] {
         if experimentalOptions.internalDecoder {
-            try await processInternalDecoder(fileHandler: fileHandler)
+            try await processInternalDecoder()
         } else {
             try await processFFmpegDecoder()
         }
     }
 
-    private func processInternalDecoder(fileHandler _: FileHandler) async throws -> [macSubtitleOCRResult] {
+    private func processInternalDecoder() async throws -> [macSubtitleOCRResult] {
         var results: [macSubtitleOCRResult] = []
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
