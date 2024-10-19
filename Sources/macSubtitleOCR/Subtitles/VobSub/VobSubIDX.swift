@@ -26,6 +26,14 @@ struct VobSubIDX {
         }
     }
 
+    init(_ idxData: String) {
+        do {
+            try parseIdxFile(idxData: idxData)
+        } catch {
+            fatalError("Failed to parse IDX file: \(error)")
+        }
+    }
+
     // MARK: - Methods
 
     private mutating func parseIdxFile(idxData: String) throws {

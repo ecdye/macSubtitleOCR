@@ -16,7 +16,7 @@ class MKVTrackParser: MKVFileHandler {
 
     // MARK: - Functions
 
-    func parseTracks(codec: String) throws {
+    func parseTracks(codec: [String]) throws {
         guard findElement(withID: EBML.segmentID) as? (UInt64, UInt32) != nil else {
             fatalError("Segment element not found in file: \(filePath)")
         }
@@ -27,13 +27,18 @@ class MKVTrackParser: MKVFileHandler {
 
         let endOfTracksOffset = fileHandle.offsetInFile + tracksSize
 
-        var trackNumbers = [Int]()
+        var trackNumbersPGS = [Int]()
+        var trackNumbersVobSub = [Int]()
         while fileHandle.offsetInFile < endOfTracksOffset {
             if let (elementID, elementSize) = tryParseElement() {
                 if elementID == EBML.trackEntryID {
                     logger.debug("Found TrackEntry element")
                     if let track = parseTrackEntry(codec: codec) {
-                        trackNumbers.append(track)
+                        if track.1 == "S_HDMV/PGS" {
+                            trackNumbersPGS.append(track.0)
+                        } else {
+                            trackNumbersVobSub.append(track.0)
+                        }
                     }
                 } else if elementID == EBML.chapters {
                     break
@@ -43,13 +48,19 @@ class MKVTrackParser: MKVFileHandler {
             }
         }
 
-        let trackData = extractTrackData(trackNumber: trackNumbers)
+        let trackData = extractTrackDataPGS(trackNumber: trackNumbersPGS)
         trackData?.enumerated().forEach { index, data in
-            tracks.append(MKVTrack(trackNumber: index, codecId: codec, trackData: data))
+            tracks.append(MKVTrack(trackNumber: index, codecId: codec[0], trackData: data))
         }
+        /*
+        let trackDataVobSub = extractTrackDataVobSub(trackNumber: trackNumbersVobSub)
+        trackDataVobSub?.enumerated().forEach { index, data in
+            tracks.append(MKVTrack(trackNumber: index, codecId: codec[1], trackData: data))
+        }
+        */
     }
 
-    func extractTrackData(trackNumber: [Int]) -> [Data]? {
+    func extractTrackDataPGS(trackNumber: [Int]) -> [Data]? {
         fileHandle.seek(toFileOffset: 0)
 
         // Step 1: Locate the Segment element
@@ -72,7 +83,7 @@ class MKVTrackParser: MKVFileHandler {
             }
 
             // Step 4: Parse Blocks (SimpleBlock or Block) within each Cluster
-            parseBlocks(
+            parseBlocksPGS(
                 within: clusterEndOffset,
                 trackNumber: trackNumber,
                 clusterTimestamp: clusterTimestamp,
@@ -84,7 +95,7 @@ class MKVTrackParser: MKVFileHandler {
 
     // MARK: - Methods
 
-    private func parseTrackEntry(codec: String) -> Int? {
+    private func parseTrackEntry(codec: [String]) -> (Int, String)? {
         var trackNumber: Int?
         var trackType: UInt8?
         var codecId: String?
@@ -109,8 +120,8 @@ class MKVTrackParser: MKVFileHandler {
         }
 
         if let trackNumber, let codecId {
-            if codecId == codec {
-                return trackNumber
+            if codec.contains(codecId) {
+                return (trackNumber, codecId)
             }
         }
         return nil
@@ -123,7 +134,7 @@ class MKVTrackParser: MKVFileHandler {
         return nil
     }
 
-    private func parseBlocks(within clusterEndOffset: UInt64, trackNumber: [Int], clusterTimestamp: Int64,
+    private func parseBlocksPGS(within clusterEndOffset: UInt64, trackNumber: [Int], clusterTimestamp: Int64,
                              trackData: inout [Data]) {
         while fileHandle.offsetInFile < clusterEndOffset {
             // swiftformat:disable:next redundantSelf

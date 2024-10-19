@@ -22,9 +22,14 @@ struct VobSub {
         let subData = try subFile.readToEnd()!
         subFile.closeFile()
         let idx = VobSubIDX(URL(filePath: idx))
-        subData.withUnsafeBytes { (pointer: UnsafeRawBufferPointer) in
-            extractSubtitleImages(buffer: pointer, idx: idx)
+        subData.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            extractSubtitleImages(buffer: buffer, idx: idx)
         }
+    }
+
+    init(_ buffer: UnsafeRawBufferPointer, _ idxData: String) throws {
+        let idx = VobSubIDX(idxData)
+        extractSubtitleImages(buffer: buffer, idx: idx)
     }
 
     // MARK: - Methods
