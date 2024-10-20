@@ -16,6 +16,9 @@ struct FileHandler {
     }
 
     func saveSRTFile(for result: macSubtitleOCRResult) throws {
+        if result.srt.isEmpty {
+            return
+        }
         let srtFilePath = URL(fileURLWithPath: outputDirectory).appendingPathComponent("track_\(result.trackNumber).srt")
         let srt = SRT(subtitles: result.srt.sorted { $0.index < $1.index })
         srt.write(toFileAt: srtFilePath)

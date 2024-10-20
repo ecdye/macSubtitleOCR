@@ -43,7 +43,8 @@ struct VobSubParser {
         repeat {
             let startOffset = offset
             guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.psPacket else {
-                fatalError("Failed to find PS packet at offset \(offset)")
+                logger.warning("Failed to find PS packet at offset \(offset), trying to decode anyway")
+                break
             }
             offset += 4
 
@@ -54,7 +55,8 @@ struct VobSubParser {
 
             guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.pesPacket
             else {
-                fatalError("Failed to find PES packet at offset \(offset)")
+                logger.warning("Failed to find PES packet at offset \(offset), trying to decode anyway")
+                break
             }
             offset += 4
 

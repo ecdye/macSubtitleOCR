@@ -81,7 +81,7 @@ class MKVFileHandler {
                 return (elementSize, elementID)
             } else {
                 // Skip over the element's data by seeking to its end
-                logger.debug("Found: \(elementID), but not \(targetID), skipping element")
+                logger.debug("\(elementID, format: .hex(includePrefix:true)) != \(targetID, format: .hex(includePrefix:true)), skipping element")
                 fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
             }
             previousOffset = fileHandle.offsetInFile

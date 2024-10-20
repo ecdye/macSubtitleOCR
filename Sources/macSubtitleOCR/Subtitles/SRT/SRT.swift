@@ -12,7 +12,7 @@ import os
 struct SRT {
     // MARK: - Properties
 
-    private var subtitles: [Subtitle] = []
+    private var subtitles: [Subtitle]
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SRT")
 
     // MARK: - Getters / Setters
