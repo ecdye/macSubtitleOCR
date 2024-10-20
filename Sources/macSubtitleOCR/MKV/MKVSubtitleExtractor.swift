@@ -11,12 +11,24 @@ import os
 
 class MKVSubtitleExtractor: MKVTrackParser {
     func saveSubtitleTrackData(trackNumber: Int, outputDirectory: URL) {
-        let trackPath = outputDirectory.appendingPathComponent("\(trackNumber)").appendingPathExtension("sup").path
+        let codecType = tracks[trackNumber].codecId
+        let fileExtension = (codecType == "S_HDMV/PGS") ? "sup" : "sub"
+        let trackPath = outputDirectory.appendingPathComponent("track_\(trackNumber)").appendingPathExtension(fileExtension)
+            .path
 
         if FileManager.default.createFile(atPath: trackPath, contents: tracks[trackNumber].trackData, attributes: nil) {
             logger.debug("Created file at path: \(trackPath)")
         } else {
             logger.error("Failed to create file at path: \(trackPath)!")
+        }
+
+        if fileExtension == "sub" {
+            let idxPath = outputDirectory.appendingPathComponent("track_\(trackNumber)").appendingPathExtension("idx")
+            do {
+                try tracks[trackNumber].idxData?.write(to: idxPath, atomically: true, encoding: .utf8)
+            } catch {
+                logger.error("Failed to write idx file at path: \(idxPath)")
+            }
         }
     }
 }
