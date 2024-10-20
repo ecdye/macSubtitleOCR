@@ -43,7 +43,7 @@ struct VobSubParser {
         repeat {
             let startOffset = offset
             guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.psPacket else {
-                logger.warning("Failed to find PS packet at offset \(offset), trying to decode anyway")
+                logger.warning("No PS packet at offset \(offset), trying to decode anyway")
                 break
             }
             offset += 4
@@ -55,7 +55,7 @@ struct VobSubParser {
 
             guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.pesPacket
             else {
-                logger.warning("Failed to find PES packet at offset \(offset), trying to decode anyway")
+                logger.warning("No PES packet at offset \(offset), trying to decode anyway")
                 break
             }
             offset += 4
@@ -81,7 +81,7 @@ struct VobSubParser {
                 presentationTimestamp += UInt64(buffer[offset + ptsDataLength - 3] & 0xFE) << 14
                 presentationTimestamp += UInt64(buffer[offset + ptsDataLength - 4]) << 22
                 presentationTimestamp += UInt64(buffer[offset] & 0x0E) << 29
-                subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90 / 1000
+                subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90000
             }
             offset += ptsDataLength
 
@@ -117,7 +117,7 @@ struct VobSubParser {
         } while offset < nextOffset && controlHeaderCopied < controlSize!
 
         if controlHeaderCopied < controlSize! {
-            logger.warning("Failed to read control header completely")
+            logger.warning("Failed to read control header completely, \(controlHeaderCopied)/\(controlSize!)")
             for _ in controlHeaderCopied ..< controlSize! {
                 controlHeader.append(0xFF)
             }

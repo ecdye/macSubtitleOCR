@@ -172,7 +172,7 @@ class MKVTrackParser: MKVFileHandler {
                 var offset = 0
                 while (offset + 3) <= raw.count {
                     let segmentSize = min(Int(raw.getUInt16BE(at: offset + 1)! + 3), raw.count - offset)
-                    logger.debug("Segment size \(segmentSize) at \(offset) type 0x\(String(format: "%02x", raw[offset]))")
+                    logger.debug("Segment size \(segmentSize) at \(offset) type \(raw[offset].hex())")
 
                     blockData.append(pgsHeader)
                     blockData.append(raw.subdata(in: offset ..< segmentSize + offset))
@@ -182,16 +182,16 @@ class MKVTrackParser: MKVFileHandler {
                 trackData[Int(blockTrackNumber - 1)].append(blockData)
             } else if trackNumber[Int(blockTrackNumber)] == "S_VOBSUB" {
                 // swiftformat:disable all
+                // Step 6: Calculate and encode the timestamp as 5 bytes in big-endian (VobSub format)
                 let absPTS = calcAbsPTS(clusterTimestamp, blockTimestamp)
                 let vobSubPTS = encodePTSForVobSub(absPTS)
                 var segmentSize = Int(blockSize - (fileHandle.offsetInFile - blockStartOffset))
                 let pesLength = withUnsafeBytes(of: UInt16(min(segmentSize, 2028)).bigEndian) { Array($0) }
-                // 2028 is the maximum size of a VobSub segment, so we need to split the data into multiple segments if it's larger
+                // 2028 is the maximum size of a VobSub segment, so we need to split the data into multiple segments
                 // The first segment will contain the PTS data, while the rest will not, so it only gets 2019 bytes of data
                 // The rest of the segments will get 2024 bytes of data
 
-
-                // Step 6: Read the block data and add needed VobSub headers and timestamps
+                // Step 7: Read the block data and add needed VobSub headers and timestamps
                 var vobSubHeader = Data([0x00, 0x00, 0x01, 0xBA,              // PS packet start code
                                          0x00, 0x00, 0x00, 0x00, 0x00, 0x0,   // Null system clock reference
                                          0x00, 0x00, 0x00,                    // Null multiplexer rate
@@ -225,8 +225,8 @@ class MKVTrackParser: MKVFileHandler {
                 }
 
                 trackData[Int(blockTrackNumber - 1)].append(vobSubHeader)
-
-                codecPrivate[Int(blockTrackNumber)]?.append("\ntimestamp: \(formatTime(TimeInterval(absPTS)/9)), filepos: \(String(format: "%09X", trackData[Int(blockTrackNumber - 1)].count - vobSubHeader.count))")
+                let offset = String(format: "%09X", trackData[Int(blockTrackNumber - 1)].count - vobSubHeader.count)
+                codecPrivate[Int(blockTrackNumber)]?.append("\ntimestamp: \(formatTime(absPTS)), filepos: \(offset)")
                 // swiftformat:enable all
             } else {
                 // Skip this block because it's for a different track
@@ -235,7 +235,8 @@ class MKVTrackParser: MKVFileHandler {
         }
     }
 
-    private func formatTime(_ time: TimeInterval) -> String {
+    private func formatTime(_ time: UInt64) -> String {
+        let time = TimeInterval(time) / 90000
         let hours = Int(time) / 3600
         let minutes = (Int(time) % 3600) / 60
         let seconds = Int(time) % 60

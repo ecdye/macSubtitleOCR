@@ -32,7 +32,7 @@ func readVINT(from fileHandle: FileHandle, elementSize: Bool = false) -> UInt64 
     for byte in fileHandle.readData(ofLength: Int(length - 1)) {
         value = (value << 8) | UInt64(byte)
     }
-    logger.debug("VINT: \(value, format: .hex(includePrefix: true))")
+    logger.debug("VINT: \(value.hex())")
 
     return value
 }

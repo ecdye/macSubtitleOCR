@@ -45,6 +45,7 @@ struct SRT {
                 let nextSubtitle = subtitles[subtitle.index + 1]
                 if nextSubtitle.startTimestamp! <= subtitle.endTimestamp! {
                     logger.warning("Fixing subtitle index \(subtitle.index) end timestamp!")
+                    logger.warning("Got \(subtitle.endTimestamp!) and \(nextSubtitle.startTimestamp!)")
                     if nextSubtitle.startTimestamp! - subtitle.startTimestamp! > 5 {
                         endTimestamp = subtitle.startTimestamp! + 5
                     } else {
