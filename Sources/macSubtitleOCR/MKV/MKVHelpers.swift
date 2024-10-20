@@ -30,28 +30,30 @@ func encodePTSForPGS(_ timestamp: Int64) -> [UInt8] {
 }
 
 func encodePTSForVobSub(_ timestamp: Int64) -> [UInt8] {
-    var buffer = [UInt8](repeating: 0, count: 5)  // 5-byte buffer
-    var presentationTimestamp = timestamp * 90 * 1000  // Reversing the division done in the original code
+    var buffer = [UInt8](repeating: 0, count: 5) // 5-byte buffer
+    var presentationTimestamp = timestamp * 90 * 1000 // Reversing the division done in the original code
 
     // Now, apply the inverse bit-shifting to break down the value
-    buffer[4] = UInt8((presentationTimestamp & 0x7F) << 1)  // Get the least significant 7 bits, shift left 1
+    buffer[4] = UInt8((presentationTimestamp & 0x7F) << 1) // Get the least significant 7 bits, shift left 1
     presentationTimestamp >>= 7
 
-    buffer[3] = UInt8((presentationTimestamp & 0x7F))       // Next 7 bits
+    buffer[3] = UInt8(presentationTimestamp & 0x7F) // Next 7 bits
     presentationTimestamp >>= 7
 
-    buffer[2] = UInt8((presentationTimestamp & 0x7F) | 0x01)  // Get next 7 bits, set the least significant bit (0xFE in original becomes 0x01 here)
+    buffer[2] =
+        UInt8((presentationTimestamp & 0x7F) |
+            0x01) // Get next 7 bits, set the least significant bit (0xFE in original becomes 0x01 here)
     presentationTimestamp >>= 7
 
-    buffer[1] = UInt8((presentationTimestamp & 0x7F))       // Next 7 bits
+    buffer[1] = UInt8(presentationTimestamp & 0x7F) // Next 7 bits
     presentationTimestamp >>= 7
 
-    buffer[0] = UInt8((presentationTimestamp & 0x07) << 1)  // Finally, get the 3 most significant bits, shift left 1
+    buffer[0] = UInt8((presentationTimestamp & 0x07) << 1) // Finally, get the 3 most significant bits, shift left 1
 
     return buffer
 }
 
-// Calculate the absolute timestamp with 90 kHz accuracy for PGS format
+// Calculate the absolute timestamp with 90 kHz accuracy
 func calcAbsPTS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64) -> Int64 {
     // The block timestamp is relative, so we add it to the cluster timestamp
     Int64((Double(clusterTimestamp) + Double(blockTimestamp)) * 90)

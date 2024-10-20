@@ -2,7 +2,7 @@
 // FileHandler.swift
 // macSubtitleOCR
 //
-// Created by Ethan Dye on 10/16/24.
+// Created by Ethan Dye on 10/17/24.
 // Copyright © 2024 Ethan Dye. All rights reserved.
 //
 

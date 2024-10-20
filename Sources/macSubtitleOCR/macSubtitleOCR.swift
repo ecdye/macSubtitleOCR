@@ -93,7 +93,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
                 input.replacingOccurrences(of: ".sub", with: ".idx"))
             let result = try await processSubtitle(sub.subtitles, trackNumber: 0)
             results.append(result)
-        } else if input.hasSuffix(".mkv") {
+        } else if input.hasSuffix(".mkv") || input.hasSuffix(".mks") {
             let mkvStream = MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(codec: ["S_HDMV/PGS", "S_VOBSUB"])
             for track in mkvStream.tracks {

@@ -11,7 +11,9 @@ import Foundation
 enum TestFilePaths: CaseIterable {
     case sup
     case sub
-    case mkv
+    case mkv_pgs
+    case mkv_vobsub
+    case mkv_pgs_vobsub
 
     var path: String {
         switch self {
@@ -19,8 +21,12 @@ enum TestFilePaths: CaseIterable {
             Bundle.module.url(forResource: "sintel.sup", withExtension: nil)!.path
         case .sub:
             Bundle.module.url(forResource: "sintel.sub", withExtension: nil)!.path
-        case .mkv:
-            Bundle.module.url(forResource: "sintel.mkv", withExtension: nil)!.path
+        case .mkv_pgs:
+            Bundle.module.url(forResource: "sintel_pgs.mks", withExtension: nil)!.path
+        case .mkv_vobsub:
+            Bundle.module.url(forResource: "sintel_vobsub.mks", withExtension: nil)!.path
+        case .mkv_pgs_vobsub:
+            Bundle.module.url(forResource: "sintel_pgs_vobsub.mks", withExtension: nil)!.path
         }
     }
 }

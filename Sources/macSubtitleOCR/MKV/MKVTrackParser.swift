@@ -46,7 +46,11 @@ class MKVTrackParser: MKVFileHandler {
 
         let trackData = extractTrackData(from: tracks)
         trackData?.enumerated().forEach { index, data in
-            self.tracks.append(MKVTrack(trackNumber: index, codecId: tracks[index + 1]!, trackData: data, idxData: codecPrivate[index + 1]))
+            self.tracks.append(MKVTrack(
+                trackNumber: index,
+                codecId: tracks[index + 1]!,
+                trackData: data,
+                idxData: codecPrivate[index + 1]))
         }
     }
 
@@ -114,11 +118,9 @@ class MKVTrackParser: MKVFileHandler {
                 while let (elementID, elementSize) = tryParseElement() {
                     switch elementID {
                     case EBML.codecPrivate:
-                    var data = fileHandle.readData(ofLength: Int(elementSize))
-                    data.removeNullBytes()
-                    codecPrivate[trackNumber] = String(data: data, encoding: .ascii)
-                    // swiftformat:disable:next redundantSelf
-                    logger.debug("Found codec private data: \(self.codecPrivate[trackNumber]!)")
+                        var data = fileHandle.readData(ofLength: Int(elementSize))
+                        data.removeNullBytes()
+                        codecPrivate[trackNumber] = String(data: data, encoding: .ascii)
                     default:
                         fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
                     }
@@ -140,7 +142,7 @@ class MKVTrackParser: MKVFileHandler {
     }
 
     private func parseBlocks(within clusterEndOffset: UInt64, trackNumber: [Int: String], clusterTimestamp: Int64,
-                                trackData: inout [Data]) {
+                             trackData: inout [Data]) {
         while fileHandle.offsetInFile < clusterEndOffset {
             // swiftformat:disable:next redundantSelf
             logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")
@@ -179,6 +181,7 @@ class MKVTrackParser: MKVFileHandler {
 
                 trackData[Int(blockTrackNumber - 1)].append(blockData)
             } else if trackNumber[Int(blockTrackNumber)] == "S_VOBSUB" {
+                // swiftformat:disable all
                 let absPTS = calcAbsPTS(clusterTimestamp, blockTimestamp)
                 let vobSubPTS = encodePTSForVobSub(absPTS)
                 var segmentSize = Int(blockSize - (fileHandle.offsetInFile - blockStartOffset))
@@ -189,17 +192,17 @@ class MKVTrackParser: MKVFileHandler {
 
 
                 // Step 6: Read the block data and add needed VobSub headers and timestamps
-                var vobSubHeader = Data([0x00, 0x00, 0x01, 0xBA, // PS packet start code
-                                         0x00, 0x00, 0x00, 0x00, 0x00, 0x0, // Null system clock reference
-                                         0x00, 0x00, 0x00, // Null multiplexer rate
-                                         0x00, // Stuffing length
-                                         0x00, 0x00, 0x01, 0xBD]) // PES packet start code
-                vobSubHeader.append(contentsOf: pesLength) // PES packet length
-                vobSubHeader.append(contentsOf: [0x00, // PES miscellaneous data
-                                                0x80, // PTS DTS flags
-                                                UInt8(vobSubPTS.count)]) // PTS data length
-                vobSubHeader.append(contentsOf: vobSubPTS) // PTS data
-                vobSubHeader.append(contentsOf: [0x00]) // Null stream ID
+                var vobSubHeader = Data([0x00, 0x00, 0x01, 0xBA,              // PS packet start code
+                                         0x00, 0x00, 0x00, 0x00, 0x00, 0x0,   // Null system clock reference
+                                         0x00, 0x00, 0x00,                    // Null multiplexer rate
+                                         0x00,                                // Stuffing length
+                                         0x00, 0x00, 0x01, 0xBD])             // PES packet start code
+                vobSubHeader.append(contentsOf: pesLength)                    // PES packet length
+                vobSubHeader.append(contentsOf: [0x00,                        // PES miscellaneous data
+                                                0x80,                         // PTS DTS flag
+                                                UInt8(vobSubPTS.count)])      // PTS data length
+                vobSubHeader.append(contentsOf: vobSubPTS)                    // PTS data
+                vobSubHeader.append(contentsOf: [0x00])                       // Null stream ID
                 vobSubHeader.append(fileHandle.readData(ofLength: min(segmentSize, 2019)))
 
                 segmentSize -= min(segmentSize, 2019)
@@ -207,34 +210,24 @@ class MKVTrackParser: MKVFileHandler {
                 while segmentSize > 0 {
                     let nextSegmentSize = min(segmentSize, 2028)
                     let pesLength = withUnsafeBytes(of: UInt16(nextSegmentSize).bigEndian) { Array($0) }
-                    vobSubHeader.append(contentsOf: [0x00, 0x00, 0x01, 0xBA, // PS packet start code
-                                                     0x00, 0x00, 0x00, 0x00, 0x00, 0x0, // Null system clock reference
-                                                     0x00, 0x00, 0x00, // Null multiplexer rate
-                                                     0x00, // Stuffing length
-                                                     0x00, 0x00, 0x01, 0xBD]) // PES packet start code
-                    vobSubHeader.append(contentsOf: pesLength) // PES packet length
-                    vobSubHeader.append(contentsOf: [0x00, // PES miscellaneous data
-                                                     0x00, // PTS DTS flags
-                                                     0x00]) // PTS data length
-                    vobSubHeader.append(contentsOf: [0x00]) // Null stream ID
+                    vobSubHeader.append(contentsOf: [0x00, 0x00, 0x01, 0xBA,              // PS packet start code
+                                                     0x00, 0x00, 0x00, 0x00, 0x00, 0x0,   // Null system clock reference
+                                                     0x00, 0x00, 0x00,                    // Null multiplexer rate
+                                                     0x00,                                // Stuffing length
+                                                     0x00, 0x00, 0x01, 0xBD])             // PES packet start code
+                    vobSubHeader.append(contentsOf: pesLength)                            // PES packet length
+                    vobSubHeader.append(contentsOf: [0x00,                                // PES miscellaneous data
+                                                     0x00,                                // PTS DTS flag
+                                                     0x00])                               // PTS data length
+                    vobSubHeader.append(contentsOf: [0x00])                               // Null stream ID
                     vobSubHeader.append(fileHandle.readData(ofLength: min(segmentSize, 2024)))
                     segmentSize -= min(segmentSize, 2024)
                 }
 
-                // var blockData = Data()
-                // let raw = fileHandle.readData(ofLength: segmentSize)
-                // var offset = 0
-                // while (offset + 3) <= raw.count {
-                //     let segmentSize = min(Int(raw.getUInt16BE(at: offset + 1)! + 3), raw.count - offset)
-                //     logger.debug("Segment size \(segmentSize) at \(offset) type 0x\(String(format: "%02x", raw[offset]))")
-
-                //     blockData.append(vobSubHeader)
-                //     blockData.append(raw.subdata(in: offset ..< segmentSize + offset))
-                //     offset += segmentSize
-                // }
-
                 trackData[Int(blockTrackNumber - 1)].append(vobSubHeader)
-                codecPrivate[Int(blockTrackNumber)]?.append("\ntimestamp: \(formatTime(TimeInterval(absPTS))), filepos: \(String(format: "%09X", trackData[Int(blockTrackNumber - 1)].count - vobSubHeader.count))")
+
+                codecPrivate[Int(blockTrackNumber)]?.append("\ntimestamp: \(formatTime(TimeInterval(absPTS)/9)), filepos: \(String(format: "%09X", trackData[Int(blockTrackNumber - 1)].count - vobSubHeader.count))")
+                // swiftformat:enable all
             } else {
                 // Skip this block because it's for a different track
                 fileHandle.seek(toFileOffset: blockStartOffset + blockSize)

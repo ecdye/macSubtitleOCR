@@ -5,5 +5,5 @@
 /.VSCodeCounter/
 /.index-build/
 Tests/Resources/*
-!Tests/Resources/sintel.*
+!Tests/Resources/sintel*.*
 !Tests/Resources/README.md
