@@ -95,23 +95,23 @@ struct macSubtitleOCR: AsyncParsableCommand {
             results.append(result)
         } else if input.hasSuffix(".mkv") || input.hasSuffix(".mks") {
             let mkvStream = MKVSubtitleExtractor(filePath: input)
-            try mkvStream.parseTracks(codec: ["S_HDMV/PGS", "S_VOBSUB"])
+            try mkvStream.parseTracks(for: ["S_HDMV/PGS", "S_VOBSUB"])
             for track in mkvStream.tracks {
-                logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecId)")
+                logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecID)")
                 if experimentalOptions.saveSubtitleFile {
                     mkvStream.saveSubtitleTrackData(
                         trackNumber: track.trackNumber,
                         outputDirectory: URL(fileURLWithPath: outputDirectory))
                 }
 
-                if track.codecId == "S_HDMV/PGS" {
+                if track.codecID == "S_HDMV/PGS" {
                     let pgs: PGS = try track.trackData
                         .withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
                             try PGS(buffer)
                         }
                     let result = try await processSubtitle(pgs.subtitles, trackNumber: track.trackNumber)
                     results.append(result)
-                } else if track.codecId == "S_VOBSUB" {
+                } else if track.codecID == "S_VOBSUB" {
                     let vobSub: VobSub = try track.trackData
                         .withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
                             try VobSub(buffer, track.idxData ?? "")

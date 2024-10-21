@@ -11,7 +11,7 @@ import os
 
 class MKVSubtitleExtractor: MKVTrackParser {
     func saveSubtitleTrackData(trackNumber: Int, outputDirectory: URL) {
-        let codecType = tracks[trackNumber].codecId
+        let codecType = tracks[trackNumber].codecID
         let fileExtension = (codecType == "S_HDMV/PGS") ? "sup" : "sub"
         let trackPath = outputDirectory.appendingPathComponent("track_\(trackNumber)").appendingPathExtension(fileExtension)
             .path

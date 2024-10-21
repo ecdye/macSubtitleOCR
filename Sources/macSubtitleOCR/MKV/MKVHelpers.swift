@@ -23,7 +23,7 @@ func encodePTSForPGS(_ timestamp: UInt64) -> [UInt8] {
     withUnsafeBytes(of: UInt32(timestamp).bigEndian) { Array($0) }
 }
 
-func encodePTSForVobSub(_ timestamp: UInt64) -> [UInt8] {
+func encodePTSForVobSub(from timestamp: UInt64) -> [UInt8] {
     var buffer = [UInt8](repeating: 0, count: 5) // 5-byte buffer
 
     buffer[0] = (buffer[0] & 0xF1) | UInt8((timestamp >> 29) & 0x0E)
@@ -35,7 +35,7 @@ func encodePTSForVobSub(_ timestamp: UInt64) -> [UInt8] {
 }
 
 // Calculate the absolute timestamp with 90 kHz accuracy
-func calcAbsPTS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64) -> UInt64 {
+func calculateAbsolutePTS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64) -> UInt64 {
     // The block timestamp is relative, so we add it to the cluster timestamp
-    UInt64((Double(clusterTimestamp) + Double(blockTimestamp)) * 90)
+    UInt64(clusterTimestamp + blockTimestamp) * 90
 }
