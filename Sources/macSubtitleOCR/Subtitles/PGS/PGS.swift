@@ -107,7 +107,7 @@ struct PGS {
             case 0x16, 0x17:
                 offset += segmentLength
             default:
-                logger.warning("Unknown segment type: \(segmentType, format: .hex), skipping...")
+                logger.warning("Unknown segment type: \(segmentType.hex()), skipping...")
                 offset += segmentLength
                 return nil
             }

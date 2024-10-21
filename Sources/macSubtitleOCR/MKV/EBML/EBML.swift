@@ -14,6 +14,7 @@ enum EBML {
     static let chapters: UInt32 = 0x1043_A770
     static let cluster: UInt32 = 0x1F43_B675
     static let codecID: UInt32 = 0x86
+    static let codecPrivate: UInt32 = 0x63A2
     static let segmentID: UInt32 = 0x1853_8067
     static let simpleBlock: UInt32 = 0xA3
     static let timestamp: UInt32 = 0xE7

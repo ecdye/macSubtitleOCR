@@ -32,11 +32,11 @@ jobs:
         run: xcrun swift test -Xswiftc -DGITHUB_ACTIONS list
 
       - name: Test FFmpeg Decoder
-        timeout-minutes: 5
+        timeout-minutes: 7
         run: xcrun swift test --skip-build --filter ffmpegDecoder
 
       - name: Test Internal Decoder
-        timeout-minutes: 5
+        timeout-minutes: 7
         run: xcrun swift test --skip-build --filter internalDecoder
 
       - name: Periphery

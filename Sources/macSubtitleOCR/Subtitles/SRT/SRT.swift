@@ -12,7 +12,7 @@ import os
 struct SRT {
     // MARK: - Properties
 
-    private var subtitles: [Subtitle] = []
+    private var subtitles: [Subtitle]
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SRT")
 
     // MARK: - Getters / Setters
@@ -45,6 +45,7 @@ struct SRT {
                 let nextSubtitle = subtitles[subtitle.index + 1]
                 if nextSubtitle.startTimestamp! <= subtitle.endTimestamp! {
                     logger.warning("Fixing subtitle index \(subtitle.index) end timestamp!")
+                    logger.warning("Got \(subtitle.endTimestamp!) and \(nextSubtitle.startTimestamp!)")
                     if nextSubtitle.startTimestamp! - subtitle.startTimestamp! > 5 {
                         endTimestamp = subtitle.startTimestamp! + 5
                     } else {

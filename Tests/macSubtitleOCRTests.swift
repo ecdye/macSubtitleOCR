@@ -42,7 +42,7 @@ private func runTest(with options: [String]) async throws {
     try compareOutputs(with: outputPath, track: 0)
 
     // Compare output for track 1 if it's an MKV file
-    if options[0] == TestFilePaths.mkv.path {
+    if options[0].contains(".mks") {
         try compareOutputs(with: outputPath, track: 1)
     }
 }
