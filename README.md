@@ -22,7 +22,7 @@ For more details on performance, refer to the [Accuracy](#accuracy) section belo
 #### Supported Formats
 
 - PGS (`.mkv`, `.sup`)
-- VobSub (`.sub`, `.idx`)
+- VobSub (`.mkv`, `.sub`, `.idx`)
 
 ### Building the Project
 
