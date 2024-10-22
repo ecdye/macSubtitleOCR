@@ -19,11 +19,11 @@ class MKVTrackParser: MKVFileHandler {
 
     func parseTracks(for codecs: [String]) throws {
         guard findElement(withID: EBML.segmentID) as? (UInt64, UInt32) != nil else {
-            fatalError("Segment element not found in file: \(filePath)")
+            fatalError("Segment element not found in file!")
         }
 
         guard let (tracksSize, _) = findElement(withID: EBML.tracksID) as? (UInt64, UInt32) else {
-            fatalError("Tracks element not found in file: \(filePath)")
+            fatalError("Tracks element not found in file!")
         }
 
         let endOfTracksOffset = fileHandle.offsetInFile + tracksSize
@@ -267,7 +267,7 @@ class MKVTrackParser: MKVFileHandler {
 
     // Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
     private func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
-        let trackNumber = readVINT(from: fileHandle, elementSize: true)
+        let trackNumber = ebmlParser.readVINT(elementSize: true)
         let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2)
         let suffix = fileHandle.readData(ofLength: 1).first ?? 0
 

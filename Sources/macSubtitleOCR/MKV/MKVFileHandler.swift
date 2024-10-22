@@ -12,16 +12,15 @@ import os
 class MKVFileHandler {
     // MARK: - Properties
 
-    var filePath: String
-    var fileHandle: FileHandle
-    var endOfFile: UInt64
+    let fileHandle: FileHandle
+    let endOfFile: UInt64
     var timestampScale: TimeInterval = 1000000.0 // Default value if not specified in a given MKV file
-    var logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "MKV")
+    let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "MKV")
+    let ebmlParser: EBMLParser
 
     // MARK: - Lifecycle
 
     init(filePath: String) {
-        self.filePath = filePath
         guard FileManager.default.fileExists(atPath: filePath) else {
             fatalError("File does not exist at path: \(filePath)")
         }
@@ -32,6 +31,7 @@ class MKVFileHandler {
         }
         endOfFile = fileHandle.seekToEndOfFile()
         fileHandle.seek(toFileOffset: 0)
+        ebmlParser = EBMLParser(fileHandle: fileHandle)
     }
 
     deinit {
@@ -90,7 +90,7 @@ class MKVFileHandler {
     }
 
     func tryParseElement() -> (elementID: UInt32, elementSize: UInt64)? {
-        let (elementID, elementSize) = readEBMLElement(from: fileHandle)
+        let (elementID, elementSize) = ebmlParser.readEBMLElement()
         return (elementID, elementSize)
     }
 }
