@@ -9,17 +9,25 @@
 import Foundation
 
 struct FileHandler {
-    let outputDirectory: String
+    private let outputDirectory: URL
 
     init(outputDirectory: String) {
-        self.outputDirectory = outputDirectory
+        self.outputDirectory = URL(fileURLWithPath: outputDirectory)
+        do {
+            try FileManager.default.createDirectory(
+                at: self.outputDirectory,
+                withIntermediateDirectories: true,
+                attributes: nil)
+        } catch {
+            fatalError("Failed to create output directory: \(error)")
+        }
     }
 
     func saveSRTFile(for result: macSubtitleOCRResult) throws {
         if result.srt.isEmpty {
             return
         }
-        let srtFilePath = URL(fileURLWithPath: outputDirectory).appendingPathComponent("track_\(result.trackNumber).srt")
+        let srtFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).srt")
         let srt = SRT(subtitles: result.srt.sorted { $0.index < $1.index })
         srt.write(toFileAt: srtFilePath)
     }
@@ -44,7 +52,7 @@ struct FileHandler {
 
         let jsonData = try JSONSerialization.data(withJSONObject: jsonResults, options: [.prettyPrinted, .sortedKeys])
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
-        let jsonFilePath = URL(fileURLWithPath: outputDirectory).appendingPathComponent("track_\(result.trackNumber).json")
+        let jsonFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).json")
         try jsonString.write(to: jsonFilePath, atomically: true, encoding: .utf8)
     }
 }

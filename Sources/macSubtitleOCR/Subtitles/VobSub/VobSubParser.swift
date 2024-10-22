@@ -16,6 +16,7 @@ struct VobSubParser {
     let subtitle: Subtitle
     private let masterPalette: [UInt8]
     private let fps = 24.0 // TODO: Make this configurable / dynamic
+    private let minimumControlHeaderSize = 22
 
     // MARK: - Lifecycle
 
@@ -128,7 +129,10 @@ struct VobSubParser {
 
     private func parseCommandHeader(_ header: Data, offset: Int) {
         let relativeEndTimestamp = TimeInterval(Int(header.getUInt16BE()!)) * 1024 / 90000 / fps
-        let endOfControl = Int(header.getUInt16BE()!) - 4 - offset
+        let endOfControl = max(minimumControlHeaderSize, Int(header.getUInt16BE()!) - 4 - offset)
+        if endOfControl > header.count {
+            logger.warning("Control header is too short, \(header.count) bytes, trying to decode anyway, errors may occur")
+        }
         subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
 
         var index = 2
