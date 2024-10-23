@@ -12,7 +12,6 @@ import os
 import UniformTypeIdentifiers
 import Vision
 
-private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SubtitleProcessor")
 
 actor SubtitleAccumulator {
     var subtitles: [Subtitle] = []
@@ -47,16 +46,31 @@ actor AsyncSemaphore {
 }
 
 struct SubtitleProcessor {
-    let subtitles: [Subtitle]
-    let trackNumber: Int
-    let invert: Bool
-    let saveImages: Bool
-    let language: String
-    let fastMode: Bool
-    let disableLanguageCorrection: Bool
-    let forceOldAPI: Bool
-    let outputDirectory: String
-    let maxConcurrentTasks: Int
+    private let subtitles: [Subtitle]
+    private let trackNumber: Int
+    private let invert: Bool
+    private let saveImages: Bool
+    private let language: String
+    private let fastMode: Bool
+    private let disableLanguageCorrection: Bool
+    private let forceOldAPI: Bool
+    private let outputDirectory: String
+    private let maxConcurrentTasks: Int
+    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SubtitleProcessor")
+
+    init(subtitles: [Subtitle], trackNumber: Int, invert: Bool, saveImages: Bool, language: String, fastMode: Bool, disableLanguageCorrection: Bool,
+         forceOldAPI: Bool, outputDirectory: String, maxConcurrentTasks: Int) {
+        self.subtitles = subtitles
+        self.trackNumber = trackNumber
+        self.invert = invert
+        self.saveImages = saveImages
+        self.language = language
+        self.fastMode = fastMode
+        self.disableLanguageCorrection = disableLanguageCorrection
+        self.forceOldAPI = forceOldAPI
+        self.outputDirectory = outputDirectory
+        self.maxConcurrentTasks = maxConcurrentTasks
+    }
 
     func process() async throws -> macSubtitleOCRResult {
         let accumulator = SubtitleAccumulator()

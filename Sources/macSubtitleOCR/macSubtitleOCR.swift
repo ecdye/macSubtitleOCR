@@ -69,7 +69,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Entrypoint
 
     func run() async throws {
-        let fileHandler = FileHandler(outputDirectory: outputDirectory)
+        let fileHandler = macSubtitleOCRFileHandler(outputDirectory: outputDirectory)
         let results = try await processInput()
         try await saveResults(fileHandler: fileHandler, results: results)
     }
@@ -162,7 +162,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
             maxConcurrentTasks: maxThreads)
     }
 
-    private func saveResults(fileHandler: FileHandler, results: [macSubtitleOCRResult]) async throws {
+    private func saveResults(fileHandler: macSubtitleOCRFileHandler, results: [macSubtitleOCRResult]) async throws {
         for result in results {
             autoreleasepool {
                 try? fileHandler.saveSRTFile(for: result)

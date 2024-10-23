@@ -126,7 +126,7 @@ struct PGS {
     }
 
     private func getSegmentTimestamp(from pointer: UnsafeRawBufferPointer, offset: Int) -> TimeInterval {
-        TimeInterval(pointer.loadUnaligned(fromByteOffset: offset + 2, as: UInt32.self).bigEndian) / 90000 // 90 kHz clock
+        TimeInterval(pointer.loadUnaligned(fromByteOffset: offset + 2, as: UInt32.self).bigEndian) / 90000
     }
 
     private func getSegmentLength(from pointer: UnsafeRawBufferPointer, offset: Int) -> Int {

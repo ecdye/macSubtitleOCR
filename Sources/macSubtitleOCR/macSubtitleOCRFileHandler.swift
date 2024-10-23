@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct FileHandler {
+struct macSubtitleOCRFileHandler {
     private let outputDirectory: URL
 
     init(outputDirectory: String) {

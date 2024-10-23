@@ -95,7 +95,7 @@ class Subtitle: @unchecked Sendable {
                     continue
                 }
 
-                let paletteOffset = colorIndex * 4
+                let paletteOffset = colorIndex * bytesPerPixel
                 rgbaData.append(contentsOf: [
                     imagePalette![paletteOffset],
                     imagePalette![paletteOffset + 1],
@@ -179,38 +179,35 @@ class Subtitle: @unchecked Sendable {
         return extendedImage.cropping(to: croppedRect)
     }
 
-    func invertColors(of image: CGImage) -> CGImage? {
-        // Get the width, height, and color space of the image
-        let width = image.width
-        let height = image.height
+    private func invertColors(of image: CGImage) -> CGImage? {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
 
         // Create a context with the same dimensions as the image
         guard let context = CGContext(
             data: nil,
-            width: width,
-            height: height,
+            width: image.width,
+            height: image.height,
             bitsPerComponent: 8,
-            bytesPerRow: width * 4,
+            bytesPerRow: image.width * 4,
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             return nil
         }
 
         // Draw the image into the context
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
 
         // Get the pixel data from the context
         guard let pixelBuffer = context.data else {
             return nil
         }
 
-        let pixelData = pixelBuffer.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        let pixelData = pixelBuffer.bindMemory(to: UInt8.self, capacity: image.width * image.height * 4)
 
         // Iterate through the pixel data and invert the colors
-        for y in 0 ..< height {
-            for x in 0 ..< width {
-                let pixelIndex = (y * width + x) * 4
+        for y in 0 ..< image.height {
+            for x in 0 ..< image.width {
+                let pixelIndex = (y * image.width + x) * 4
                 pixelData[pixelIndex] = 255 - pixelData[pixelIndex] // Red
                 pixelData[pixelIndex + 1] = 255 - pixelData[pixelIndex + 1] // Green
                 pixelData[pixelIndex + 2] = 255 - pixelData[pixelIndex + 2] // Blue
