@@ -12,7 +12,6 @@ import os
 import UniformTypeIdentifiers
 import Vision
 
-
 actor SubtitleAccumulator {
     var subtitles: [Subtitle] = []
     var json: [SubtitleJSONResult] = []
@@ -58,7 +57,8 @@ struct SubtitleProcessor {
     private let maxConcurrentTasks: Int
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SubtitleProcessor")
 
-    init(subtitles: [Subtitle], trackNumber: Int, invert: Bool, saveImages: Bool, language: String, fastMode: Bool, disableLanguageCorrection: Bool,
+    init(subtitles: [Subtitle], trackNumber: Int, invert: Bool, saveImages: Bool, language: String, fastMode: Bool,
+         disableLanguageCorrection: Bool,
          forceOldAPI: Bool, outputDirectory: String, maxConcurrentTasks: Int) {
         self.subtitles = subtitles
         self.trackNumber = trackNumber

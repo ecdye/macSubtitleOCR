@@ -1,5 +1,5 @@
 //
-// FileHandler.swift
+// macSubtitleOCRFileHandler.swift
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 10/17/24.
