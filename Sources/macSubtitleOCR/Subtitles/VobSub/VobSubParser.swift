@@ -77,10 +77,10 @@ struct VobSubParser {
             offset += 1
             if ptsDataLength == 5 {
                 var presentationTimestamp: UInt64 = 0
-                presentationTimestamp = UInt64(buffer[offset + ptsDataLength - 1]) >> 1
-                presentationTimestamp += UInt64(buffer[offset + ptsDataLength - 2]) << 7
-                presentationTimestamp += UInt64(buffer[offset + ptsDataLength - 3] & 0xFE) << 14
-                presentationTimestamp += UInt64(buffer[offset + ptsDataLength - 4]) << 22
+                presentationTimestamp = UInt64(buffer[offset + 4]) >> 1
+                presentationTimestamp += UInt64(buffer[offset + 3]) << 7
+                presentationTimestamp += UInt64(buffer[offset + 2] & 0xFE) << 14
+                presentationTimestamp += UInt64(buffer[offset + 1]) << 22
                 presentationTimestamp += UInt64(buffer[offset] & 0x0E) << 29
                 subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90000
             }
