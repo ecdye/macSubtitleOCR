@@ -47,6 +47,10 @@ class MKVTrackParser: MKVFileHandler {
 
         let trackData = extractTrackData(for: subtitleTracks)
         trackData?.enumerated().forEach { index, data in
+            if data.isEmpty {
+                print("Found empty track data for track \(index + 1), skipping track!")
+                return
+            }
             tracks.append(MKVTrack(
                 trackNumber: index,
                 codecID: subtitleTracks[index + 1]!,
