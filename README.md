@@ -9,9 +9,9 @@
 
 **macSubtitleOCR** is a tool written entirely in Swift that converts bitmap subtitles into the SubRip subtitle format (SRT) using Optical Character Recognition (OCR).
 We currently support both PGS and VobSub bitmap subtitles.
-The macOS Vision framework is used to perform OCR and typically offers highly accurate text recognition.
+OCR is performed by the macOS Vision framework as it offers highly accurate text recognition.
 
-For more details on performance, refer to the [Accuracy](#accuracy) section below.
+For more details on OCR accuracy, refer to the [Accuracy](#accuracy) section below.
 
 ### Features
 
