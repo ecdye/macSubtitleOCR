@@ -12,20 +12,6 @@ import UniformTypeIdentifiers
 
 private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
 
-struct ExperimentalOptions: ParsableArguments {
-    @Flag(help: "Force old API (experimental)")
-    var forceOldAPI = false
-
-    @Flag(help: "Save extracted subtitle file to disk (experimental)")
-    var saveSubtitleFile = false
-
-    @Flag(help: "Enable fast mode (experimental)")
-    var fastMode = false
-
-    @Flag(help: "Disable language correction (experimental)")
-    var disableLanguageCorrection = false
-}
-
 @main
 struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Properties
