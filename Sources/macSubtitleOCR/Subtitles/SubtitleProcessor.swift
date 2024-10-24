@@ -104,7 +104,8 @@ struct SubtitleProcessor {
                     }
 
                     let (subtitleText, subtitleLines) = await recognizeText(from: subImage)
-                    subtitle.text = subtitleText
+                    let pattern = #"\bl\b"# // Replace l with I when it's a single character
+                    subtitle.text = subtitleText.replacingOccurrences(of: pattern, with: "I", options: .regularExpression)
                     subtitle.imageData = nil // Clear the image data to save memory
 
                     let jsonOut = SubtitleJSONResult(index: subIndex, lines: subtitleLines, text: subtitleText)
