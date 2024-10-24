@@ -8,8 +8,8 @@
 ## Overview
 
 **macSubtitleOCR** is a tool written entirely in Swift that converts bitmap subtitles into the SubRip subtitle format (SRT) using Optical Character Recognition (OCR).
-It currently supports both PGS and VobSub bitmap subtitles.
-The tool utilizes the built-in macOS OCR engine, offering highly accurate text recognition.
+We currently support both PGS and VobSub bitmap subtitles.
+The macOS Vision framework is used to perform OCR and typically offers highly accurate text recognition.
 
 For more details on performance, refer to the [Accuracy](#accuracy) section below.
 
@@ -43,7 +43,7 @@ The compiled build will be available in the `.build/release` directory.
 ### Running Tests
 
 The testing process compares OCR output against known correct results.
-We aim for at least 95% accuracy, because slight differences may occur between machines.
+We aim for at least 95% accuracy, because there are slight differences in OCR output between machines.
 
 ``` shell
 swift test
@@ -51,8 +51,9 @@ swift test
 
 ### Accuracy
 
-In tests comparing macSubtitleOCR with the Tesseract OCR engine, the macOS Vision framework often outperforms Tesseract, particularly with challenging cases like the letter 'I'.
-While methods like binary image comparison, used by tools such as [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit), may offer slightly better accuracy in some cases, the Vision framework provides excellent results for most use cases.
+In our tests comparing macSubtitleOCR with the Tesseract OCR engine, the macOS Vision framework consistently gave better results, particularly with tricky cases like properly recognizing the letter 'I'.
+
+While some tools, like [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit), may use binary image compare for better accuracy, Vision usually performs excellently and offers more flexibility with built-in language support.
 
 ## Contribution and TODO
 
@@ -63,5 +64,5 @@ If you're interested in working on specific features or improvements, check out 
 ## References
 
 - [Presentation Graphic Stream (PGS) Files](https://blog.thescorpius.com/index.php/2017/07/15/presentation-graphic-stream-sup-files-bluray-subtitle-format/)
-- [Matroska Technical Specifications](https://www.matroska.org/technical/elements.html)
 - [DVD Subtitle Stream (VobSub) Files](http://www.mpucoder.com/DVD/index.html)
+- [Matroska Technical Specifications](https://www.matroska.org/technical/elements.html)
