@@ -90,8 +90,8 @@ struct macSubtitleOCR: AsyncParsableCommand {
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
             invert.toggle() // Invert the image if the input is a VobSub file
             let sub = try VobSub(
-                input.replacingOccurrences(of: ".idx", with: ".sub"),
-                input.replacingOccurrences(of: ".sub", with: ".idx"))
+                URL(fileURLWithPath: input.replacingOccurrences(of: ".idx", with: ".sub")),
+                URL(fileURLWithPath: input.replacingOccurrences(of: ".sub", with: ".idx")))
             let result = try await processSubtitle(sub.subtitles, trackNumber: 0)
             results.append(result)
         } else if input.hasSuffix(".mkv") || input.hasSuffix(".mks") {

@@ -83,13 +83,12 @@ struct SubtitleProcessor {
                     await semaphore.wait()
                     let subIndex = subtitle.index
 
-                    guard !shouldSkipSubtitle(subtitle, at: subIndex) else {
-                        await semaphore.signal()
-                        return
-                    }
-
-                    guard let subImage = subtitle.createImage(invert) else {
-                        logger.warning("Could not create image for index \(subIndex)! Skipping...")
+                    guard !shouldSkip(subtitle), let subImage = subtitle.createImage(invert) else {
+                        print(
+                            "Found invalid image for track: \(trackNumber), index: \(subIndex), creating an empty placeholder!")
+                        subtitle.text = ""
+                        await accumulator.appendSubtitle(subtitle)
+                        await accumulator.appendJSON(SubtitleJSONResult(index: subIndex, lines: [], text: ""))
                         await semaphore.signal()
                         return
                     }
@@ -121,12 +120,8 @@ struct SubtitleProcessor {
         return await macSubtitleOCRResult(trackNumber: trackNumber, srt: accumulator.subtitles, json: accumulator.json)
     }
 
-    private func shouldSkipSubtitle(_ subtitle: Subtitle, at index: Int) -> Bool {
-        if subtitle.imageWidth == 0 || subtitle.imageHeight == 0 {
-            logger.warning("Skipping subtitle index \(index) with empty image data!")
-            return true
-        }
-        return false
+    private func shouldSkip(_ subtitle: Subtitle) -> Bool {
+        subtitle.imageWidth == 0 || subtitle.imageHeight == 0
     }
 
     private func recognizeText(from image: CGImage) async -> (String, [SubtitleLine]) {

@@ -17,12 +17,10 @@ struct VobSub {
 
     // MARK: - Lifecycle
 
-    init(_ sub: String, _ idx: String) throws {
-        let subFile = try FileHandle(forReadingFrom: URL(filePath: sub))
-        let subData = try subFile.readToEnd()!
-        subFile.closeFile()
-        let idx = VobSubIDX(URL(filePath: idx))
-        subData.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+    init(_ sub: URL, _ idx: URL) throws {
+        let data = try Data(contentsOf: sub)
+        let idx = VobSubIDX(idx)
+        data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
             extractSubtitleImages(buffer: buffer, idx: idx)
         }
     }
@@ -35,6 +33,10 @@ struct VobSub {
     // MARK: - Methods
 
     private mutating func extractSubtitleImages(buffer: UnsafeRawBufferPointer, idx: VobSubIDX) {
+        if buffer.count == 0 {
+            print("Found empty VobSub buffer, skipping track!")
+            return
+        }
         for index in idx.offsets.indices {
             let offset = idx.offsets[index]
             let timestamp = idx.timestamps[index]

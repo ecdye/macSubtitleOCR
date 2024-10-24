@@ -14,20 +14,13 @@ struct PGS {
 
     private(set) var subtitles = [Subtitle]()
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "PGS")
-    private var data: Data?
     private let pgsHeaderLength = 13
 
     // MARK: - Lifecycle
 
     init(_ url: URL) throws {
-        let fileHandle = try FileHandle(forReadingFrom: url)
-        defer { fileHandle.closeFile() }
-        data = try fileHandle.readToEnd() ?? Data()
-        guard data!.count > pgsHeaderLength else {
-            fatalError("Failed to read valid subtitle data from: \(url.path)")
-        }
-        fileHandle.closeFile()
-        try data!.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+        let data = try Data(contentsOf: url)
+        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
             try parseData(buffer)
         }
     }
@@ -40,6 +33,10 @@ struct PGS {
 
     private mutating func parseData(_ buffer: UnsafeRawBufferPointer) throws {
         var offset = 0
+        guard buffer.count > pgsHeaderLength else {
+            print("Found empty PGS buffer, skipping track!")
+            return
+        }
         while offset + pgsHeaderLength < buffer.count {
             logger.debug("Parsing subtitle at offset: \(offset)")
             guard let subtitle = try parseNextSubtitle(buffer, &offset)
