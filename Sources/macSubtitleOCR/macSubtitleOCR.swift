@@ -26,14 +26,13 @@ struct ExperimentalOptions: ParsableArguments {
     var disableLanguageCorrection = false
 }
 
-// The main struct representing the macSubtitleOCR command-line tool.
 @main
 struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Properties
 
     static let configuration = CommandConfiguration(
         commandName: "macSubtitleOCR",
-        abstract: "macSubtitleOCR - Convert bitmap subtitles into SubRip format using the macOS OCR engine")
+        abstract: "macSubtitleOCR - Convert bitmap subtitles into SubRip format using the macOS Vision framework")
 
     @Argument(help: "Input subtitle file (supported formats: .sup, .sub, .idx, .mkv)")
     var input: String
@@ -62,6 +61,9 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     @Flag(help: "Use FFmpeg decoder")
     var ffmpegDecoder = false
+
+    @Flag(help: "Disable correction of 'l' to 'I' in OCR results")
+    var disableICorrection = false
 
     @OptionGroup(title: "Experimental Options", visibility: .hidden)
     var experimentalOptions: ExperimentalOptions
@@ -164,6 +166,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
             language: languages,
             fastMode: experimentalOptions.fastMode,
             disableLanguageCorrection: experimentalOptions.disableLanguageCorrection,
+            disableICorrection: disableICorrection,
             forceOldAPI: experimentalOptions.forceOldAPI,
             outputDirectory: outputDirectory,
             maxConcurrentTasks: maxThreads)

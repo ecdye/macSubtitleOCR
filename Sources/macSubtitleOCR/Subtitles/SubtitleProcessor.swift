@@ -52,14 +52,15 @@ struct SubtitleProcessor {
     private let language: String
     private let fastMode: Bool
     private let disableLanguageCorrection: Bool
+    private let disableICorrection: Bool
     private let forceOldAPI: Bool
     private let outputDirectory: String
     private let maxConcurrentTasks: Int
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SubtitleProcessor")
 
     init(subtitles: [Subtitle], trackNumber: Int, invert: Bool, saveImages: Bool, language: String, fastMode: Bool,
-         disableLanguageCorrection: Bool,
-         forceOldAPI: Bool, outputDirectory: String, maxConcurrentTasks: Int) {
+         disableLanguageCorrection: Bool, disableICorrection: Bool, forceOldAPI: Bool, outputDirectory: String,
+         maxConcurrentTasks: Int) {
         self.subtitles = subtitles
         self.trackNumber = trackNumber
         self.invert = invert
@@ -67,6 +68,7 @@ struct SubtitleProcessor {
         self.language = language
         self.fastMode = fastMode
         self.disableLanguageCorrection = disableLanguageCorrection
+        self.disableICorrection = disableICorrection
         self.forceOldAPI = forceOldAPI
         self.outputDirectory = outputDirectory
         self.maxConcurrentTasks = maxConcurrentTasks
@@ -103,8 +105,12 @@ struct SubtitleProcessor {
                     }
 
                     let (subtitleText, subtitleLines) = await recognizeText(from: subImage)
-                    let pattern = #"\bl\b"# // Replace l with I when it's a single character
-                    subtitle.text = subtitleText.replacingOccurrences(of: pattern, with: "I", options: .regularExpression)
+                    if language.contains("en"), !disableICorrection {
+                        let pattern = #"\bl\b"# // Replace l with I when it's a single character
+                        subtitle.text = subtitleText.replacingOccurrences(of: pattern, with: "I", options: .regularExpression)
+                    } else {
+                        subtitle.text = subtitleText
+                    }
                     subtitle.imageData = nil // Clear the image data to save memory
 
                     let jsonOut = SubtitleJSONResult(index: subIndex, lines: subtitleLines, text: subtitleText)
