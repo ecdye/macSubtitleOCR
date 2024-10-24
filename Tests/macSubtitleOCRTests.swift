@@ -36,7 +36,7 @@ private func runTest(with options: [String]) async throws {
     let outputPath = options[1]
 
     // Run tests
-    let runner = try macSubtitleOCR.parse(options)
+    var runner = try macSubtitleOCR.parse(options)
     try await runner.run()
 
     try compareOutputs(with: outputPath, track: 0)

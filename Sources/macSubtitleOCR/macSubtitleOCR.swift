@@ -68,7 +68,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     // MARK: - Entrypoint
 
-    func run() async throws {
+    mutating func run() async throws {
         let fileHandler = macSubtitleOCRFileHandler(outputDirectory: outputDirectory)
         let results = try await processInput()
         try await saveResults(fileHandler: fileHandler, results: results)
@@ -76,7 +76,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     // MARK: - Methods
 
-    private func processInput() async throws -> [macSubtitleOCRResult] {
+    private mutating func processInput() async throws -> [macSubtitleOCRResult] {
         if ffmpegDecoder {
             try await processFFmpegDecoder()
         } else {
@@ -84,7 +84,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
         }
     }
 
-    private func processInternalDecoder() async throws -> [macSubtitleOCRResult] {
+    private mutating func processInternalDecoder() async throws -> [macSubtitleOCRResult] {
         var results: [macSubtitleOCRResult] = []
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
@@ -102,6 +102,10 @@ struct macSubtitleOCR: AsyncParsableCommand {
                     mkvStream.saveSubtitleTrackData(
                         trackNumber: track.trackNumber,
                         outputDirectory: URL(fileURLWithPath: outputDirectory))
+                }
+
+                if track.language != nil {
+                    languages += ",\(track.language!)"
                 }
 
                 if track.codecID == "S_HDMV/PGS" {

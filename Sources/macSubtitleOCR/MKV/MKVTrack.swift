@@ -13,4 +13,5 @@ struct MKVTrack {
     var codecID: String
     var trackData: Data
     var idxData: String?
+    var language: String?
 }

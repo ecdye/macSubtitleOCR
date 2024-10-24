@@ -13,7 +13,8 @@ class MKVTrackParser: MKVFileHandler {
     // MARK: - Properties
 
     private(set) var tracks: [MKVTrack] = []
-    private(set) var codecPrivate = [Int: String]()
+    private var codecPrivate = [Int: String]()
+    private var languages = [Int: String]()
 
     // MARK: - Functions
 
@@ -50,7 +51,8 @@ class MKVTrackParser: MKVFileHandler {
                 trackNumber: index,
                 codecID: subtitleTracks[index + 1]!,
                 trackData: data,
-                idxData: codecPrivate[index + 1]))
+                idxData: codecPrivate[index + 1],
+                language: languages[index + 1]))
         }
     }
 
@@ -89,6 +91,7 @@ class MKVTrackParser: MKVFileHandler {
         var trackNumber: Int?
         var trackType: UInt8?
         var codecID: String?
+        var language: String?
 
         while let (elementID, elementSize) = tryParseElement() {
             switch elementID {
@@ -103,6 +106,12 @@ class MKVTrackParser: MKVFileHandler {
                 data.removeNullBytes()
                 codecID = String(data: data, encoding: .ascii)
                 logger.debug("Found codec ID: \(codecID!)")
+            case EBML.language, EBML.languageBCP47:
+                var data = fileHandle.readData(ofLength: Int(elementSize))
+                data.removeNullBytes()
+                language = String(data: data, encoding: .ascii)
+                logger.debug("Found language: \(language!)")
+                languages[trackNumber!] = language
             default:
                 fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
             }
