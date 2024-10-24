@@ -72,10 +72,11 @@ class Subtitle: @unchecked Sendable {
                             shouldInterpolate: false,
                             intent: .defaultIntent)
 
-        if !invert {
-            return cropImageToVisibleArea(image!)!
+        guard var croppedImage = cropImageToVisibleArea(image!) else { return nil }
+        if invert {
+            croppedImage = invertColors(of: croppedImage) ?? croppedImage
         }
-        return invertColors(of: cropImageToVisibleArea(image!)!)
+        return changeTransparency(for: croppedImage, to: CGColor.white)
     }
 
     // MARK: - Methods
@@ -215,6 +216,30 @@ class Subtitle: @unchecked Sendable {
         }
 
         // Create a new CGImage from the modified pixel data
+        return context.makeImage()
+    }
+
+    func changeTransparency(for image: CGImage, to color: CGColor) -> CGImage? {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        guard let context = CGContext(
+            data: nil,
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: image.bitsPerComponent,
+            bytesPerRow: image.bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return nil
+        }
+
+        // Fill the context with the specified color
+        context.setFillColor(color)
+        context.fill(CGRect(x: 0, y: 0, width: image.width, height: image.height))
+
+        // Draw the image on top of the colored background
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+
         return context.makeImage()
     }
 }
