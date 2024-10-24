@@ -7,17 +7,18 @@
 
 ## Overview
 
-**macSubtitleOCR** is a tool written entirely in Swift that converts bitmap subtitles into the SubRip subtitle format (SRT) using Optical Character Recognition (OCR).
-We currently support both PGS and VobSub bitmap subtitles.
-OCR is performed by the macOS Vision framework as it offers highly accurate text recognition.
+**macSubtitleOCR** converts bitmap subtitles into the SubRip subtitle format (SRT) using the macOS Vision framework to perform OCR.
+Currently PGS and VobSub subtitles are supported.
 
 For more details on OCR accuracy, refer to the [Accuracy](#accuracy) section below.
 
+An Apple M series processor is required for macSubtitleOCR, PRs adding additional support are welcomed.
+
 ### Features
 
-- Optional FFmpeg decoder for any issues with internal decoder
-- Export raw JSON output from the OCR engine for further analysis.
-- Export `.png` images of subtitles for manual correction of OCR output.
+- Export raw JSON output from Vision for further analysis
+- Save `.png` images of subtitles for manual correction of OCR output
+- Built-in support for FFmpeg in case of any issues with internal decoder
 
 #### Supported Formats
 
@@ -27,7 +28,7 @@ For more details on OCR accuracy, refer to the [Accuracy](#accuracy) section bel
 ### Building the Project
 
 > [!IMPORTANT]
-> macSubtitleOCR requires Swift 6, FFmpeg, and an M series processor.
+> macSubtitleOCR requires Swift 6 support to compile
 
 To build macSubtitleOCR, follow these steps:
 
@@ -43,7 +44,7 @@ The compiled build will be available in the `.build/release` directory.
 ### Running Tests
 
 The testing process compares OCR output against known correct results.
-We aim for at least 95% accuracy, because there are slight differences in OCR output between machines.
+Tests aim for at least 95% accuracy, as there are slight differences in Vision results between machines.
 
 ``` shell
 swift test
@@ -51,9 +52,12 @@ swift test
 
 ### Accuracy
 
-In our tests comparing macSubtitleOCR with the Tesseract OCR engine, the macOS Vision framework consistently gave better results, particularly with tricky cases like properly recognizing the letter 'I'.
+In general, Vision produces a highly accurate output for almost all subtitles.
+If you find an edge case with degraded performance, open an issue so it can be investigated.
 
-While some tools, like [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit), may use binary image compare for better accuracy, Vision usually performs excellently and offers more flexibility with built-in language support.
+In tests comparing Vision's output with [Tesseract](https://github.com/tesseract-ocr/tesseract), Vision consistently gave better results, particularly with tricky cases like properly recognizing `I`.
+
+While some tools, like [SubtitleEdit](https://github.com/SubtitleEdit/subtitleedit), may use binary image compare for marginally better accuracy, Vision offers more flexibility with built-in language support.
 
 ## Contribution and TODO
 
