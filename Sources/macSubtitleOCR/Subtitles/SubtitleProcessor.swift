@@ -107,7 +107,10 @@ struct SubtitleProcessor {
                     let (subtitleText, subtitleLines) = await recognizeText(from: subImage)
                     if language.contains("en"), !disableICorrection {
                         let pattern = #"\bl\b"# // Replace l with I when it's a single character
-                        subtitle.text = subtitleText.replacingOccurrences(of: pattern, with: "I", options: .regularExpression)
+                        subtitle.text = subtitleText.replacingOccurrences(
+                            of: pattern,
+                            with: "I",
+                            options: .regularExpression)
                     } else {
                         subtitle.text = subtitleText
                     }
