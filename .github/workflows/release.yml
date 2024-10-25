@@ -32,16 +32,20 @@ jobs:
           action: none
 
       - name: Build
+        id: build
         run: |
+          TAG=${{ github.ref_name }}
+          echo "::set-output name=version::${TAG#v}"
           xcrun swift build --configuration release --arch arm64
-          tar -cvJf macSubtitleOCR-${{ github.ref_name }}.tar.xz -C .build/release/ macSubtitleOCR
-          gpg --detach-sign --armor macSubtitleOCR-${{ github.ref_name }}.tar.xz
-          gpg --verify macSubtitleOCR-${{ github.ref_name }}.tar.xz.asc macSubtitleOCR-${{ github.ref_name }}.tar.xz
+          tar -cvJf macSubtitleOCR-${TAG}.tar.xz -C .build/release/ macSubtitleOCR
+          gpg --detach-sign --armor macSubtitleOCR-${TAG}.tar.xz
+          gpg --verify macSubtitleOCR-${TAG}.tar.xz.asc macSubtitleOCR-${TAG}.tar.xz
 
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
             token: ${{ secrets.GITHUB_TOKEN }}
+            name: macSubtitleOCR ${{ steps.build.outputs.version }}
             generate_release_notes: true
             make_latest: true
             files: |
