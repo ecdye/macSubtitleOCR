@@ -26,30 +26,8 @@ struct macSubtitleOCR: AsyncParsableCommand {
     @Argument(help: "Directory to save the output files")
     var outputDirectory: String
 
-    @Option(wrappedValue: "en", name: [.customShort("l"), .long],
-            help: ArgumentHelp(
-                "Comma-separated list of languages for OCR (ISO 639-1 codes)",
-                valueName: "l"))
-    var languages: String
-
-    @Option(wrappedValue: 4, name: [.customShort("t"), .long],
-            help: ArgumentHelp("Maximum number of threads to use for OCR", valueName: "n"))
-    var maxThreads: Int
-
-    @Flag(name: [.customShort("i"), .long], help: "Invert images before OCR")
-    var invert = false
-
-    @Flag(name: [.customShort("s"), .long], help: "Save extracted subtitle images to disk")
-    var saveImages = false
-
-    @Flag(name: [.customShort("j"), .long], help: "Save OCR results as raw JSON files")
-    var json = false
-
-    @Flag(help: "Use FFmpeg decoder")
-    var ffmpegDecoder = false
-
-    @Flag(help: "Disable correction of 'l' to 'I' in OCR results")
-    var disableICorrection = false
+    @OptionGroup(title: "Options")
+    var options: Options
 
     @OptionGroup(title: "Experimental Options", visibility: .hidden)
     var experimentalOptions: ExperimentalOptions
@@ -65,7 +43,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Methods
 
     private mutating func processInput() async throws -> [macSubtitleOCRResult] {
-        if ffmpegDecoder {
+        if options.ffmpegDecoder {
             try await processFFmpegDecoder()
         } else {
             try await processInternalDecoder()
@@ -76,14 +54,14 @@ struct macSubtitleOCR: AsyncParsableCommand {
         var results: [macSubtitleOCRResult] = []
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
-            invert.toggle() // Invert the image if the input is a VobSub file
+            options.invert.toggle() // Invert the image if the input is a VobSub file
             let sub = try VobSub(
                 URL(fileURLWithPath: input.replacingOccurrences(of: ".idx", with: ".sub")),
                 URL(fileURLWithPath: input.replacingOccurrences(of: ".sub", with: ".idx")))
             let result = try await processSubtitle(sub.subtitles, trackNumber: 0)
             results.append(result)
             if sub.language != nil {
-                languages += ",\(sub.language!)"
+                options.languages += ",\(sub.language!)"
             }
         } else if input.hasSuffix(".mkv") || input.hasSuffix(".mks") {
             let mkvStream = MKVSubtitleExtractor(filePath: input)
@@ -97,7 +75,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
                 }
 
                 if track.language != nil {
-                    languages += ",\(track.language!)"
+                    options.languages += ",\(track.language!)"
                 }
 
                 if track.codecID == "S_HDMV/PGS" {
@@ -108,14 +86,14 @@ struct macSubtitleOCR: AsyncParsableCommand {
                     let result = try await processSubtitle(pgs.subtitles, trackNumber: track.trackNumber)
                     results.append(result)
                 } else if track.codecID == "S_VOBSUB" {
-                    invert.toggle() // Invert the image if the input is VobSub
+                    options.invert.toggle() // Invert the image if the input is VobSub
                     let vobSub: VobSub = try track.trackData
                         .withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
                             try VobSub(buffer, track.idxData ?? "")
                         }
                     let result = try await processSubtitle(vobSub.subtitles, trackNumber: track.trackNumber)
                     results.append(result)
-                    invert.toggle() // Reset the invert flag
+                    options.invert.toggle() // Reset the invert flag
                 }
             }
         } else if input.hasSuffix(".sup") {
@@ -150,22 +128,23 @@ struct macSubtitleOCR: AsyncParsableCommand {
         SubtitleProcessor(
             subtitles: subtitles,
             trackNumber: trackNumber,
-            invert: invert,
-            saveImages: saveImages,
-            language: languages,
+            invert: options.invert,
+            saveImages: options.saveImages,
+            language: options.languages,
+            customWords: options.customWords?.split(separator: ",").map(String.init),
             fastMode: experimentalOptions.fastMode,
             disableLanguageCorrection: experimentalOptions.disableLanguageCorrection,
-            disableICorrection: disableICorrection,
+            disableICorrection: options.disableICorrection,
             forceOldAPI: experimentalOptions.forceOldAPI,
             outputDirectory: outputDirectory,
-            maxConcurrentTasks: maxThreads)
+            maxConcurrentTasks: options.maxThreads)
     }
 
     private func saveResults(fileHandler: macSubtitleOCRFileHandler, results: [macSubtitleOCRResult]) async throws {
         for result in results {
             autoreleasepool {
                 try? fileHandler.saveSRTFile(for: result)
-                if json {
+                if options.json {
                     try? fileHandler.saveJSONFile(for: result)
                 }
             }

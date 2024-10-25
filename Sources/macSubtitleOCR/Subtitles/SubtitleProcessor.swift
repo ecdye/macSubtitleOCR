@@ -50,6 +50,7 @@ struct SubtitleProcessor {
     private let invert: Bool
     private let saveImages: Bool
     private let language: String
+    private let customWords: [String]?
     private let fastMode: Bool
     private let disableLanguageCorrection: Bool
     private let disableICorrection: Bool
@@ -58,14 +59,15 @@ struct SubtitleProcessor {
     private let maxConcurrentTasks: Int
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SubtitleProcessor")
 
-    init(subtitles: [Subtitle], trackNumber: Int, invert: Bool, saveImages: Bool, language: String, fastMode: Bool,
-         disableLanguageCorrection: Bool, disableICorrection: Bool, forceOldAPI: Bool, outputDirectory: String,
-         maxConcurrentTasks: Int) {
+    init(subtitles: [Subtitle], trackNumber: Int, invert: Bool, saveImages: Bool, language: String, customWords: [String]?,
+         fastMode: Bool, disableLanguageCorrection: Bool, disableICorrection: Bool, forceOldAPI: Bool,
+         outputDirectory: String, maxConcurrentTasks: Int) {
         self.subtitles = subtitles
         self.trackNumber = trackNumber
         self.invert = invert
         self.saveImages = saveImages
         self.language = language
+        self.customWords = customWords
         self.fastMode = fastMode
         self.disableLanguageCorrection = disableLanguageCorrection
         self.disableICorrection = disableICorrection
@@ -148,6 +150,9 @@ struct SubtitleProcessor {
             request.usesLanguageCorrection = !disableLanguageCorrection
             request.revision = VNRecognizeTextRequestRevision3
             request.recognitionLanguages = language.split(separator: ",").map { String($0) }
+            if let customWords {
+                request.customWords = customWords
+            }
 
             try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
             let observations = request.results! as [VNRecognizedTextObservation]
@@ -163,6 +168,9 @@ struct SubtitleProcessor {
         request.recognitionLevel = getOCRMode()
         request.usesLanguageCorrection = !disableLanguageCorrection
         request.recognitionLanguages = language.split(separator: ",").map { Locale.Language(identifier: String($0)) }
+        if let customWords {
+            request.customWords = customWords
+        }
         return request
     }
 
