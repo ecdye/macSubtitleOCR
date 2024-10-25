@@ -18,20 +18,20 @@ struct VobSubIDX {
 
     // MARK: - Lifecycle
 
-    init(_ url: URL) {
+    init(_ url: URL) throws {
         do {
             let idxData = try String(contentsOf: url, encoding: .utf8)
             try parseIdxFile(idxData: idxData)
         } catch {
-            fatalError("Failed to parse IDX file: \(error)")
+            throw macSubtitleOCRError.fileReadError("Failed to parse IDX file: \(error)")
         }
     }
 
-    init(_ idxData: String) {
+    init(_ idxData: String) throws {
         do {
             try parseIdxFile(idxData: idxData)
         } catch {
-            fatalError("Failed to parse IDX file: \(error)")
+            throw macSubtitleOCRError.fileReadError("Failed to parse IDX file: \(error)")
         }
     }
 
@@ -58,7 +58,7 @@ struct VobSubIDX {
             guard let timestamp = extractTimestamp(from: trimmedLine),
                   let offset = extractOffset(from: trimmedLine)
             else {
-                throw macSubtitleOCRError.fileReadError
+                continue
             }
             offsets.append(offset)
             timestamps.append(timestamp)

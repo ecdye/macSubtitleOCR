@@ -7,9 +7,12 @@
 //
 
 enum macSubtitleOCRError: Error {
-    case fileReadError
+    case fileReadError(_ string: String)
     case fileCreationError
     case fileWriteError
+    case ffmpegError(_ string: String)
+    case invalidInputFile(_ string: String)
+    case invalidRLE(_ string: String)
     case invalidODSDataLength(length: Int)
     case invalidPDSDataLength(length: Int)
 }

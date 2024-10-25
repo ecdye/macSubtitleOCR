@@ -11,16 +11,12 @@ import Foundation
 struct macSubtitleOCRFileHandler {
     private let outputDirectory: URL
 
-    init(outputDirectory: String) {
+    init(outputDirectory: String) throws {
         self.outputDirectory = URL(fileURLWithPath: outputDirectory)
-        do {
-            try FileManager.default.createDirectory(
-                at: self.outputDirectory,
-                withIntermediateDirectories: true,
-                attributes: nil)
-        } catch {
-            fatalError("Failed to create output directory: \(error)")
-        }
+        try FileManager.default.createDirectory(
+            at: self.outputDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil)
     }
 
     func saveSRTFile(for result: macSubtitleOCRResult) throws {

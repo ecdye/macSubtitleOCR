@@ -111,7 +111,7 @@ struct PGS {
 
             guard let pds, let ods else { continue }
             offset += pgsHeaderLength // Skip the end segment
-            return Subtitle(
+            return try Subtitle(
                 index: subtitles.count + 1,
                 startTimestamp: startTimestamp,
                 imageWidth: ods.objectWidth,

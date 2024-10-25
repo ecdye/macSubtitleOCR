@@ -29,7 +29,7 @@ struct RLEData {
 
     // MARK: - Functions
 
-    func decodePGS() -> Data {
+    func decodePGS() throws -> Data {
         if data.isEmpty || width <= 0 || height <= 0 {
             return data
         }
@@ -59,7 +59,8 @@ struct RLEData {
             } else if run == 0 {
                 // New Line: Check if pixels align correctly
                 if pixelCount % width > 0 {
-                    fatalError("Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.")
+                    throw macSubtitleOCRError
+                        .invalidRLE("Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.")
                 }
                 lineCount += 1
             }
@@ -67,13 +68,13 @@ struct RLEData {
 
         // Check if we decoded enough pixels
         if pixelCount < width * height {
-            fatalError("Insufficient RLE data for subtitle.")
+            throw macSubtitleOCRError.invalidRLE("Insufficient RLE data for subtitle.")
         }
 
         return image
     }
 
-    mutating func decodeVobSub() -> Data {
+    mutating func decodeVobSub() throws -> Data {
         if data.isEmpty || width <= 0 || height <= 0 {
             return data
         }
@@ -86,10 +87,6 @@ struct RLEData {
         for byte in data {
             nibbles.append(byte >> 4)
             nibbles.append(byte & 0x0F)
-        }
-        guard nibbles.count == 2 * data.count
-        else {
-            fatalError("Failed to create nibbles from RLE data.")
         }
 
         var i = 0

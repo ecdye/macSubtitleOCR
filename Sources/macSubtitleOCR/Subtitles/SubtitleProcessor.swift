@@ -57,7 +57,6 @@ struct SubtitleProcessor {
     private let forceOldAPI: Bool
     private let outputDirectory: String
     private let maxConcurrentTasks: Int
-    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SubtitleProcessor")
 
     init(subtitles: [Subtitle], trackNumber: Int, invert: Bool, saveImages: Bool, language: String, customWords: [String]?,
          fastMode: Bool, disableLanguageCorrection: Bool, disableICorrection: Bool, forceOldAPI: Bool,
@@ -102,7 +101,9 @@ struct SubtitleProcessor {
                         do {
                             try saveImage(subImage, index: subIndex)
                         } catch {
-                            logger.error("Error saving image \(trackNumber)-\(subIndex): \(error.localizedDescription)")
+                            print(
+                                "Error saving image \(trackNumber)-\(subIndex): \(error.localizedDescription)",
+                                to: &stderr)
                         }
                     }
 

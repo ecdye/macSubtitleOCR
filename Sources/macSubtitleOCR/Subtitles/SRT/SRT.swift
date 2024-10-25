@@ -29,7 +29,7 @@ struct SRT {
         do {
             try srtContent.write(to: url, atomically: true, encoding: .utf8)
         } catch {
-            fatalError("Failed to write SRT content to file: \(error)")
+            print("Failed to write SRT content to file: \(error.localizedDescription)", to: &stderr)
         }
     }
 

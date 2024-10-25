@@ -32,9 +32,9 @@ struct ODS {
     }
 
     // Decodes the run-length encoded (RLE) image data
-    func decodeRLEData() -> Data {
+    func decodeRLEData() throws -> Data {
         let rleImageData = RLEData(data: encodedImageData, width: objectWidth, height: objectHeight)
-        return rleImageData.decodePGS()
+        return try rleImageData.decodePGS()
     }
 
     // MARK: - Methods

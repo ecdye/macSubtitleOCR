@@ -21,17 +21,17 @@ struct VobSubParser {
     // MARK: - Lifecycle
 
     init(index: Int, buffer: UnsafeRawBufferPointer, timestamp: TimeInterval, offset: UInt64,
-         nextOffset: UInt64, idxPalette: [UInt8]) {
+         nextOffset: UInt64, idxPalette: [UInt8]) throws {
         subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
-        readSubFrame(buffer: buffer, offset: offset, nextOffset: nextOffset)
-        decodeImage()
+        try readSubFrame(buffer: buffer, offset: offset, nextOffset: nextOffset)
+        try decodeImage()
         decodePalette()
     }
 
     // MARK: - Methods
 
-    func readSubFrame(buffer: UnsafeRawBufferPointer, offset: UInt64, nextOffset: UInt64) {
+    func readSubFrame(buffer: UnsafeRawBufferPointer, offset: UInt64, nextOffset: UInt64) throws {
         var firstPacketFound = false
         var controlOffset: Int?
         var controlSize: Int?
@@ -63,7 +63,7 @@ struct VobSubParser {
 
             let pesLength = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
             if pesLength == 0 {
-                fatalError("PES packet length is 0 at offset \(offset)")
+                throw macSubtitleOCRError.invalidInputFile("VobSub PES packet length is 0 at offset: \(offset)")
             }
             offset += 2
             let nextPSOffset = offset + pesLength
@@ -211,13 +211,13 @@ struct VobSubParser {
         subtitle.imagePalette = palette
     }
 
-    private func decodeImage() {
+    private func decodeImage() throws {
         var rleData = RLEData(
             data: subtitle.imageData ?? Data(),
             width: subtitle.imageWidth ?? 0,
             height: subtitle.imageHeight ?? 0,
             evenOffset: subtitle.evenOffset ?? 0,
             oddOffset: subtitle.oddOffset ?? 0)
-        subtitle.imageData = rleData.decodeVobSub()
+        subtitle.imageData = try rleData.decodeVobSub()
     }
 }

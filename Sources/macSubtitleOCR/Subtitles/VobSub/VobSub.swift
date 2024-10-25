@@ -20,21 +20,21 @@ struct VobSub {
 
     init(_ sub: URL, _ idx: URL) throws {
         let data = try Data(contentsOf: sub)
-        let idx = VobSubIDX(idx)
+        let idx = try VobSubIDX(idx)
         language = idx.language
-        data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            extractSubtitleImages(buffer: buffer, idx: idx)
+        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            try extractSubtitleImages(buffer: buffer, idx: idx)
         }
     }
 
     init(_ buffer: UnsafeRawBufferPointer, _ idxData: String) throws {
-        let idx = VobSubIDX(idxData)
-        extractSubtitleImages(buffer: buffer, idx: idx)
+        let idx = try VobSubIDX(idxData)
+        try extractSubtitleImages(buffer: buffer, idx: idx)
     }
 
     // MARK: - Methods
 
-    private mutating func extractSubtitleImages(buffer: UnsafeRawBufferPointer, idx: VobSubIDX) {
+    private mutating func extractSubtitleImages(buffer: UnsafeRawBufferPointer, idx: VobSubIDX) throws {
         if buffer.count == 0 {
             print("Found empty VobSub buffer, skipping track!")
             return
@@ -49,7 +49,7 @@ struct VobSub {
             } else {
                 UInt64(buffer.count)
             }
-            let subtitle = VobSubParser(
+            let subtitle = try VobSubParser(
                 index: index + 1,
                 buffer: buffer,
                 timestamp: timestamp,

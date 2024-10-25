@@ -20,11 +20,11 @@ class MKVTrackParser: MKVFileHandler {
 
     func parseTracks(for codecs: [String]) throws {
         guard findElement(withID: EBML.segmentID) as? (UInt64, UInt32) != nil else {
-            fatalError("Segment element not found in file!")
+            throw macSubtitleOCRError.invalidInputFile("MKV segment element not found in file")
         }
 
         guard let (tracksSize, _) = findElement(withID: EBML.tracksID) as? (UInt64, UInt32) else {
-            fatalError("Tracks element not found in file!")
+            throw macSubtitleOCRError.invalidInputFile("MKV tracks element not found in file")
         }
 
         let endOfTracksOffset = fileHandle.offsetInFile + tracksSize

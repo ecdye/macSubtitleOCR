@@ -11,6 +11,7 @@ import os
 import UniformTypeIdentifiers
 
 private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
+nonisolated(unsafe) var stderr = FileHandleOutputStream(.standardError)
 
 @main
 struct macSubtitleOCR: AsyncParsableCommand {
@@ -34,10 +35,19 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     // MARK: - Entrypoint
 
-    mutating func run() async throws {
-        let fileHandler = macSubtitleOCRFileHandler(outputDirectory: outputDirectory)
-        let results = try await processInput()
-        try await saveResults(fileHandler: fileHandler, results: results)
+    mutating func run() async {
+        // swiftformat:disable all
+        do {
+            let fileHandler = try macSubtitleOCRFileHandler(outputDirectory: outputDirectory)
+            let results = try await processInput()
+            try await saveResults(fileHandler: fileHandler, results: results)
+        } catch let macSubtitleOCRError.fileReadError(string), let macSubtitleOCRError.invalidInputFile(string),
+                let macSubtitleOCRError.ffmpegError(string), let macSubtitleOCRError.invalidRLE(string) {
+            print("Error: \(string), exiting...", to: &stderr)
+        } catch {
+            print("Error: \(error.localizedDescription), exiting...", to: &stderr)
+        }
+        // swiftformat:enable all
     }
 
     // MARK: - Methods
@@ -64,7 +74,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
                 options.languages += ",\(sub.language!)"
             }
         } else if input.hasSuffix(".mkv") || input.hasSuffix(".mks") {
-            let mkvStream = MKVSubtitleExtractor(filePath: input)
+            let mkvStream = try MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(for: ["S_HDMV/PGS", "S_VOBSUB"])
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecID)")
@@ -101,6 +111,8 @@ struct macSubtitleOCR: AsyncParsableCommand {
             let PGS = try PGS(URL(fileURLWithPath: input))
             let result = try await processSubtitle(PGS.subtitles, trackNumber: 0)
             results.append(result)
+        } else {
+            throw macSubtitleOCRError.invalidInputFile("Invalid input file type \((input as NSString).pathExtension)")
         }
 
         return results

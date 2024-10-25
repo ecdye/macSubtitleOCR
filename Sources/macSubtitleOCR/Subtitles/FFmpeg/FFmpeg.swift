@@ -23,13 +23,13 @@ struct FFmpeg {
 
         // Open the input file
         if avformat_open_input(&fmtCtx, sub, nil, nil) != 0 {
-            fatalError("Could not open input file")
+            throw macSubtitleOCRError.fileReadError("Failed to open input file: \(sub)")
         }
         defer { avformat_close_input(&fmtCtx) }
 
         // Retrieve stream information
         if avformat_find_stream_info(fmtCtx, nil) < 0 {
-            fatalError("Could not find stream info")
+            throw macSubtitleOCRError.ffmpegError("FFmpeg failed to find stream info")
         }
 
         // Iterate over all streams and find subtitle tracks
@@ -81,7 +81,7 @@ struct FFmpeg {
             // Decode subtitle packet
             var gotSubtitle: Int32 = 0
             guard avcodec_decode_subtitle2(stream.codecContext, &subtitle, &gotSubtitle, packet) > 0 else {
-                logger.warning("Error decoding subtitle for stream \(streamNumber), skipping...")
+                logger.warning("Failed to decode subtitle for stream \(streamNumber), skipping...")
                 continue
             }
 

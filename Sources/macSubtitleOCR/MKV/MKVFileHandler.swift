@@ -20,14 +20,14 @@ class MKVFileHandler {
 
     // MARK: - Lifecycle
 
-    init(filePath: String) {
+    init(filePath: String) throws {
         guard FileManager.default.fileExists(atPath: filePath) else {
-            fatalError("File does not exist at path: \(filePath)")
+            throw macSubtitleOCRError.fileReadError("File does not exist at path: \(filePath)")
         }
         do {
             try fileHandle = FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
         } catch {
-            fatalError("Failed to open file for file at path: \(filePath), error: \(error.localizedDescription)")
+            throw macSubtitleOCRError.fileReadError("Failed to open file: \(filePath)")
         }
         endOfFile = fileHandle.seekToEndOfFile()
         fileHandle.seek(toFileOffset: 0)
