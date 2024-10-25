@@ -9,6 +9,9 @@ jobs:
   release:
     name: Release
     runs-on: "macos-latest"
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
