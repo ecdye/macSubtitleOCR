@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    name: Release
+    runs-on: "macos-latest"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6.1.0
+        with:
+          gpg_private_key: "${{ secrets.RELEASE_GPG_PRIVATE_KEY }}"
+          passphrase: "${{ secrets.RELEASE_GPG_PASSPHRASE }}"
+
+      - name: Install FFmpeg
+        run: brew install ffmpeg
+
+      - name: Select Xcode
+        uses: mxcl/xcodebuild@v3
+        with:
+          swift: '6.0'
+          action: none
+
+      - name: Build
+        run: |
+          xcrun swift build --configuration release --arch arm64
+          tar -cvJf macSubtitleOCR-${{ github.ref_name }}.tar.xz -C .build/release/ macSubtitleOCR
+          gpg --detach-sign --armor macSubtitleOCR-${{ github.ref_name }}.tar.xz
+          gpg --verify macSubtitleOCR-${{ github.ref_name }}.tar.xz.asc macSubtitleOCR-${{ github.ref_name }}.tar.xz
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+            token: ${{ secrets.GITHUB_TOKEN }}
+            generate_release_notes: true
+            make_latest: true
+            files: |
+              macSubtitleOCR-${{ github.ref_name }}.tar.xz
+              macSubtitleOCR-${{ github.ref_name }}.tar.xz.asc
