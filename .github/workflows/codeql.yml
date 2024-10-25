@@ -39,7 +39,7 @@ jobs:
         build-mode: manual
 
     - name: Build
-      run: xcrun swift build --configuration release --arch arm64
+      run: xcrun swift build --arch arm64
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

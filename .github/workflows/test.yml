@@ -1,4 +1,4 @@
-name: Build
+name: Test
 
 on:
   push:
@@ -41,33 +41,3 @@ jobs:
 
       - name: Periphery
         run: periphery scan --skip-build --index-store-path .build/debug/index/store
-
-  build:
-    name: Build
-    runs-on: macos-latest
-    needs: test
-    if: needs.test.result == 'success'
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Install FFmpeg
-      run: brew install ffmpeg
-
-    - name: Select Xcode
-      uses: mxcl/xcodebuild@v3
-      with:
-        swift: '6.0'
-        action: none
-
-    - name: Build
-      run: |
-        xcrun swift build --configuration release --arch arm64
-        tar -cvJf macSubtitleOCR.tar.xz -C .build/release/ macSubtitleOCR
-
-    - name: Save artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: macSubtitleOCR.tar.xz
-        path: macSubtitleOCR.tar.xz
