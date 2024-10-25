@@ -129,7 +129,12 @@ class MKVTrackParser: MKVFileHandler {
                     case EBML.codecPrivate:
                         var data = fileHandle.readData(ofLength: Int(elementSize))
                         data.removeNullBytes()
-                        codecPrivate[trackNumber] = String(data: data, encoding: .ascii)
+                        codecPrivate[trackNumber] = "# VobSub index file, v7 (do not modify this line!)\n" +
+                            (String(data: data, encoding: .ascii) ?? "")
+                        if let language {
+                            codecPrivate[trackNumber]?.append("langidx: 0\n")
+                            codecPrivate[trackNumber]?.append("\nid: \(language), index: 0")
+                        }
                     default:
                         fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
                     }

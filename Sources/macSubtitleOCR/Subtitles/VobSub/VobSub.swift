@@ -14,12 +14,14 @@ struct VobSub {
 
     private var logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "VobSub")
     private(set) var subtitles = [Subtitle]()
+    private(set) var language: String?
 
     // MARK: - Lifecycle
 
     init(_ sub: URL, _ idx: URL) throws {
         let data = try Data(contentsOf: sub)
         let idx = VobSubIDX(idx)
+        language = idx.language
         data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
             extractSubtitleImages(buffer: buffer, idx: idx)
         }

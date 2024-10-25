@@ -14,6 +14,7 @@ struct VobSubIDX {
     private(set) var timestamps: [TimeInterval] = []
     private(set) var offsets: [UInt64] = []
     private(set) var palette: [UInt8] = []
+    private(set) var language: String?
 
     // MARK: - Lifecycle
 
@@ -45,6 +46,9 @@ struct VobSubIDX {
             // Handle palette line
             if trimmedLine.starts(with: "palette:") {
                 palette = parsePalette(line: trimmedLine)
+                continue
+            } else if trimmedLine.starts(with: "id:") {
+                language = String(trimmedLine.split(separator: " ")[1].dropLast())
                 continue
             } else if !trimmedLine.starts(with: "timestamp:") {
                 continue
