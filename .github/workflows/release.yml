@@ -31,7 +31,7 @@ jobs:
           swift: '6.0'
           action: none
 
-      - name: Build
+      - name: Build Standalone
         id: build
         run: |
           TAG=${{ github.ref_name }}
@@ -41,6 +41,17 @@ jobs:
           gpg --detach-sign --armor macSubtitleOCR-${TAG}.tar.xz
           gpg --verify macSubtitleOCR-${TAG}.tar.xz.asc macSubtitleOCR-${TAG}.tar.xz
 
+      - name: Build with FFmpeg
+        run: |
+          mv Package.swift Package.standalone.swift
+          mv Package.ffmpeg.swift Package.swift
+          TAG=${{ github.ref_name }}
+          echo "::set-output name=version::${TAG#v}"
+          xcrun swift build -Xswiftc -DFFMPEG --configuration release --arch arm64
+          tar -cvJf macSubtitleOCR-ffmpeg-${TAG}.tar.xz -C .build/release/ macSubtitleOCR
+          gpg --detach-sign --armor macSubtitleOCR-ffmpeg-${TAG}.tar.xz
+          gpg --verify macSubtitleOCR-ffmpeg-${TAG}.tar.xz.asc macSubtitleOCR-ffmpeg-${TAG}.tar.xz
+
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
@@ -49,5 +60,5 @@ jobs:
             generate_release_notes: true
             make_latest: true
             files: |
-              macSubtitleOCR-${{ github.ref_name }}.tar.xz
-              macSubtitleOCR-${{ github.ref_name }}.tar.xz.asc
+              macSubtitleOCR*${{ github.ref_name }}.tar.xz
+              macSubtitleOCR*${{ github.ref_name }}.tar.xz.asc

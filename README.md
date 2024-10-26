@@ -18,30 +18,45 @@ An Apple M series processor is required for macSubtitleOCR, PRs adding additiona
 
 - Export raw JSON output from Vision for further analysis
 - Save `.png` images of subtitles for manual correction of OCR output
-- Built-in support for FFmpeg in case of any issues with internal decoder
+- Optional support for FFmpeg in case of any issues with internal decoder
 
-#### Supported Formats
+### Supported Formats
 
 - PGS (`.mkv`, `.sup`)
 - VobSub (`.mkv`, `.sub`, `.idx`)
 
-### Building the Project
+## Building the Project
 
 > [!IMPORTANT]
 > macSubtitleOCR requires Swift 6 support to compile
 
+Follow the directions below to compile the project with your desired support option.
+The final build will be available in the `.build/release` directory.
+
+### Build Internal Decoder Only
+
 To build macSubtitleOCR, follow these steps:
 
 ``` shell
-brew install ffmpeg
 git clone https://github.com/ecdye/macSubtitleOCR
 cd macSubtitleOCR
 swift build --configuration release
 ```
 
-The compiled build will be available in the `.build/release` directory.
+### Build With FFmpeg Decoder
 
-### Running Tests
+To build with FFmpeg support, follow these steps:
+
+``` shell
+brew install ffmpeg
+git clone https://github.com/ecdye/macSubtitleOCR
+cd macSubtitleOCR
+mv Package.swift Package.internal.swift
+mv Package.ffmpeg.swift Package.swift
+swift build -Xswiftc -DFFMPEG --configuration release
+```
+
+## Running Tests
 
 The testing process compares OCR output against known correct results.
 Tests aim for at least 95% accuracy, as there are slight differences in Vision results between machines.
@@ -50,7 +65,7 @@ Tests aim for at least 95% accuracy, as there are slight differences in Vision r
 swift test
 ```
 
-### Accuracy
+## Accuracy
 
 In general, Vision produces a highly accurate output for almost all subtitles.
 If you find an edge case with degraded performance, open an issue so it can be investigated.

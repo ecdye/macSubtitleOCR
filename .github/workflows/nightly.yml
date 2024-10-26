@@ -63,7 +63,7 @@ jobs:
         swift: '6.0'
         action: none
 
-    - name: Build
+    - name: Build Standalone
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
@@ -73,6 +73,17 @@ jobs:
         gpg --detach-sign --armor macSubtitleOCR-nightly-${sha}.tar.xz
         gpg --verify macSubtitleOCR-nightly-${sha}.tar.xz.asc macSubtitleOCR-nightly-${sha}.tar.xz
         gh release delete --yes --cleanup-tag nightly
+
+    - name: Build with FFmpeg
+      run: |
+        mv Package.swift Package.standalone.swift
+        mv Package.ffmpeg.swift Package.swift
+        sha=$(git rev-parse --short HEAD)
+        xcrun swift build -Xswiftc -DFFMPEG --configuration release --arch arm64
+        tar -cvJf macSubtitleOCR-nightly-ffmpeg-${sha}.tar.xz -C .build/release/ macSubtitleOCR
+        gpg --detach-sign --armor macSubtitleOCR-ffmpeg-${sha}.tar.xz
+        gpg --verify macSubtitleOCR-nightly-ffmpeg-${sha}.tar.xz.asc macSubtitleOCR-nightly-ffmpeg-${sha}.tar.xz
+
 
     - name: Publish
       uses: softprops/action-gh-release@v2

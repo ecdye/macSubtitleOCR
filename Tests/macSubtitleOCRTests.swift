@@ -18,12 +18,14 @@ let goodJSONPath = Bundle.module.url(forResource: "sintel.json", withExtension: 
     let options = ["--json"]
 #endif
 
-@Test(.serialized, arguments: TestFilePaths.allCases.map(\.path))
-func ffmpegDecoder(path: String) async throws {
-    let outputPath = URL.temporaryDirectory.path
-    let options = [path, outputPath, "--ffmpeg-decoder"] + options
-    try await runTest(with: options)
-}
+#if FFMPEG
+    @Test(.serialized, arguments: TestFilePaths.allCases.map(\.path))
+    func ffmpegDecoder(path: String) async throws {
+        let outputPath = URL.temporaryDirectory.path
+        let options = [path, outputPath, "--ffmpeg-decoder"] + options
+        try await runTest(with: options)
+    }
+#endif
 
 @Test(.serialized, arguments: TestFilePaths.allCases.map(\.path))
 func internalDecoder(path: String) async throws {

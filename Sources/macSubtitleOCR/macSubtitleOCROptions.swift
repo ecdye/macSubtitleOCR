@@ -32,8 +32,10 @@ struct Options: ParsableArguments {
     @Flag(name: [.customShort("j"), .long], help: "Save OCR results as raw JSON files")
     var json = false
 
-    @Flag(name: [.customShort("f"), .long], help: "Use FFmpeg decoder")
-    var ffmpegDecoder = false
+    #if FFMPEG
+        @Flag(name: [.customShort("f"), .long], help: "Use FFmpeg decoder")
+        var ffmpegDecoder = false
+    #endif
 
     @Flag(help: "Disable correction of 'l' to 'I' in OCR results")
     var disableICorrection = false
