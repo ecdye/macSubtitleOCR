@@ -137,19 +137,11 @@ struct macSubtitleOCR: AsyncParsableCommand {
     }
 
     private func createSubtitleProcessor(_ subtitles: [Subtitle], _ trackNumber: Int) -> SubtitleProcessor {
-        SubtitleProcessor(
-            subtitles: subtitles,
-            trackNumber: trackNumber,
-            invert: options.invert,
-            saveImages: options.saveImages,
-            language: options.languages,
-            customWords: options.customWords?.split(separator: ",").map(String.init),
-            fastMode: experimentalOptions.fastMode,
-            disableLanguageCorrection: experimentalOptions.disableLanguageCorrection,
-            disableICorrection: options.disableICorrection,
-            forceOldAPI: experimentalOptions.forceOldAPI,
-            outputDirectory: outputDirectory,
-            maxConcurrentTasks: options.maxThreads)
+        SubtitleProcessor(for: subtitles, from: trackNumber,
+                          withOptions: options.invert, options.saveImages, options.languages,
+                          options.customWords?.split(separator: ",").map(String.init), experimentalOptions.fastMode,
+                          experimentalOptions.disableLanguageCorrection, options.disableICorrection,
+                          experimentalOptions.forceOldAPI, outputDirectory, options.maxThreads)
     }
 
     private func saveResults(fileHandler: macSubtitleOCRFileHandler, results: [macSubtitleOCRResult]) async throws {

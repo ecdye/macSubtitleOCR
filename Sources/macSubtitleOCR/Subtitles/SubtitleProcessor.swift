@@ -8,41 +8,8 @@
 
 import CoreGraphics
 import Foundation
-import os
 import UniformTypeIdentifiers
 import Vision
-
-actor SubtitleAccumulator {
-    var subtitles: [Subtitle] = []
-    var json: [SubtitleJSONResult] = []
-
-    func appendSubtitle(_ subtitle: Subtitle) {
-        subtitles.append(subtitle)
-    }
-
-    func appendJSON(_ jsonOut: SubtitleJSONResult) {
-        json.append(jsonOut)
-    }
-}
-
-actor AsyncSemaphore {
-    private var permits: Int
-
-    init(limit: Int) {
-        permits = limit
-    }
-
-    func wait() async {
-        while permits <= 0 {
-            await Task.yield()
-        }
-        permits -= 1
-    }
-
-    func signal() {
-        permits += 1
-    }
-}
 
 struct SubtitleProcessor {
     private let subtitles: [Subtitle]
@@ -58,9 +25,9 @@ struct SubtitleProcessor {
     private let outputDirectory: String
     private let maxConcurrentTasks: Int
 
-    init(subtitles: [Subtitle], trackNumber: Int, invert: Bool, saveImages: Bool, language: String, customWords: [String]?,
-         fastMode: Bool, disableLanguageCorrection: Bool, disableICorrection: Bool, forceOldAPI: Bool,
-         outputDirectory: String, maxConcurrentTasks: Int) {
+    init(for subtitles: [Subtitle], from trackNumber: Int, withOptions invert: Bool, _ saveImages: Bool, _ language: String,
+         _ customWords: [String]?, _ fastMode: Bool, _ disableLanguageCorrection: Bool, _ disableICorrection: Bool,
+         _ forceOldAPI: Bool, _ outputDirectory: String, _ maxConcurrentTasks: Int) {
         self.subtitles = subtitles
         self.trackNumber = trackNumber
         self.invert = invert
@@ -90,8 +57,7 @@ struct SubtitleProcessor {
                         print(
                             "Found invalid image for track: \(trackNumber), index: \(subIndex), creating an empty placeholder!")
                         subtitle.text = ""
-                        await accumulator.appendSubtitle(subtitle)
-                        await accumulator.appendJSON(SubtitleJSONResult(index: subIndex, lines: [], text: ""))
+                        await accumulator.append(subtitle, SubtitleJSONResult(index: subIndex, lines: [], text: ""))
                         await semaphore.signal()
                         return
                     }
@@ -122,8 +88,7 @@ struct SubtitleProcessor {
                     let jsonOut = SubtitleJSONResult(index: subIndex, lines: subtitleLines, text: subtitleText)
 
                     // Safely append to the arrays using the actor
-                    await accumulator.appendSubtitle(subtitle)
-                    await accumulator.appendJSON(jsonOut)
+                    await accumulator.append(subtitle, jsonOut)
                     await semaphore.signal()
                 }
             }
@@ -156,8 +121,7 @@ struct SubtitleProcessor {
             }
 
             try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
-            let observations = request.results! as [VNRecognizedTextObservation]
-            processVNRecognizedText(observations, &text, &lines, image.width, image.height)
+            processRecognizedText(request.results, &text, &lines, image.width, image.height)
         }
 
         return (text, lines)
@@ -184,8 +148,8 @@ struct SubtitleProcessor {
             let string = candidate.string
             let confidence = candidate.confidence
             let stringRange = string.startIndex ..< string.endIndex
-            let boundingBox = candidate.boundingBox(for: stringRange)!.boundingBox
-            let rect = boundingBox.toImageCoordinates(size, origin: .upperLeft)
+            let boundingBox = candidate.boundingBox(for: stringRange)?.boundingBox
+            let rect = boundingBox?.toImageCoordinates(size, origin: .upperLeft) ?? .zero
             let line = SubtitleLine(
                 text: string,
                 confidence: confidence,
@@ -199,15 +163,15 @@ struct SubtitleProcessor {
         }.joined(separator: "\n") ?? ""
     }
 
-    private func processVNRecognizedText(_ observations: [VNRecognizedTextObservation], _ text: inout String,
-                                         _ lines: inout [SubtitleLine], _ width: Int, _ height: Int) {
-        text = observations.compactMap { observation in
+    private func processRecognizedText(_ observations: [VNRecognizedTextObservation]?, _ text: inout String,
+                                       _ lines: inout [SubtitleLine], _ width: Int, _ height: Int) {
+        text = observations?.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return "" }
 
             let string = candidate.string
             let confidence = candidate.confidence
             let stringRange = string.startIndex ..< string.endIndex
-            let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox ?? .zero
+            let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox
             let rect = VNImageRectForNormalizedRect(boundingBox ?? .zero, width, height)
 
             let line = SubtitleLine(
@@ -220,7 +184,7 @@ struct SubtitleProcessor {
             lines.append(line)
 
             return string
-        }.joined(separator: "\n")
+        }.joined(separator: "\n") ?? ""
     }
 
     private func saveImage(_ image: CGImage, index: Int) throws {
