@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check schedule
+      - name: Check if build is needed
         id: should_run
         continue-on-error: true
         env:
