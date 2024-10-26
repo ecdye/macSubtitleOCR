@@ -5,8 +5,9 @@ on:
     - cron: '0 0 * * *'
 
 jobs:
-  check_commit:
-    name: Check latest commit
+  confirm_build:
+    name: Confim Build
+    if: ${{ github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.should_run.outputs.should_run }}
@@ -14,19 +15,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check latest commit
+      - name: Check schedule
         id: should_run
         continue-on-error: true
-        if: ${{ github.event_name == 'schedule' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          COMMIT="$(git rev-list --after="24 hours" ${{ github.sha }} -- '**/*.swift' | head -n 1)"
+          if [[ -z $COMMIT ]]; then
+            echo "::set-output name=should_run::false"
+            exit 0
+          fi
           STATUS="$(gh api -H "Accept: application/vnd.github+json" \
                     -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "/repos/ecdye/macSubtitleOCR/actions/runs?branch=main&head_sha=${{ github.sha }}&status=completed" | \
+                    "/repos/ecdye/macSubtitleOCR/actions/runs?branch=main&head_sha=${COMMIT}&status=completed" | \
                     jq '.workflow_runs[] | select(.name == "Test") | .conclusion')"
-          COMMIT="$(git rev-list  --after="24 hours" ${{ github.sha }})""
-          if [[ $STATUS == "\"success\"" ]] && [[ -n $COMMIT ]]; then
+          if [[ $STATUS == "\"success\"" ]]; then
             echo "::set-output name=should_run::true"
           else
             echo "::set-output name=should_run::false"
@@ -35,8 +39,8 @@ jobs:
   nightly:
     name: Nightly Build
     runs-on: macos-latest
-    needs: check_commit
-    if: ${{ needs.check_commit.outputs.should_run != 'false' }}
+    needs: confirm_build
+    if: ${{ needs.confirm_build.outputs.should_run == 'true' }} || ${{ github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: write
 
@@ -63,10 +67,11 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        sha=$(git rev-parse --short HEAD)
         xcrun swift build --configuration release --arch arm64
-        tar -cvJf macSubtitleOCR-nightly-${{ github.ref_name }}.tar.xz -C .build/release/ macSubtitleOCR
-        gpg --detach-sign --armor macSubtitleOCR-nightly-${{ github.ref_name }}.tar.xz
-        gpg --verify macSubtitleOCR-nightly-${{ github.ref_name }}.tar.xz.asc macSubtitleOCR-nightly-${{ github.ref_name }}.tar.xz
+        tar -cvJf macSubtitleOCR-nightly-${sha}.tar.xz -C .build/release/ macSubtitleOCR
+        gpg --detach-sign --armor macSubtitleOCR-nightly-${sha}.tar.xz
+        gpg --verify macSubtitleOCR-nightly-${sha}.tar.xz.asc macSubtitleOCR-nightly-${sha}.tar.xz
         gh release delete --yes --cleanup-tag nightly
 
     - name: Publish
@@ -77,5 +82,5 @@ jobs:
         tag_name: nightly
         prerelease: true
         files: |
-          macSubtitleOCR-nightly-${{ github.ref_name }}.tar.xz
-          macSubtitleOCR-nightly-${{ github.ref_name }}.tar.xz.asc
+          macSubtitleOCR-nightly-*.tar.xz
+          macSubtitleOCR-nightly-*.tar.xz.asc
