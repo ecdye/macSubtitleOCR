@@ -87,7 +87,7 @@ struct PGS {
                         ods = try ODS(buffer, offset, segmentLength)
                         offset += segmentLength
                         hasMultipleODS = true
-                        break
+                        continue
                     } else if hasMultipleODS {
                         try ods!.appendSegment(buffer, offset, segmentLength)
                         offset += segmentLength
@@ -99,14 +99,14 @@ struct PGS {
                 } catch let macSubtitleOCRError.invalidODSDataLength(length) {
                     logger.error("Invalid ODS length: \(length), abandoning remaining segments!")
                     offset = buffer.count
-                    return nil
+                    continue
                 }
             case 0x16, 0x17:
                 offset += segmentLength
             default:
                 logger.warning("Unknown segment type: \(segmentType.hex()), skipping...")
                 offset += segmentLength
-                return nil
+                continue
             }
 
             guard let pds, let ods else { continue }
