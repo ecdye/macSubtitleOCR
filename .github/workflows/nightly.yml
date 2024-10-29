@@ -72,7 +72,7 @@ jobs:
         tar -cvJf macSubtitleOCR-nightly-${sha}.tar.xz -C .build/release/ macSubtitleOCR
         gpg --detach-sign --armor macSubtitleOCR-nightly-${sha}.tar.xz
         gpg --verify macSubtitleOCR-nightly-${sha}.tar.xz.asc macSubtitleOCR-nightly-${sha}.tar.xz
-        gh release delete --yes --cleanup-tag nightly
+        gh release delete --yes --cleanup-tag nightly || true
 
     - name: Build with FFmpeg
       run: |
