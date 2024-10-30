@@ -26,7 +26,7 @@ struct VobSubParser {
         masterPalette = idxPalette
         try readSubFrame(buffer: buffer, offset: offset, nextOffset: nextOffset)
         try decodeImage()
-        decodePalette()
+        try decodePalette()
     }
 
     // MARK: - Methods
@@ -197,7 +197,11 @@ struct VobSubParser {
         }
     }
 
-    private func decodePalette() {
+    private func decodePalette() throws {
+        guard subtitle.imagePalette != nil, subtitle.imageAlpha != nil else {
+            throw macSubtitleOCRError.fileReadError("Failed to read image palette and alpha")
+        }
+
         var palette = [UInt8](repeating: 0, count: 4 * 4)
 
         for i in 0 ..< 4 {
