@@ -7,7 +7,6 @@ on:
 jobs:
   confirm_build:
     name: Confim Build
-    if: ${{ github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.should_run.outputs.should_run }}
@@ -22,7 +21,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           COMMIT="$(git rev-list --after="24 hours" ${{ github.sha }} -- '**/*.swift' | head -n 1)"
-          if [[ -z $COMMIT ]]; then
+          if [[ ${{ github.event_name }} == "schedule" ]]; then
+            echo "::set-output name=should_run::true"
+            exit 0
+          elif [[ -z $COMMIT ]]; then
             echo "::set-output name=should_run::false"
             exit 0
           fi
