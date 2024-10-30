@@ -7,3 +7,4 @@
 Tests/Resources/*
 !Tests/Resources/sintel*.*
 !Tests/Resources/README.md
+Session.vim

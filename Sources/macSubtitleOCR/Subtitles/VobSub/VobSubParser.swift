@@ -97,7 +97,7 @@ struct VobSubParser {
                 let rleSize = relativeControlOffset - 2
                 controlSize = size - rleSize - 4 // 4 bytes for the size and control offset
                 controlOffset = offset + rleSize
-                trueHeaderSize = startOffset - offset
+                trueHeaderSize = offset - startOffset
                 firstPacketFound = true
             } else if firstPacketFound {
                 controlOffset! += trueHeaderSize
