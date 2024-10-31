@@ -13,18 +13,18 @@ import Testing
 let goodSRTPath = Bundle.module.url(forResource: "sintel.srt", withExtension: nil)!.path
 let goodJSONPath = Bundle.module.url(forResource: "sintel.json", withExtension: nil)!.path
 #if GITHUB_ACTIONS // Lower thread count for CI to avoid timeouts
-    let options = ["--json", "--max-threads", "1"]
+let options = ["--json", "--max-threads", "1"]
 #else
-    let options = ["--json"]
+let options = ["--json"]
 #endif
 
 #if FFMPEG
-    @Test(.serialized, arguments: TestFilePaths.allCases.map(\.path))
-    func ffmpegDecoder(path: String) async throws {
-        let outputPath = URL.temporaryDirectory.path
-        let options = [path, outputPath, "--ffmpeg-decoder"] + options
-        try await runTest(with: options)
-    }
+@Test(.serialized, arguments: TestFilePaths.allCases.map(\.path))
+func ffmpegDecoder(path: String) async throws {
+    let outputPath = URL.temporaryDirectory.path
+    let options = [path, outputPath, "--ffmpeg-decoder"] + options
+    try await runTest(with: options)
+}
 #endif
 
 @Test(.serialized, arguments: TestFilePaths.allCases.map(\.path))

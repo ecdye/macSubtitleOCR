@@ -54,13 +54,13 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     private mutating func processInput() async throws -> [macSubtitleOCRResult] {
         #if FFMPEG
-            if options.ffmpegDecoder {
-                try await processFFmpegDecoder()
-            } else {
-                try await processInternalDecoder()
-            }
-        #else
+        if options.ffmpegDecoder {
+            try await processFFmpegDecoder()
+        } else {
             try await processInternalDecoder()
+        }
+        #else
+        try await processInternalDecoder()
         #endif
     }
 
@@ -123,18 +123,18 @@ struct macSubtitleOCR: AsyncParsableCommand {
     }
 
     #if FFMPEG
-        private func processFFmpegDecoder() async throws -> [macSubtitleOCRResult] {
-            var results: [macSubtitleOCRResult] = []
-            let ffmpeg = try FFmpeg(input)
+    private func processFFmpegDecoder() async throws -> [macSubtitleOCRResult] {
+        var results: [macSubtitleOCRResult] = []
+        let ffmpeg = try FFmpeg(input)
 
-            for result in ffmpeg.subtitleTracks {
-                logger.debug("Processing subtitle track: \(result.key)")
-                let result = try await processSubtitle(result.value, trackNumber: result.key)
-                results.append(result)
-            }
-
-            return results
+        for result in ffmpeg.subtitleTracks {
+            logger.debug("Processing subtitle track: \(result.key)")
+            let result = try await processSubtitle(result.value, trackNumber: result.key)
+            results.append(result)
         }
+
+        return results
+    }
     #endif
 
     private func processSubtitle(_ subtitles: [Subtitle], trackNumber: Int) async throws -> macSubtitleOCRResult {

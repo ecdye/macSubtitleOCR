@@ -33,8 +33,8 @@ struct Options: ParsableArguments {
     var json = false
 
     #if FFMPEG
-        @Flag(name: [.customShort("f"), .long], help: "Use FFmpeg decoder")
-        var ffmpegDecoder = false
+    @Flag(name: [.customShort("f"), .long], help: "Use FFmpeg decoder")
+    var ffmpegDecoder = false
     #endif
 
     @Flag(help: "Disable correction of 'l' to 'I' in OCR results")
