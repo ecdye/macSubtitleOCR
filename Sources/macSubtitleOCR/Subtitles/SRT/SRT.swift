@@ -13,9 +13,8 @@ struct SRT {
     // MARK: - Properties
 
     private var subtitles: [Subtitle]
-    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "SRT")
 
-    // MARK: - Getters / Setters
+    // MARK: - Lifecycle
 
     init(subtitles: [Subtitle]) {
         self.subtitles = subtitles
@@ -40,21 +39,9 @@ struct SRT {
         var srtContent = ""
 
         for subtitle in subtitles {
-            var endTimestamp = subtitle.endTimestamp ?? 0
-            if subtitle.index + 1 < subtitles.count {
-                let nextSubtitle = subtitles[subtitle.index + 1]
-                if nextSubtitle.startTimestamp! <= subtitle.endTimestamp! {
-                    logger.warning("Fixing subtitle index \(subtitle.index) end timestamp!")
-                    logger.warning("Got \(subtitle.endTimestamp!) and \(nextSubtitle.startTimestamp!)")
-                    if nextSubtitle.startTimestamp! - subtitle.startTimestamp! > 5 {
-                        endTimestamp = subtitle.startTimestamp! + 5
-                    } else {
-                        endTimestamp = nextSubtitle.startTimestamp! - 0.1
-                    }
-                }
-            }
+            fixEndTimestamp(of: subtitle)
             let startTime = formatTime(subtitle.startTimestamp!)
-            let endTime = formatTime(endTimestamp)
+            let endTime = formatTime(subtitle.endTimestamp!)
 
             srtContent += "\(subtitle.index)\n"
             srtContent += "\(startTime) --> \(endTime)\n"
@@ -62,6 +49,26 @@ struct SRT {
         }
 
         return srtContent
+    }
+
+    // TODO: Make this smarter, use length of the text to make it more dynamic
+    private func fixEndTimestamp(of subtitle: Subtitle) {
+        if subtitle.endTimestamp == nil {
+            if subtitle.index < subtitles.count {
+                let nextSubtitle = subtitles[subtitle.index]
+                subtitle.endTimestamp = min(subtitle.startTimestamp! + 5, nextSubtitle.startTimestamp! - 0.1)
+            } else {
+                subtitle.endTimestamp = subtitle.startTimestamp! + 5
+            }
+        } else {
+            if subtitle.index < subtitles.count {
+                let nextSubtitle = subtitles[subtitle.index]
+                subtitle.endTimestamp = min(subtitle.endTimestamp!, nextSubtitle.startTimestamp! - 0.1)
+            }
+            if subtitle.endTimestamp! > subtitle.startTimestamp! + 5 {
+                subtitle.endTimestamp = subtitle.startTimestamp! + 5
+            }
+        }
     }
 
     private func formatTime(_ time: TimeInterval) -> String {

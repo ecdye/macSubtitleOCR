@@ -15,7 +15,6 @@ struct VobSubParser {
     private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "VobSubParser")
     let subtitle: Subtitle
     private let masterPalette: [UInt8]
-    private let fps = 24.0 // TODO: Make this configurable / dynamic
     private let minimumControlHeaderSize = 22
 
     // MARK: - Lifecycle
@@ -71,11 +70,11 @@ struct VobSubParser {
             offset += 1 // Skip PES miscellaneous data
             let extByteOne = buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self)
             offset += 1
-            let firstPacket = (extByteOne & 0x80) == 0x80 || (extByteOne & 0xC0) == 0xC0
+            let ptsDtsFlags = (extByteOne & 0x80) == 0x80 || (extByteOne & 0xC0) == 0xC0
 
-            let ptsDataLength = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self))
+            let pesHeaderLength = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self))
             offset += 1
-            if ptsDataLength == 5 {
+            if ptsDtsFlags, pesHeaderLength >= 5 {
                 var presentationTimestamp: UInt64 = 0
                 presentationTimestamp = UInt64(buffer[offset + 4]) >> 1
                 presentationTimestamp += UInt64(buffer[offset + 3]) << 7
@@ -84,19 +83,19 @@ struct VobSubParser {
                 presentationTimestamp += UInt64(buffer[offset] & 0x0E) << 29
                 subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90000
             }
-            offset += ptsDataLength
+            offset += pesHeaderLength
 
             offset += 1 // Stream ID
 
             var trueHeaderSize = offset - startOffset
-            if firstPacket, ptsDataLength >= 5 {
+            if ptsDtsFlags, pesHeaderLength >= 5 {
                 let size = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
                 offset += 2
                 relativeControlOffset = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
                 offset += 2
-                let rleSize = relativeControlOffset - 2
-                controlSize = size - rleSize - 4 // 4 bytes for the size and control offset
-                controlOffset = offset + rleSize
+                // 2 byte offset because of the 2 byte relative offset field
+                controlSize = size - relativeControlOffset - 6
+                controlOffset = offset + relativeControlOffset - 4
                 trueHeaderSize = offset - startOffset
                 firstPacketFound = true
             } else if firstPacketFound {
@@ -110,7 +109,7 @@ struct VobSubParser {
             offset += rleFragmentSize
 
             let bytesToCopy = max(0, min(difference, controlSize! - controlHeaderCopied))
-            controlHeader.append(contentsOf: buffer[offset ..< offset + bytesToCopy])
+            controlHeader.append(contentsOf: buffer[controlOffset! ..< controlOffset! + bytesToCopy])
             controlHeaderCopied += bytesToCopy
             offset += bytesToCopy
 
@@ -128,14 +127,13 @@ struct VobSubParser {
     }
 
     private func parseCommandHeader(_ header: Data, offset: Int) {
-        let relativeEndTimestamp = TimeInterval(Int(header.getUInt16BE()!)) * 1024 / 90000 / fps
-        let endOfControl = max(minimumControlHeaderSize, Int(header.getUInt16BE()!) - 4 - offset)
+        let date = TimeInterval((header.getUInt16BE()! << 10) / 90)
+        let endOfControl = max(minimumControlHeaderSize, Int(header.getUInt16BE(at: 2)!) - 4 - offset)
         if endOfControl > header.count {
-            logger.warning("Control header is too short, \(header.count) bytes, trying to decode anyway, errors may occur")
+            logger.warning("Control header is too short: \(header.count) bytes, errors may occur")
         }
-        subtitle.endTimestamp = subtitle.startTimestamp! + relativeEndTimestamp
 
-        var index = 2
+        var index = 4
 
         while index < endOfControl {
             let command = header[index]
@@ -144,9 +142,10 @@ struct VobSubParser {
             switch command {
             case 0:
                 break // Set subtitle as forced
-            case 1, 2:
-                // Start and stop display commands
-                break
+            case 1:
+                subtitle.startTimestamp! += date
+            case 2:
+                subtitle.endTimestamp = subtitle.startTimestamp! + date
             case 3:
                 var byte = header[index]
                 index += 1
