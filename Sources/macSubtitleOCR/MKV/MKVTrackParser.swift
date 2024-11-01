@@ -46,30 +46,29 @@ class MKVTrackParser: MKVFileHandler {
         }
 
         let trackData = extractTrackData(for: subtitleTracks)
-        trackData?.enumerated().forEach { index, data in
+        trackData?.forEach { trackNumber, data in
             if data.isEmpty {
-                print("Found empty track data for track \(index + 1), skipping track!")
+                print("Found empty track data for track \(trackNumber), skipping track!")
                 return
             }
             tracks.append(MKVTrack(
-                trackNumber: index,
-                codecID: subtitleTracks[index + 1]!,
+                trackNumber: trackNumber,
+                codecID: subtitleTracks[trackNumber]!,
                 trackData: data,
-                idxData: codecPrivate[index + 1],
-                language: languages[index + 1]))
+                idxData: codecPrivate[trackNumber],
+                language: languages[trackNumber]))
         }
     }
 
-    func extractTrackData(for tracks: [Int: String]) -> [Data]? {
+    func extractTrackData(for tracks: [Int: String]) -> [Int: Data]? {
         fileHandle.seek(toFileOffset: 0)
 
         // Step 1: Locate the Segment element
         guard let segmentSize = locateSegment() else { return nil }
         let segmentEndOffset = fileHandle.offsetInFile + segmentSize
-        // swiftformat:disable:next redundantSelf
         logger.debug("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset)")
 
-        var trackData = [Data](repeating: Data(), count: tracks.count)
+        var trackData = [Int: Data]()
 
         // Step 2: Parse Clusters within the Segment
         while fileHandle.offsetInFile < segmentEndOffset {
@@ -156,7 +155,7 @@ class MKVTrackParser: MKVFileHandler {
     }
 
     private func parseBlocks(until clusterEndOffset: UInt64, for tracks: [Int: String], with clusterTimestamp: Int64,
-                             into trackData: inout [Data]) {
+                             into trackData: inout [Int: Data]) {
         while fileHandle.offsetInFile < clusterEndOffset {
             // swiftformat:disable:next redundantSelf
             logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")
@@ -180,7 +179,7 @@ class MKVTrackParser: MKVFileHandler {
     }
 
     private func handlePGSBlock(for blockTrackNumber: UInt64, with blockTimestamp: Int64, _ blockSize: UInt64,
-                                _ clusterTimestamp: Int64, _ blockStartOffset: UInt64, _ trackData: inout [Data]) {
+                                _ clusterTimestamp: Int64, _ blockStartOffset: UInt64, _ trackData: inout [Int: Data]) {
         let absPTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp)
         let pgsPTS = encodePTSForPGS(absPTS)
         let pgsHeader = Data([0x50, 0x47] + pgsPTS + [0x00, 0x00, 0x00, 0x00])
@@ -199,11 +198,15 @@ class MKVTrackParser: MKVFileHandler {
             offset += segmentSize
         }
 
-        trackData[Int(blockTrackNumber - 1)].append(blockData)
+        let trackNumber = Int(blockTrackNumber)
+        if trackData[trackNumber] == nil {
+            trackData[trackNumber] = Data()
+        }
+        trackData[trackNumber]?.append(blockData)
     }
 
     private func handleVobSubBlock(for blockTrackNumber: UInt64, with blockTimestamp: Int64, _ blockSize: UInt64,
-                                   _ clusterTimestamp: Int64, _ blockStartOffset: UInt64, _ trackData: inout [Data]) {
+                                   _ clusterTimestamp: Int64, _ blockStartOffset: UInt64, _ trackData: inout [Int: Data]) {
         let absolutePTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp)
         let vobSubPTS = encodePTSForVobSub(from: absolutePTS)
 
@@ -215,10 +218,14 @@ class MKVTrackParser: MKVFileHandler {
 
         appendVobSubSegments(segmentSize: segmentSize, header: &vobSubHeader)
 
-        trackData[Int(blockTrackNumber - 1)].append(vobSubHeader)
+        let trackNumber = Int(blockTrackNumber)
+        if trackData[trackNumber] == nil {
+            trackData[trackNumber] = Data()
+        }
+        trackData[trackNumber]?.append(vobSubHeader)
 
-        let offset = String(format: "%09X", trackData[Int(blockTrackNumber - 1)].count - vobSubHeader.count)
-        codecPrivate[Int(blockTrackNumber)]?.append("\ntimestamp: \(formatTime(absolutePTS)), filepos: \(offset)")
+        let offset = String(format: "%09X", trackData[trackNumber]!.count - vobSubHeader.count)
+        codecPrivate[trackNumber]?.append("\ntimestamp: \(formatTime(absolutePTS)), filepos: \(offset)")
     }
 
     // swiftformat:disable all

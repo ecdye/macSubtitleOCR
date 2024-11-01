@@ -77,7 +77,7 @@ struct PGS {
                     pds = try PDS(buffer, offset, segmentLength)
                     offset += segmentLength
                 } catch let macSubtitleOCRError.invalidPDSDataLength(length) {
-                    logger.error("Invalid PDS length: \(length), abandoning remaining segments!")
+                    print("Invalid PDS length: \(length), abandoning remaining segments!", to: &stderr)
                     offset = buffer.count
                     return nil
                 }
@@ -97,7 +97,7 @@ struct PGS {
                         offset += segmentLength
                     }
                 } catch let macSubtitleOCRError.invalidODSDataLength(length) {
-                    logger.error("Invalid ODS length: \(length), abandoning remaining segments!")
+                    print("Invalid ODS length: \(length), abandoning remaining segments!", to: &stderr)
                     offset = buffer.count
                     continue
                 }

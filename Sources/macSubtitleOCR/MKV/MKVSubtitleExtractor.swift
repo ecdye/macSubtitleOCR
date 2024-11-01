@@ -19,7 +19,7 @@ class MKVSubtitleExtractor: MKVTrackParser {
         if FileManager.default.createFile(atPath: trackPath, contents: tracks[trackNumber].trackData, attributes: nil) {
             logger.debug("Created file at path: \(trackPath)")
         } else {
-            logger.error("Failed to create file at path: \(trackPath)!")
+            print("Failed to create file at path: \(trackPath)!", to: &stderr)
         }
 
         if fileExtension == "sub" {
@@ -27,7 +27,7 @@ class MKVSubtitleExtractor: MKVTrackParser {
             do {
                 try tracks[trackNumber].idxData?.write(to: idxPath, atomically: true, encoding: .utf8)
             } catch {
-                logger.error("Failed to write idx file at path: \(idxPath)")
+                print("Failed to write idx file at path: \(idxPath)", to: &stderr)
             }
         }
     }
