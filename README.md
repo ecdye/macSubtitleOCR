@@ -30,8 +30,7 @@ An Apple M series processor is required for macSubtitleOCR, PRs adding additiona
 > [!IMPORTANT]
 > macSubtitleOCR requires Swift 6 support to compile
 
-Follow the directions below to compile the project with your desired support option.
-The final build will be available in the `.build/release` directory.
+To make and install the project, follow the directions below:
 
 ### Build Internal Decoder Only
 
@@ -40,7 +39,8 @@ To build macSubtitleOCR, follow these steps:
 ``` shell
 git clone https://github.com/ecdye/macSubtitleOCR
 cd macSubtitleOCR
-swift build --configuration release
+make
+sudo make install
 ```
 
 ### Build With FFmpeg Decoder
@@ -51,9 +51,8 @@ To build with FFmpeg support, follow these steps:
 brew install ffmpeg
 git clone https://github.com/ecdye/macSubtitleOCR
 cd macSubtitleOCR
-mv Package.swift Package.internal.swift
-mv Package.ffmpeg.swift Package.swift
-swift build -Xswiftc -DFFMPEG --configuration release
+make ffmpeg
+sudo make install_ffmpeg
 ```
 
 ## Running Tests
