@@ -12,7 +12,6 @@ import os
 struct VobSubParser {
     // MARK: - Properties
 
-    private let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "VobSubParser")
     let subtitle: Subtitle
     private let masterPalette: [UInt8]
     private let fps = 24.0 // TODO: Make this configurable / dynamic
@@ -44,7 +43,7 @@ struct VobSubParser {
         repeat {
             let startOffset = offset
             guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.psPacket else {
-                logger.warning("No PS packet at offset \(offset), trying to decode anyway")
+                print("No VobSub PS packet at offset \(offset), trying to decode anyway")
                 break
             }
             offset += 4
@@ -56,7 +55,7 @@ struct VobSubParser {
 
             guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.pesPacket
             else {
-                logger.warning("No PES packet at offset \(offset), trying to decode anyway")
+                print("No VobSub PES packet at offset \(offset), trying to decode anyway")
                 break
             }
             offset += 4
@@ -118,7 +117,7 @@ struct VobSubParser {
         } while offset < nextOffset && controlHeaderCopied < controlSize!
 
         if controlHeaderCopied < controlSize! {
-            logger.warning("Failed to read control header completely, \(controlHeaderCopied)/\(controlSize!)")
+            print("Failed to read control header completely, \(controlHeaderCopied)/\(controlSize!), errors may occur")
             for _ in controlHeaderCopied ..< controlSize! {
                 controlHeader.append(0xFF)
             }
@@ -130,7 +129,7 @@ struct VobSubParser {
     private func parseCommandHeader(_ header: Data, offset: Int) {
         let endOfControl = max(minimumControlHeaderSize, Int(header.getUInt16BE()!) - 4 - offset)
         if endOfControl > header.count {
-            logger.warning("Control header is too short, \(header.count) bytes, trying to decode anyway, errors may occur")
+            print("Control header is too short for subtitle: \(subtitle.index), got \(header.count) bytes, errors may occur")
         }
 
         var index = 2
