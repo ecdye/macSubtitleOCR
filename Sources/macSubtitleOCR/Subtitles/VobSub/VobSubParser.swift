@@ -12,7 +12,7 @@ import os
 struct VobSubParser {
     // MARK: - Properties
 
-    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "VobSubParser")
+    private let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "VobSubParser")
     let subtitle: Subtitle
     private let masterPalette: [UInt8]
     private let fps = 24.0 // TODO: Make this configurable / dynamic

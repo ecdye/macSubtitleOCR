@@ -10,7 +10,7 @@ import ArgumentParser
 import os
 import UniformTypeIdentifiers
 
-private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "main")
+private let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "main")
 nonisolated(unsafe) var stderr = FileHandleOutputStream(.standardError)
 
 @main

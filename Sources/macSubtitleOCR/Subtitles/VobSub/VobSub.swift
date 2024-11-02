@@ -12,7 +12,7 @@ import os
 struct VobSub {
     // MARK: - Properties
 
-    private var logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "VobSub")
+    private var logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "VobSub")
     private(set) var subtitles = [Subtitle]()
     private(set) var language: String?
 

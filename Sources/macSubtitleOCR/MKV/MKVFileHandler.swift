@@ -15,7 +15,7 @@ class MKVFileHandler {
     let fileHandle: FileHandle
     let endOfFile: UInt64
     var timestampScale: TimeInterval = 1000000.0 // Default value if not specified in a given MKV file
-    let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "MKV")
+    let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "MKV")
     let ebmlParser: EBMLParser
 
     // MARK: - Lifecycle

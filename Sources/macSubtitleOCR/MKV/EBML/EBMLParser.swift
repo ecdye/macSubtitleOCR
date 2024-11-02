@@ -12,7 +12,7 @@ import os
 struct EBMLParser {
     // MARK: - Properties
 
-    private let logger = Logger(subsystem: "github.ecdye.macSubtitleOCR", category: "EBML")
+    private let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "EBML")
     private let fileHandle: FileHandle
 
     // MARK: - Lifecycle
