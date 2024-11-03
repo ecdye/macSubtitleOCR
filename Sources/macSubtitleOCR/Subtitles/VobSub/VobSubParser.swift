@@ -14,7 +14,6 @@ struct VobSubParser {
 
     let subtitle: Subtitle
     private let masterPalette: [UInt8]
-    private let fps = 24.0 // TODO: Make this configurable / dynamic
     private let minimumControlHeaderSize = 22
 
     // MARK: - Lifecycle
