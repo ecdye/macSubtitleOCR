@@ -21,9 +21,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          brew tap peripheryapp/periphery
-          brew install --cask periphery --quiet
-          brew install --formula ffmpeg --quiet
+          brew install ffmpeg peripheryapp/periphery/periphery --quiet
 
       - name: Select Xcode
         uses: mxcl/xcodebuild@v3
