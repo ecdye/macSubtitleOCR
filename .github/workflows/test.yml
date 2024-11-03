@@ -21,9 +21,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          mv Package.swift Package.standalone.swift
-          mv Package.ffmpeg.swift Package.swift
-          brew install ffmpeg peripheryapp/periphery/periphery
+          brew install ffmpeg peripheryapp/periphery/periphery --quiet
 
       - name: Select Xcode
         uses: mxcl/xcodebuild@v3
@@ -32,7 +30,7 @@ jobs:
           action: none
 
       - name: Build Tests
-        run: xcrun swift test -Xswiftc -DGITHUB_ACTIONS -Xswiftc -DFFMPEG list
+        run: USE_FFMPEG=1 xcrun swift test -Xswiftc -DGITHUB_ACTIONS -Xswiftc -DFFMPEG list
 
       - name: Test FFmpeg Decoder
         timeout-minutes: 5
@@ -43,4 +41,4 @@ jobs:
         run: xcrun swift test --skip-build --filter internalDecoder
 
       - name: Periphery
-        run: periphery scan --skip-build --index-store-path .build/debug/index/store
+        run: periphery scan --skip-build --format github-actions --relative-results

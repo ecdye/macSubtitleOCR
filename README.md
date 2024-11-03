@@ -12,7 +12,9 @@ Currently PGS and VobSub subtitles are supported.
 
 For more details on OCR accuracy, refer to the [Accuracy](#accuracy) section below.
 
-An Apple M series processor is required for macSubtitleOCR, PRs adding additional support are welcomed.
+[Release](https://github.com/ecdye/macSubtitleOCR/releases/latest) and [Nightly](https://github.com/ecdye/macSubtitleOCR/releases/tag/nightly) builds are provided for arm64.
+Unfortunately, GitHub Actions doesn't provide a runner I can build x86_64 binaries on, sorry.
+However, you should be able to compile for x86_64 on you own machine by following the directions in the [Building the Project](#building-the-project) section below.
 
 ### Features
 
@@ -39,8 +41,7 @@ To build macSubtitleOCR, follow these steps:
 ``` shell
 git clone https://github.com/ecdye/macSubtitleOCR
 cd macSubtitleOCR
-make
-sudo make install
+swift build --configuration release
 ```
 
 ### Build With FFmpeg Decoder
@@ -51,8 +52,7 @@ To build with FFmpeg support, follow these steps:
 brew install ffmpeg
 git clone https://github.com/ecdye/macSubtitleOCR
 cd macSubtitleOCR
-make ffmpeg
-sudo make install_ffmpeg
+USE_FFMPEG=1 swift build --configuration release -Xswiftc -DFFMPEG
 ```
 
 ## Running Tests
