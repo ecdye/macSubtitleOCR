@@ -82,7 +82,7 @@ jobs:
         USE_FFMPEG=1 xcrun swift build -Xswiftc -DFFMPEG --configuration release --arch arm64
         tar -cvJf macSubtitleOCR-nightly-ffmpeg-${sha}.tar.xz -C .build/release/ macSubtitleOCR
         gpg --detach-sign --armor macSubtitleOCR-ffmpeg-nightly-${sha}.tar.xz
-        gpg --verify macSubtitleOCR-nightly-ffmpeg-${sha}.tar.xz.asc macSubtitleOCR-ffmpeg-nightly-${sha}.tar.xz
+        gpg --verify macSubtitleOCR-ffmpeg-nightly-${sha}.tar.xz.asc macSubtitleOCR-ffmpeg-nightly-${sha}.tar.xz
 
     - name: Publish
       uses: softprops/action-gh-release@v2
