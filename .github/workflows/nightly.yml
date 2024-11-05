@@ -92,5 +92,5 @@ jobs:
         tag_name: nightly
         prerelease: true
         files: |
-          macSubtitleOCR-nightly-*.tar.xz
-          macSubtitleOCR-ffmpeg-nightly-*.tar.xz.asc
+          macSubtitleOCR-*.tar.xz
+          macSubtitleOCR-*.tar.xz.asc
