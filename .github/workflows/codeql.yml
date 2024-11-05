@@ -23,6 +23,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Install FFmpeg
+      run: brew install ffmpeg
+
     - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
@@ -36,7 +39,7 @@ jobs:
         build-mode: manual
 
     - name: Build
-      run: xcrun swift build --arch arm64
+      run: USE_FFMPEG=1 xcrun swift build --arch arm64 -Xswiftc -DFFMPEG
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
