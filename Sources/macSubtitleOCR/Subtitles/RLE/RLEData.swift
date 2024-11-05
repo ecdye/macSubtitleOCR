@@ -158,7 +158,7 @@ struct RLEData {
 
     private func getNibble(currentNibbles: inout [UInt8?], nibbles: Data, i: inout Int) -> UInt16 {
         let nibble = UInt16(currentNibbles.removeFirst()!)
-        currentNibbles.append(nibbles[i])
+        nibbles.count <= i ? currentNibbles.append(nil) : currentNibbles.append(nibbles[i])
         i += 1
         return nibble
     }

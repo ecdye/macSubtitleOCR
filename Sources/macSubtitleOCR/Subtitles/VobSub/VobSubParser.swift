@@ -92,7 +92,7 @@ struct VobSubParser {
                 offset += 2
                 relativeControlOffset = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
                 offset += 2
-                let rleSize = relativeControlOffset - 2
+                let rleSize = relativeControlOffset - 4
                 controlSize = size - rleSize - 4 // 4 bytes for the size and control offset
                 controlOffset = offset + rleSize
                 trueHeaderSize = offset - startOffset
@@ -107,10 +107,9 @@ struct VobSubParser {
             rleLengthFound += rleFragmentSize
             offset += rleFragmentSize
 
-            let bytesToCopy = max(0, min(difference, controlSize! - controlHeaderCopied))
+            let bytesToCopy = difference <= 0 ? 0 : controlSize! - controlHeaderCopied
             controlHeader.append(contentsOf: buffer[offset ..< offset + bytesToCopy])
             controlHeaderCopied += bytesToCopy
-            offset += bytesToCopy
 
             offset = nextPSOffset
         } while offset < nextOffset && controlHeaderCopied < controlSize!
@@ -126,23 +125,23 @@ struct VobSubParser {
     }
 
     private func parseCommandHeader(_ header: Data, offset: Int) {
-        let endOfControl = max(minimumControlHeaderSize, Int(header.getUInt16BE()!) - 4 - offset)
+        let date = TimeInterval((header.getUInt16BE()! << 10) / 90)
+        let endOfControl = max(minimumControlHeaderSize, Int(header.getUInt16BE(at: 2)!) - 4 - offset)
         if endOfControl > header.count {
             print("Control header is too short for subtitle: \(subtitle.index), got \(header.count) bytes, errors may occur")
         }
 
-        var index = 2
+        var index = 4
 
         while index < endOfControl {
             let command = header[index]
             index += 1
 
             switch command {
-            case 0:
-                break // Set subtitle as forced
-            case 1, 2:
-                // Start and stop display commands
-                break
+            case 1:
+                subtitle.startTimestamp! += date
+            case 2:
+                subtitle.endTimestamp = subtitle.startTimestamp! + date
             case 3:
                 var byte = header[index]
                 index += 1
