@@ -36,6 +36,16 @@ func encodePTSForVobSub(from timestamp: UInt64) -> [UInt8] {
 
 // Calculate the absolute timestamp with 90 kHz accuracy
 func calculateAbsolutePTS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64) -> UInt64 {
-    // The block timestamp is relative, so we add it to the cluster timestamp
     UInt64(clusterTimestamp + blockTimestamp) * 90
+}
+
+// Format the timestamp input (90kHz value) as a VobSub IDX timestamp string
+func formatTime(_ time: UInt64) -> String {
+    let time = TimeInterval(time) / 90000
+    let hours = Int(time) / 3600
+    let minutes = (Int(time) % 3600) / 60
+    let seconds = Int(time) % 60
+    let milliseconds = Int((time - TimeInterval(Int(time))) * 1000)
+
+    return String(format: "%02d:%02d:%02d:%03d", hours, minutes, seconds, milliseconds)
 }

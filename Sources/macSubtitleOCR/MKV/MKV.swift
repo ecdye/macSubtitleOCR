@@ -1,5 +1,5 @@
 //
-// MKVTrackParser.swift
+// MKV.swift
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/22/24.
@@ -9,16 +9,58 @@
 import Foundation
 import os
 
-class MKVTrackParser: MKVFileHandler {
+struct MKV {
     // MARK: - Properties
 
-    private(set) var tracks: [MKVTrack] = []
     private var codecPrivate = [Int: String]()
+    private let ebmlParser: EBMLParser
+    private let endOfFile: UInt64
+    private let fileHandle: FileHandle
     private var languages = [Int: String]()
+    private let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "MKV")
+    private(set) var tracks: [MKVTrack] = []
+
+    // MARK: - Lifecycle
+
+    init(filePath: String) throws {
+        guard FileManager.default.fileExists(atPath: filePath) else {
+            throw macSubtitleOCRError.fileReadError("File does not exist at path: \(filePath)")
+        }
+        do {
+            try fileHandle = FileHandle(forReadingFrom: URL(fileURLWithPath: filePath))
+        } catch {
+            throw macSubtitleOCRError.fileReadError("Failed to open file: \(filePath)")
+        }
+        endOfFile = fileHandle.seekToEndOfFile()
+        fileHandle.seek(toFileOffset: 0)
+        ebmlParser = EBMLParser(fileHandle: fileHandle)
+    }
 
     // MARK: - Functions
 
-    func parseTracks(for codecs: [String]) throws {
+    func saveSubtitleTrackData(trackNumber: Int, outputDirectory: URL) {
+        let codecType = tracks[trackNumber].codecID
+        let fileExtension = (codecType == "S_HDMV/PGS") ? "sup" : "sub"
+        let trackPath = outputDirectory.appendingPathComponent("track_\(trackNumber)").appendingPathExtension(fileExtension)
+            .path
+
+        if FileManager.default.createFile(atPath: trackPath, contents: tracks[trackNumber].trackData, attributes: nil) {
+            logger.debug("Created file at path: \(trackPath)")
+        } else {
+            print("Failed to create file at path: \(trackPath)!", to: &stderr)
+        }
+
+        if fileExtension == "sub" {
+            let idxPath = outputDirectory.appendingPathComponent("track_\(trackNumber)").appendingPathExtension("idx")
+            do {
+                try tracks[trackNumber].idxData?.write(to: idxPath, atomically: true, encoding: .utf8)
+            } catch {
+                print("Failed to write idx file at path: \(idxPath)", to: &stderr)
+            }
+        }
+    }
+
+    mutating func parseTracks(for codecs: [String]) throws {
         guard findElement(withID: EBML.segmentID) as? (UInt64, UInt32) != nil else {
             throw macSubtitleOCRError.invalidInputFile("MKV segment element not found in file")
         }
@@ -60,28 +102,24 @@ class MKVTrackParser: MKVFileHandler {
         }
     }
 
-    func extractTrackData(for tracks: [Int: String]) -> [Int: Data]? {
+    mutating func extractTrackData(for tracks: [Int: String]) -> [Int: Data]? {
         fileHandle.seek(toFileOffset: 0)
 
-        // Step 1: Locate the Segment element
         guard let segmentSize = locateSegment() else { return nil }
         let segmentEndOffset = fileHandle.offsetInFile + segmentSize
         logger.debug("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset)")
 
         var trackData = [Int: Data]()
 
-        // Step 2: Parse Clusters within the Segment
         while fileHandle.offsetInFile < segmentEndOffset {
-            guard let clusterSize = locateCluster() else { continue }
+            guard let clusterSize = locateSegment(avoidCluster: false) else { continue }
             let clusterEndOffset = fileHandle.offsetInFile + clusterSize
 
-            // Step 3: Extract the cluster timestamp
             guard let clusterTimestamp = extractClusterTimestamp() else {
                 logger.warning("Failed to extract cluster timestamp, skipping cluster.")
                 continue
             }
 
-            // Step 4: Parse Blocks (SimpleBlock or Block) within each Cluster
             parseBlocks(until: clusterEndOffset, for: tracks, with: clusterTimestamp, into: &trackData)
         }
 
@@ -90,7 +128,42 @@ class MKVTrackParser: MKVFileHandler {
 
     // MARK: - Methods
 
-    private func parseTrackEntry(for codecs: [String]) -> (Int, String)? {
+    private mutating func locateSegment(avoidCluster: Bool = true) -> UInt64? {
+        if let (segmentSize, _) = findElement(withID: EBML.segmentID, avoidCluster: avoidCluster) as? (UInt64, UInt32) {
+            return segmentSize
+        }
+        return nil
+    }
+
+    private func tryParseElement() -> (elementID: UInt32, elementSize: UInt64)? {
+        let (elementID, elementSize) = ebmlParser.readEBMLElement()
+        return (elementID, elementSize)
+    }
+
+    private mutating func findElement(withID targetID: UInt32, _ tgtID2: UInt32? = nil,
+                                      avoidCluster: Bool = true) -> (UInt64?, UInt32?) {
+        var previousOffset = fileHandle.offsetInFile
+        while let (elementID, elementSize) = tryParseElement() {
+            guard fileHandle.offsetInFile < endOfFile else { return (nil, nil) }
+
+            if elementID == EBML.cluster && avoidCluster {
+                logger.debug("Encountered Cluster: seeking back to before the cluster header")
+                fileHandle.seek(toFileOffset: previousOffset)
+                return (nil, nil)
+            }
+
+            if elementID == targetID || (tgtID2 != nil && elementID == tgtID2!) {
+                return (elementSize, elementID)
+            } else {
+                logger.debug("\(elementID.hex()) != \(targetID.hex()), skipping element")
+                fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
+            }
+            previousOffset = fileHandle.offsetInFile
+        }
+        return (nil, nil)
+    }
+
+    private mutating func parseTrackEntry(for codecs: [String]) -> (Int, String)? {
         var trackNumber: Int?
         var trackType: UInt8?
         var codecID: String?
@@ -147,22 +220,19 @@ class MKVTrackParser: MKVFileHandler {
         return nil
     }
 
-    private func extractClusterTimestamp() -> Int64? {
+    private mutating func extractClusterTimestamp() -> Int64? {
         if let (timestampElementSize, _) = findElement(withID: EBML.timestamp) as? (UInt64, UInt32) {
             return readFixedLengthNumber(fileHandle: fileHandle, length: Int(timestampElementSize))
         }
         return nil
     }
 
-    private func parseBlocks(until clusterEndOffset: UInt64, for tracks: [Int: String], with clusterTimestamp: Int64,
-                             into trackData: inout [Int: Data]) {
+    private mutating func parseBlocks(until clusterEndOffset: UInt64, for tracks: [Int: String],
+                                      with clusterTimestamp: Int64, into trackData: inout [Int: Data]) {
         while fileHandle.offsetInFile < clusterEndOffset {
-            // swiftformat:disable:next redundantSelf
-            logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")
-
             guard let (blockSize, blockStartOffset) = findBlockTypeAndSize() else { break }
 
-            guard let (blockTrackNumber, blockTimestamp) = readTrackNumber(from: fileHandle) as? (UInt64, Int64)
+            guard let (blockTrackNumber, blockTimestamp) = readTrackNumber() as? (UInt64, Int64)
             else { continue }
 
             if tracks[Int(blockTrackNumber)] == "S_HDMV/PGS" {
@@ -172,7 +242,6 @@ class MKVTrackParser: MKVFileHandler {
                 handleVobSubBlock(for: blockTrackNumber,
                                   with: blockTimestamp, blockSize, clusterTimestamp, blockStartOffset, &trackData)
             } else {
-                // Skip this block because it's for a different track
                 fileHandle.seek(toFileOffset: blockStartOffset + blockSize)
             }
         }
@@ -205,8 +274,9 @@ class MKVTrackParser: MKVFileHandler {
         trackData[trackNumber]?.append(blockData)
     }
 
-    private func handleVobSubBlock(for blockTrackNumber: UInt64, with blockTimestamp: Int64, _ blockSize: UInt64,
-                                   _ clusterTimestamp: Int64, _ blockStartOffset: UInt64, _ trackData: inout [Int: Data]) {
+    private mutating func handleVobSubBlock(for blockTrackNumber: UInt64, with blockTimestamp: Int64, _ blockSize: UInt64,
+                                            _ clusterTimestamp: Int64, _ blockStartOffset: UInt64,
+                                            _ trackData: inout [Int: Data]) {
         let absolutePTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp)
         let vobSubPTS = encodePTSForVobSub(from: absolutePTS)
 
@@ -266,7 +336,7 @@ class MKVTrackParser: MKVFileHandler {
     }
     // swiftformat:enable all
 
-    private func findBlockTypeAndSize() -> (blockSize: UInt64, blockStartOffset: UInt64)? {
+    private mutating func findBlockTypeAndSize() -> (blockSize: UInt64, blockStartOffset: UInt64)? {
         guard case (var blockSize?, let blockType?) = findElement(withID: EBML.simpleBlock, EBML.blockGroup) else {
             return nil
         }
@@ -280,24 +350,11 @@ class MKVTrackParser: MKVFileHandler {
         return (blockSize, blockStartOffset)
     }
 
-    private func formatTime(_ time: UInt64) -> String {
-        let time = TimeInterval(time) / 90000
-        let hours = Int(time) / 3600
-        let minutes = (Int(time) % 3600) / 60
-        let seconds = Int(time) % 60
-        let milliseconds = Int((time - TimeInterval(Int(time))) * 1000)
-
-        return String(format: "%02d:%02d:%02d:%03d", hours, minutes, seconds, milliseconds)
-    }
-
-    // Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
-    private func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
+    private func readTrackNumber() -> (UInt64?, Int64) {
         let trackNumber = ebmlParser.readVINT(elementSize: true)
         let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2)
-        let suffix = fileHandle.readData(ofLength: 1).first ?? 0
 
-        let lacingFlag = (suffix >> 1) & 0x03 // Bits 1 and 2 are the lacing type (unused by us, kept for debugging)
-        logger.debug("Track number: \(trackNumber), Timestamp: \(timestamp), Lacing type: \(lacingFlag)")
+        logger.debug("Track number: \(trackNumber), Timestamp: \(timestamp)")
         return (trackNumber, timestamp)
     }
 }
