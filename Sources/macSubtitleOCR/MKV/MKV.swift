@@ -12,14 +12,13 @@ import os
 struct MKV {
     // MARK: - Properties
 
-    private let fileHandle: FileHandle
-    private let endOfFile: UInt64
-    private var timestampScale: TimeInterval = 1000000.0 // Default value if not specified in a given MKV file
-    private let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "MKV")
-    private let ebmlParser: EBMLParser
-    private(set) var tracks: [MKVTrack] = []
     private var codecPrivate = [Int: String]()
+    private let ebmlParser: EBMLParser
+    private let endOfFile: UInt64
+    private let fileHandle: FileHandle
     private var languages = [Int: String]()
+    private let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "MKV")
+    private(set) var tracks: [MKVTrack] = []
 
     // MARK: - Lifecycle
 
@@ -147,11 +146,6 @@ struct MKV {
         while let (elementID, elementSize) = tryParseElement() {
             guard fileHandle.offsetInFile < endOfFile else { return (nil, nil) }
 
-            if elementID == EBML.timestampScale {
-                timestampScale = Double(readFixedLengthNumber(fileHandle: fileHandle, length: Int(elementSize)))
-                continue
-            }
-
             if elementID == EBML.cluster && avoidCluster {
                 logger.debug("Encountered Cluster: seeking back to before the cluster header")
                 fileHandle.seek(toFileOffset: previousOffset)
@@ -238,7 +232,7 @@ struct MKV {
         while fileHandle.offsetInFile < clusterEndOffset {
             guard let (blockSize, blockStartOffset) = findBlockTypeAndSize() else { break }
 
-            guard let (blockTrackNumber, blockTimestamp) = readTrackNumber(from: fileHandle) as? (UInt64, Int64)
+            guard let (blockTrackNumber, blockTimestamp) = readTrackNumber() as? (UInt64, Int64)
             else { continue }
 
             if tracks[Int(blockTrackNumber)] == "S_HDMV/PGS" {
@@ -356,14 +350,11 @@ struct MKV {
         return (blockSize, blockStartOffset)
     }
 
-    // Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
-    private func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
+    private func readTrackNumber() -> (UInt64?, Int64) {
         let trackNumber = ebmlParser.readVINT(elementSize: true)
         let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2)
-        let suffix = fileHandle.readData(ofLength: 1).first ?? 0
 
-        let lacingFlag = (suffix >> 1) & 0x03 // Bits 1 and 2 are the lacing type (unused by us, kept for debugging)
-        logger.debug("Track number: \(trackNumber), Timestamp: \(timestamp), Lacing type: \(lacingFlag)")
+        logger.debug("Track number: \(trackNumber), Timestamp: \(timestamp)")
         return (trackNumber, timestamp)
     }
 }
