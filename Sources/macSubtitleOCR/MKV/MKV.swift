@@ -204,8 +204,8 @@ struct MKV {
                         codecPrivate[trackNumber] = "# VobSub index file, v7 (do not modify this line!)\n" +
                             (String(data: data, encoding: .ascii) ?? "")
                         if let language {
-                            codecPrivate[trackNumber]?.append("langidx: 0\n")
-                            codecPrivate[trackNumber]?.append("\nid: \(language), index: 0")
+                            codecPrivate[trackNumber]!.append("langidx: 0\n")
+                            codecPrivate[trackNumber]!.append("\nid: \(language), index: 0")
                         }
                     default:
                         fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
@@ -281,31 +281,33 @@ struct MKV {
         let vobSubPTS = encodePTSForVobSub(from: absolutePTS)
 
         var segmentSize = Int(blockSize - (fileHandle.offsetInFile - blockStartOffset))
-        var vobSubHeader = buildVobSubHeader(pts: vobSubPTS, segmentSize: segmentSize)
+        var buffer = buildVobSubHeader(pts: vobSubPTS, segmentSize: segmentSize)
 
-        vobSubHeader.append(fileHandle.readData(ofLength: min(segmentSize, 2019)))
+        buffer.append(fileHandle.readData(ofLength: min(segmentSize, 2019)))
         segmentSize -= min(segmentSize, 2019)
 
-        appendVobSubSegments(segmentSize: segmentSize, header: &vobSubHeader)
+        appendVobSubSegments(segmentSize: segmentSize, buffer: &buffer)
 
         let trackNumber = Int(blockTrackNumber)
         if trackData[trackNumber] == nil {
             trackData[trackNumber] = Data()
         }
-        trackData[trackNumber]?.append(vobSubHeader)
+        trackData[trackNumber]!.append(buffer)
 
-        let offset = String(format: "%09X", trackData[trackNumber]!.count - vobSubHeader.count)
+        let offset = String(format: "%09X", trackData[trackNumber]!.count - buffer.count)
         codecPrivate[trackNumber]?.append("\ntimestamp: \(formatTime(absolutePTS)), filepos: \(offset)")
     }
 
     // swiftformat:disable all
     private func buildVobSubHeader(pts: [UInt8], segmentSize: Int) -> Data {
         let pesLength = withUnsafeBytes(of: UInt16(min(segmentSize, 2028)).bigEndian) { Array($0) }
-        var vobSubHeader = Data([0x00, 0x00, 0x01, 0xBA,              // PS packet start code
-                                 0x00, 0x00, 0x00, 0x00, 0x00, 0x0,   // Null system clock reference
-                                 0x00, 0x00, 0x00,                    // Null multiplexer rate
-                                 0x00,                                // Stuffing length
-                                 0x00, 0x00, 0x01, 0xBD])             // PES packet start code
+        var vobSubHeader = Data()
+        vobSubHeader.reserveCapacity(segmentSize + 512)
+        vobSubHeader = Data([0x00, 0x00, 0x01, 0xBA,                  // PS packet start code
+                             0x00, 0x00, 0x00, 0x00, 0x00, 0x0,       // Null system clock reference
+                             0x00, 0x00, 0x00,                        // Null multiplexer rate
+                             0x00,                                    // Stuffing length
+                             0x00, 0x00, 0x01, 0xBD])                 // PES packet start code
         vobSubHeader.append(contentsOf: pesLength)                    // PES packet length
         vobSubHeader.append(contentsOf: [0x00,                        // PES miscellaneous data
                                          0x80,                        // PTS DTS flag
@@ -315,22 +317,22 @@ struct MKV {
         return vobSubHeader
     }
 
-    private func appendVobSubSegments(segmentSize: Int, header: inout Data) {
+    private func appendVobSubSegments(segmentSize: Int, buffer: inout Data) {
         var remainingSize = segmentSize
         while remainingSize > 0 {
             let nextSegmentSize = min(remainingSize, 2028)
             let pesLength = withUnsafeBytes(of: UInt16(nextSegmentSize).bigEndian) { Array($0) }
-            header.append(contentsOf: [0x00, 0x00, 0x01, 0xBA,              // PS packet start code
+            buffer.append(contentsOf: [0x00, 0x00, 0x01, 0xBA,              // PS packet start code
                                        0x00, 0x00, 0x00, 0x00, 0x00, 0x0,   // Null system clock reference
                                        0x00, 0x00, 0x00,                    // Null multiplexer rate
                                        0x00,                                // Stuffing length
                                        0x00, 0x00, 0x01, 0xBD])             // PES packet start code
-            header.append(contentsOf: pesLength)                            // PES packet length
-            header.append(contentsOf: [0x00,                                // PES miscellaneous data
+            buffer.append(contentsOf: pesLength)                            // PES packet length
+            buffer.append(contentsOf: [0x00,                                // PES miscellaneous data
                                        0x00,                                // PTS DTS flag
                                        0x00])                               // PTS data length
-            header.append(contentsOf: [0x00])                               // Null stream ID
-            header.append(fileHandle.readData(ofLength: min(remainingSize, 2024)))
+            buffer.append(contentsOf: [0x00])                               // Null stream ID
+            buffer.append(fileHandle.readData(ofLength: min(remainingSize, 2024)))
             remainingSize -= min(remainingSize, 2024)
         }
     }
