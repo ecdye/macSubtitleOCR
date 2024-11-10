@@ -21,7 +21,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           COMMIT="$(git rev-list --after="24 hours" ${{ github.sha }} -- '**/*.swift' | head -n 1)"
-          if [[ ${{ github.event_name }} == "schedule" ]]; then
+          if [[ ${{ github.event_name }} == "workflow_dispatch" ]]; then
             echo "should_run=true" >> $GITHUB_ENV
             exit 0
           elif [[ -z $COMMIT ]]; then
