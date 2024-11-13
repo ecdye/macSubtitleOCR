@@ -36,17 +36,18 @@ struct macSubtitleOCR: AsyncParsableCommand {
     // MARK: - Entrypoint
 
     mutating func run() async {
+        // swiftformat:disable all
         do {
             let fileHandler = try macSubtitleOCRFileHandler(outputDirectory: outputDirectory)
             let results = try await processInput()
             try await saveResults(fileHandler: fileHandler, results: results)
         } catch let macSubtitleOCRError.fileReadError(string), let macSubtitleOCRError.invalidInputFile(string),
-                                                                   let macSubtitleOCRError.ffmpegError(string),
-                                                                   let macSubtitleOCRError.invalidRLE(string) {
+                let macSubtitleOCRError.ffmpegError(string), let macSubtitleOCRError.invalidRLE(string) {
             print("Error: \(string), exiting...", to: &stderr)
         } catch {
             print("Error: \(error.localizedDescription), exiting...", to: &stderr)
         }
+        // swiftformat:enable all
     }
 
     // MARK: - Methods
@@ -67,7 +68,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
         var results: [macSubtitleOCRResult] = []
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
-            options.invert.toggle()
+            options.invert.toggle() // Invert the image if the input is a VobSub file
             let sub = try VobSub(
                 URL(fileURLWithPath: input.replacingOccurrences(of: ".idx", with: ".sub")),
                 URL(fileURLWithPath: input.replacingOccurrences(of: ".sub", with: ".idx")))
@@ -77,7 +78,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
                 options.languages += ",\(sub.language!)"
             }
         } else if input.hasSuffix(".mkv") || input.hasSuffix(".mks") {
-            var mkvStream = try MKV(filePath: input)
+            let mkvStream = try MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(for: ["S_HDMV/PGS", "S_VOBSUB"])
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecID)")
@@ -99,17 +100,18 @@ struct macSubtitleOCR: AsyncParsableCommand {
                     let result = try await processSubtitle(pgs.subtitles, trackNumber: track.trackNumber)
                     results.append(result)
                 } else if track.codecID == "S_VOBSUB" {
-                    options.invert.toggle()
+                    options.invert.toggle() // Invert the image if the input is VobSub
                     let vobSub: VobSub = try track.trackData
                         .withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
                             try VobSub(buffer, track.idxData ?? "")
                         }
                     let result = try await processSubtitle(vobSub.subtitles, trackNumber: track.trackNumber)
                     results.append(result)
-                    options.invert.toggle()
+                    options.invert.toggle() // Reset the invert flag
                 }
             }
         } else if input.hasSuffix(".sup") {
+            // Open the PGS data stream
             let PGS = try PGS(URL(fileURLWithPath: input))
             let result = try await processSubtitle(PGS.subtitles, trackNumber: 0)
             results.append(result)

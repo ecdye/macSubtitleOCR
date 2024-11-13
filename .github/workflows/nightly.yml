@@ -62,7 +62,7 @@ jobs:
     - name: Select Xcode
       uses: mxcl/xcodebuild@v3
       with:
-        swift: '6'
+        swift: '6.0'
         action: none
 
     - name: Build Standalone
