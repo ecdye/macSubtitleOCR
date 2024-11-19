@@ -14,7 +14,6 @@ class MKVFileHandler {
 
     let fileHandle: FileHandle
     let endOfFile: UInt64
-    var timestampScale: TimeInterval = 1000000.0 // Default value if not specified in a given MKV file
     let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "MKV")
     let ebmlParser: EBMLParser
 
@@ -60,14 +59,6 @@ class MKVFileHandler {
         while let (elementID, elementSize) = tryParseElement() {
             // Ensure we stop if we have reached or passed the EOF
             guard fileHandle.offsetInFile < endOfFile else { return (nil, nil) }
-
-            // If, by chance, we find a TimestampScale element, update it from the default
-            if elementID == EBML.timestampScale {
-                timestampScale = Double(readFixedLengthNumber(fileHandle: fileHandle, length: Int(elementSize)))
-                // swiftformat:disable:next redundantSelf
-                logger.debug("Found timestamp scale: \(self.timestampScale)")
-                continue
-            }
 
             // If a Cluster header is encountered, seek back to the start of the Cluster
             if elementID == EBML.cluster && avoidCluster {
