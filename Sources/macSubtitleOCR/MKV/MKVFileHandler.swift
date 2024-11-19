@@ -57,21 +57,17 @@ class MKVFileHandler {
     func findElement(withID targetID: UInt32, _ tgtID2: UInt32? = nil, avoidCluster: Bool = true) -> (UInt64?, UInt32?) {
         var previousOffset = fileHandle.offsetInFile
         while let (elementID, elementSize) = tryParseElement() {
-            // Ensure we stop if we have reached or passed the EOF
             guard fileHandle.offsetInFile < endOfFile else { return (nil, nil) }
 
-            // If a Cluster header is encountered, seek back to the start of the Cluster
             if elementID == EBML.cluster && avoidCluster {
                 logger.debug("Encountered Cluster: seeking back to before the cluster header")
                 fileHandle.seek(toFileOffset: previousOffset)
                 return (nil, nil)
             }
 
-            // If the element matches the target ID (or secondary ID), return its size
             if elementID == targetID || (tgtID2 != nil && elementID == tgtID2!) {
                 return (elementSize, elementID)
             } else {
-                // Skip over the element's data by seeking to its end
                 logger.debug("\(elementID.hex()) != \(targetID.hex()), skipping element")
                 fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
             }
@@ -81,7 +77,6 @@ class MKVFileHandler {
     }
 
     func tryParseElement() -> (elementID: UInt32, elementSize: UInt64)? {
-        let (elementID, elementSize) = ebmlParser.readEBMLElement()
-        return (elementID, elementSize)
+        ebmlParser.readEBMLElement()
     }
 }
