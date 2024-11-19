@@ -282,16 +282,6 @@ class MKVTrackParser: MKVFileHandler {
         return (blockSize, blockStartOffset)
     }
 
-    private func formatTime(_ time: UInt64) -> String {
-        let time = TimeInterval(time) / 90000
-        let hours = Int(time) / 3600
-        let minutes = (Int(time) % 3600) / 60
-        let seconds = Int(time) % 60
-        let milliseconds = Int((time - TimeInterval(Int(time))) * 1000)
-
-        return String(format: "%02d:%02d:%02d:%03d", hours, minutes, seconds, milliseconds)
-    }
-
     // Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
     private func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
         let trackNumber = ebmlParser.readVINT(elementSize: true)
