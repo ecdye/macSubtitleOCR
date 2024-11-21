@@ -23,19 +23,18 @@ jobs:
           COMMIT="$(git rev-list --after="24 hours" ${{ github.sha }} -- '**/*.swift' | head -n 1)"
           if [[ ${{ github.event_name }} == "workflow_dispatch" ]]; then
             echo "should_run=true" >> $GITHUB_ENV
-            exit 0
           elif [[ -z $COMMIT ]]; then
             echo "should_run=false" >> $GITHUB_ENV
-            exit 0
-          fi
-          STATUS="$(gh api -H "Accept: application/vnd.github+json" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "/repos/ecdye/macSubtitleOCR/actions/runs?branch=main&head_sha=${COMMIT}&status=completed" | \
-                    jq '.workflow_runs[] | select(.name == "Test") | .conclusion')"
-          if [[ $STATUS == "\"success\"" ]]; then
-            echo "should_run=true" >> $GITHUB_ENV
           else
-            echo "should_run=false" >> $GITHUB_ENV
+            STATUS="$(gh api -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/repos/ecdye/macSubtitleOCR/actions/runs?branch=main&head_sha=${COMMIT}&status=completed" | \
+                jq '.workflow_runs[] | select(.name == "Test") | .conclusion')"
+            if [[ $STATUS == "\"success\"" ]]; then
+                echo "should_run=true" >> $GITHUB_ENV
+            else
+                echo "should_run=false" >> $GITHUB_ENV
+            fi
           fi
 
   nightly:
