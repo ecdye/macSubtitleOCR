@@ -107,7 +107,7 @@ struct VobSubParser {
             rleLengthFound += rleFragmentSize
             offset += rleFragmentSize
 
-            let bytesToCopy = difference <= 0 ? 0 : controlSize! - controlHeaderCopied
+            let bytesToCopy = difference <= 0 ? 0 : min(difference, controlSize! - controlHeaderCopied)
             controlHeader.append(contentsOf: buffer[offset ..< offset + bytesToCopy])
             controlHeaderCopied += bytesToCopy
 
