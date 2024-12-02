@@ -104,6 +104,6 @@ struct VobSubIDX {
     // Function to parse the palette from the line
     private func parsePalette(line: String) -> [UInt8] {
         let paletteString = line.replacingOccurrences(of: "palette: ", with: "")
-        return paletteString.split(separator: ", ").compactMap { String($0).hexToBytes }.flatMap { $0 }
+        return paletteString.split(separator: ", ").compactMap { String($0).hexToBytes }.flatMap(\.self)
     }
 }
