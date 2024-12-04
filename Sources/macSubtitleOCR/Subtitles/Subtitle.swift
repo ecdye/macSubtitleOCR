@@ -76,7 +76,7 @@ class Subtitle: @unchecked Sendable {
         if invert {
             croppedImage = invertColors(of: croppedImage) ?? croppedImage
         }
-        return changeTransparency(for: croppedImage, to: CGColor.white)
+        return croppedImage // changeTransparency(for: croppedImage, to: CGColor.white)
     }
 
     // MARK: - Methods
