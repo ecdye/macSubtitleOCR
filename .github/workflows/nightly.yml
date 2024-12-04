@@ -44,7 +44,7 @@ jobs:
     name: Nightly Build
     runs-on: macos-latest
     needs: confirm_build
-    if: ${{ needs.confirm_build.outputs.should_run == 'true' }} || ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ needs.confirm_build.outputs.should_run != 'false' }}
     permissions:
       contents: write
 
