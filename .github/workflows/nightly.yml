@@ -23,10 +23,10 @@ jobs:
           COMMIT="$(git rev-list --after="24 hours" ${{ github.sha }} -- '**/*.swift' | head -n 1)"
           if [[ ${{ github.event_name }} == "workflow_dispatch" ]]; then
             echo "Manual run"
-            echo "should_run=true" >> $GITHUB_ENV
+            echo "should_run=true" >> $GITHUB_OUTPUT
           elif [[ -z "$COMMIT" ]]; then
             echo "No changes"
-            echo "should_run=false" >> $GITHUB_ENV
+            echo "should_run=false" >> $GITHUB_OUTPUT
           else
             echo "Normal run"
             STATUS="$(gh api -H "Accept: application/vnd.github+json" \
@@ -34,9 +34,9 @@ jobs:
                 "/repos/ecdye/macSubtitleOCR/actions/runs?branch=main&head_sha=${COMMIT}&status=completed" | \
                 jq -r '.workflow_runs[] | select(.name == "Test") | .conclusion')"
             if [[ "$STATUS" == "success" ]]; then
-                echo "should_run=true" >> $GITHUB_ENV
+                echo "should_run=true" >> $GITHUB_OUTPUT
             else
-                echo "should_run=false" >> $GITHUB_ENV
+                echo "should_run=false" >> $GITHUB_OUTPUT
             fi
           fi
 
