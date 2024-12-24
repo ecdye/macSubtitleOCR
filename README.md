@@ -12,9 +12,9 @@ Currently PGS and VobSub subtitles are supported.
 
 For more details on OCR accuracy, refer to the [Accuracy](#accuracy) section below.
 
-[Release](https://github.com/ecdye/macSubtitleOCR/releases/latest) and [Nightly](https://github.com/ecdye/macSubtitleOCR/releases/tag/nightly) builds are provided for arm64.
-Unfortunately, GitHub Actions doesn't provide a runner I can build x86_64 binaries on, sorry.
-However, you should be able to compile for x86_64 on you own machine by following the directions in the [Building the Project](#building-the-project) section below.
+[Release](https://github.com/ecdye/macSubtitleOCR/releases/latest) and [Nightly](https://github.com/ecdye/macSubtitleOCR/releases/tag/nightly) builds are provided for `arm64`.
+Unfortunately, GitHub Actions doesn't provide a runner I can build `x86_64` binaries on, sorry.
+However, you should be able to compile for `x86_64` on you own machine by following the directions in the [Building the Project](#building-the-project) section below.
 
 ### Features
 
