@@ -68,7 +68,6 @@ struct macSubtitleOCR: AsyncParsableCommand {
         var results: [macSubtitleOCRResult] = []
 
         if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
-            options.invert.toggle() // Invert the image if the input is a VobSub file
             let sub = try VobSub(
                 URL(fileURLWithPath: input.replacingOccurrences(of: ".idx", with: ".sub")),
                 URL(fileURLWithPath: input.replacingOccurrences(of: ".sub", with: ".idx")))
@@ -100,14 +99,12 @@ struct macSubtitleOCR: AsyncParsableCommand {
                     let result = try await processSubtitle(pgs.subtitles, trackNumber: track.trackNumber)
                     results.append(result)
                 } else if track.codecID == "S_VOBSUB" {
-                    options.invert.toggle() // Invert the image if the input is VobSub
                     let vobSub: VobSub = try track.trackData
                         .withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
                             try VobSub(buffer, track.idxData ?? "")
                         }
                     let result = try await processSubtitle(vobSub.subtitles, trackNumber: track.trackNumber)
                     results.append(result)
-                    options.invert.toggle() // Reset the invert flag
                 }
             }
         } else if input.hasSuffix(".sup") {

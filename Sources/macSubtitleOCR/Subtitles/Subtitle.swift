@@ -49,34 +49,56 @@ class Subtitle: @unchecked Sendable {
 
     // Converts the RGBA data to a CGImage
     func createImage(_ invert: Bool) -> CGImage? {
-        // Convert the image data to RGBA format using the palette
-        let rgbaData = imageDataToRGBA()
+        var rgbaData = imageDataToRGBA()
 
+        var minX = imageWidth!, maxX = 0, minY = imageHeight!, maxY = 0
+        for y in 0 ..< imageHeight! {
+            for x in 0 ..< imageWidth! {
+                let pixelIndex = (y * imageWidth! + x) * 4
+                let alpha = rgbaData[pixelIndex + 3]
+                if alpha > 0 {
+                    minX = min(minX, x)
+                    maxX = max(maxX, x)
+                    minY = min(minY, y)
+                    maxY = max(maxY, y)
+                    if !invert {
+                        rgbaData[pixelIndex] = 255 - rgbaData[pixelIndex]
+                        rgbaData[pixelIndex + 1] = 255 - rgbaData[pixelIndex + 1]
+                        rgbaData[pixelIndex + 2] = 255 - rgbaData[pixelIndex + 2]
+                    }
+                } else {
+                    // Set transparent pixels to white
+                    rgbaData[pixelIndex] = 255
+                    rgbaData[pixelIndex + 1] = 255
+                    rgbaData[pixelIndex + 2] = 255
+                    rgbaData[pixelIndex + 3] = 255
+                }
+            }
+        }
+
+        guard let provider = CGDataProvider(data: rgbaData as CFData) else { return nil }
         let bitmapInfo = CGBitmapInfo.byteOrder32Big
             .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
         let colorSpace = CGColorSpaceCreateDeviceRGB()
 
-        guard let provider = CGDataProvider(data: rgbaData as CFData) else {
+        let image = CGImage(
+            width: imageWidth!,
+            height: imageHeight!,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: imageWidth! * 4,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo,
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent)
+
+        if minX == imageWidth! || maxX == 0 || minY == imageHeight! || maxY == 0 {
             return nil
         }
-
-        let image = CGImage(width: imageWidth!,
-                            height: imageHeight!,
-                            bitsPerComponent: 8,
-                            bitsPerPixel: 32,
-                            bytesPerRow: imageWidth! * 4, // 4 bytes per pixel (RGBA)
-                            space: colorSpace,
-                            bitmapInfo: bitmapInfo,
-                            provider: provider,
-                            decode: nil,
-                            shouldInterpolate: false,
-                            intent: .defaultIntent)
-
-        guard var croppedImage = cropImageToVisibleArea(image!) else { return nil }
-        if invert {
-            croppedImage = invertColors(of: croppedImage) ?? croppedImage
-        }
-        return changeTransparency(for: croppedImage, to: CGColor.white)
+        let croppedRect = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+        return image?.cropping(to: croppedRect)
     }
 
     // MARK: - Methods
@@ -107,139 +129,5 @@ class Subtitle: @unchecked Sendable {
         }
 
         return rgbaData
-    }
-
-    /// Crops the image to the visible (non-transparent) area and adds a buffer around it.
-    /// - Parameter image: The original CGImage to crop.
-    /// - Returns: A cropped CGImage, or nil if the image is fully transparent.
-    private func cropImageToVisibleArea(_ image: CGImage) -> CGImage? {
-        let buffer = 10 // Buffer size around the non-transparent area
-        let width = image.width
-        let height = image.height
-        let newWidth = width + buffer * 2
-        let newHeight = height + buffer * 2
-
-        // Create a new image context with extended dimensions
-        guard let context = CGContext(data: nil,
-                                      width: newWidth,
-                                      height: newHeight,
-                                      bitsPerComponent: image.bitsPerComponent,
-                                      bytesPerRow: 0,
-                                      space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: image.bitmapInfo.rawValue) else {
-            return nil
-        }
-
-        // Clear the context (set a transparent background)
-        context.clear(CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
-
-        // Draw the original image onto the new context at the center
-        context.draw(image, in: CGRect(x: buffer, y: buffer, width: width, height: height))
-
-        guard let extendedImage = context.makeImage(),
-              let dataProvider = extendedImage.dataProvider,
-              let data = dataProvider.data,
-              let pixelData = CFDataGetBytePtr(data) else {
-            return nil
-        }
-
-        let bytesPerPixel = extendedImage.bitsPerPixel / 8
-        let bytesPerRow = extendedImage.bytesPerRow
-
-        // Initialize variables to track the non-transparent bounds
-        var minX = newWidth, maxX = 0, minY = newHeight, maxY = 0
-
-        // Scan the image to find the non-transparent pixels
-        for y in 0 ..< newHeight {
-            for x in 0 ..< newWidth {
-                let pixelIndex = y * bytesPerRow + x * bytesPerPixel
-                let alpha = pixelData[pixelIndex + 3] // Assuming RGBA format
-
-                if alpha > 0 { // Non-transparent pixel found
-                    minX = min(minX, x)
-                    maxX = max(maxX, x)
-                    minY = min(minY, y)
-                    maxY = max(maxY, y)
-                }
-            }
-        }
-
-        // If the image is fully transparent, return nil
-        if minX == newWidth || maxX == 0 || minY == newHeight || maxY == 0 {
-            return nil
-        }
-
-        // Apply buffer to the bounding box, ensuring it's within image bounds
-        minX = max(0, minX - buffer)
-        maxX = min(newWidth - 1, maxX + buffer)
-        minY = max(0, minY - buffer)
-        maxY = min(newHeight - 1, maxY + buffer)
-
-        // Crop the image to the visible (non-transparent) area with the buffer
-        let croppedRect = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
-        return extendedImage.cropping(to: croppedRect)
-    }
-
-    private func invertColors(of image: CGImage) -> CGImage? {
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-
-        // Create a context with the same dimensions as the image
-        guard let context = CGContext(
-            data: nil,
-            width: image.width,
-            height: image.height,
-            bitsPerComponent: 8,
-            bytesPerRow: image.width * 4,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-            return nil
-        }
-
-        // Draw the image into the context
-        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-
-        // Get the pixel data from the context
-        guard let pixelBuffer = context.data else {
-            return nil
-        }
-
-        let pixelData = pixelBuffer.bindMemory(to: UInt8.self, capacity: image.width * image.height * 4)
-
-        // Iterate through the pixel data and invert the colors
-        for y in 0 ..< image.height {
-            for x in 0 ..< image.width {
-                let pixelIndex = (y * image.width + x) * 4
-                pixelData[pixelIndex] = 255 - pixelData[pixelIndex] // Red
-                pixelData[pixelIndex + 1] = 255 - pixelData[pixelIndex + 1] // Green
-                pixelData[pixelIndex + 2] = 255 - pixelData[pixelIndex + 2] // Blue
-            }
-        }
-
-        // Create a new CGImage from the modified pixel data
-        return context.makeImage()
-    }
-
-    func changeTransparency(for image: CGImage, to color: CGColor) -> CGImage? {
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-
-        guard let context = CGContext(
-            data: nil,
-            width: image.width,
-            height: image.height,
-            bitsPerComponent: image.bitsPerComponent,
-            bytesPerRow: image.bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-            return nil
-        }
-
-        // Fill the context with the specified color
-        context.setFillColor(color)
-        context.fill(CGRect(x: 0, y: 0, width: image.width, height: image.height))
-
-        // Draw the image on top of the colored background
-        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-
-        return context.makeImage()
     }
 }
