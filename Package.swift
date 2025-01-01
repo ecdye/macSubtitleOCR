@@ -3,7 +3,7 @@
 import Foundation
 import PackageDescription
 
-let hasFFmpeg = ProcessInfo.processInfo.environment["USE_FFMPEG"] == "1"
+let hasFFmpeg = true // ProcessInfo.processInfo.environment["USE_FFMPEG"] == "1"
 
 #if arch(arm64)
 let includePath = "-I/opt/homebrew/include"
@@ -42,7 +42,7 @@ let package = Package(
     ] + (hasFFmpeg ? [
         .systemLibrary(
             name: "CFFmpeg",
-            pkgConfig: "libavformat libavcodec libavutil",
+            pkgConfig: "libavformat libavcodec libavutil libswscale",
             providers: [
                 .brew(["ffmpeg"])
             ])
