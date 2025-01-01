@@ -6,7 +6,7 @@ on:
 
 jobs:
   confirm_build:
-    name: Confim Build
+    name: Confirm Build
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.should_run.outputs.should_run }}

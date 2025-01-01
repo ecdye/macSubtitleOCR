@@ -2,11 +2,11 @@ name: Test
 
 on:
   push:
-    branches: [ "main" ]
+    branches: main
     paths:
       - '**/*.swift'
   pull_request:
-    branches: [ "main" ]
+    branches: main
     paths:
       - '**/*.swift'
 
