@@ -1,7 +1,7 @@
 The MIT License (MIT)
 =====================
 
-Copyright © 2024 Ethan Dye
+Copyright © 2024-2025 Ethan Dye
 
 Permission is hereby granted, free of charge, to any person
 obtaining a copy of this software and associated documentation
