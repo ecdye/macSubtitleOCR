@@ -20,6 +20,7 @@ class Subtitle: @unchecked Sendable {
     var imageData: Data?
     var imagePalette: [UInt8]?
     var imageAlpha: [UInt8]?
+    var image: CGImage?
     var numberOfColors: Int?
     var endTimestamp: TimeInterval?
     var evenOffset: Int?
@@ -27,7 +28,8 @@ class Subtitle: @unchecked Sendable {
 
     init(index: Int, text: String? = nil, startTimestamp: TimeInterval? = nil, endTimestamp: TimeInterval? = nil,
          imageXOffset: Int? = nil, imageYOffset: Int? = nil, imageWidth: Int? = nil, imageHeight: Int? = nil,
-         imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, numberOfColors: Int? = nil,
+         imageData: Data? = nil, imagePalette: [UInt8]? = nil, imageAlpha: [UInt8]? = nil, image: CGImage? = nil,
+         numberOfColors: Int? = nil,
          evenOffset: Int? = nil, oddOffset: Int? = nil) {
         self.index = index
         self.text = text
@@ -40,6 +42,7 @@ class Subtitle: @unchecked Sendable {
         self.imageData = imageData
         self.imagePalette = imagePalette
         self.imageAlpha = imageAlpha
+        self.image = image
         self.numberOfColors = numberOfColors
         self.evenOffset = evenOffset
         self.oddOffset = oddOffset
@@ -49,6 +52,9 @@ class Subtitle: @unchecked Sendable {
 
     // Converts the RGBA data to a CGImage
     func createImage(_ invert: Bool) -> CGImage? {
+        if image != nil {
+            return image
+        }
         var rgbaData = imageDataToRGBA()
 
         var minX = imageWidth!, maxX = 0, minY = imageHeight!, maxY = 0
