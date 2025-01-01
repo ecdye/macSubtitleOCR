@@ -3,7 +3,7 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 11/12/24.
-// Copyright © 2024 Ethan Dye. All rights reserved.
+// Copyright © 2024-2025 Ethan Dye. All rights reserved.
 //
 
 import Foundation
