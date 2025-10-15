@@ -40,7 +40,7 @@ jobs:
 
     - name: Build
       run: |
-        codeql database trace-command $RUNNER_TEMP/codeql_databases/swift --use-build-mode manual -- USE_FFMPEG=1 xcrun swift build --arch arm64 -Xswiftc -DFFMPEG
+        $CODEQL_DIST/codeql database trace-command $RUNNER_TEMP/codeql_databases/swift --use-build-mode manual -- USE_FFMPEG=1 xcrun swift build --arch arm64 -Xswiftc -DFFMPEG
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
