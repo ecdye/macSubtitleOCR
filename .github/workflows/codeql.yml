@@ -41,7 +41,7 @@ jobs:
 
     - name: Build
       run: |
-        $CODEQL_DIST/codeql database trace-command $CODEQL_EXTRACTOR_SWIFT_WIP_DATABASE -- USE_FFMPEG=1 xcrun swift build --arch arm64 -Xswiftc -DFFMPEG
+        $CODEQL_DIST/codeql database trace-command $CODEQL_EXTRACTOR_SWIFT_WIP_DATABASE -- env USE_FFMPEG=1 xcrun swift build --arch arm64 -Xswiftc -DFFMPEG
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
