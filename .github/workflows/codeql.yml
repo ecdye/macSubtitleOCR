@@ -31,6 +31,7 @@ jobs:
       with:
         swift: '6'
         action: none
+        xcode: '^15.0'
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
@@ -40,7 +41,7 @@ jobs:
 
     - name: Build
       run: |
-        $CODEQL_DIST/codeql database trace-command $RUNNER_TEMP/codeql_databases/swift --use-build-mode manual -- USE_FFMPEG=1 xcrun swift build --arch arm64 -Xswiftc -DFFMPEG
+        $CODEQL_DIST/codeql database trace-command $CODEQL_EXTRACTOR_SWIFT_WIP_DATABASE --build-mode manual -- USE_FFMPEG=1 xcrun swift build --arch arm64 -Xswiftc -DFFMPEG
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
