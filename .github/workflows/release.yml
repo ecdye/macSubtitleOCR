@@ -44,7 +44,7 @@ jobs:
       - name: Build with FFmpeg
         run: |
           TAG=${{ github.ref_name }}
-          USE_FFMPEG=1 xcrun swift build -Xswiftc -DFFMPEG --configuration release --arch arm64
+          USE_FFMPEG=1 xcrun swift build --configuration release --arch arm64
           tar -cvJf macSubtitleOCR-ffmpeg-${TAG}.tar.xz -C .build/release/ macSubtitleOCR
           gpg --detach-sign --armor macSubtitleOCR-ffmpeg-${TAG}.tar.xz
           gpg --verify macSubtitleOCR-ffmpeg-${TAG}.tar.xz.asc macSubtitleOCR-ffmpeg-${TAG}.tar.xz

@@ -115,9 +115,15 @@ struct FFmpeg {
                     subtitle.imagePalette = []
                 }
                 for i in 0 ..< 256 {
+                    #if _endian(little)
+                    let b = paletteData[i * 4 + 0]
+                    let g = paletteData[i * 4 + 1]
+                    let r = paletteData[i * 4 + 2]
+                    #else
                     let r = paletteData[i * 4 + 0]
                     let g = paletteData[i * 4 + 1]
                     let b = paletteData[i * 4 + 2]
+                    #endif
                     let a = paletteData[i * 4 + 3]
 
                     subtitle.imagePalette?.append(contentsOf: [r, g, b, a])
@@ -129,10 +135,21 @@ struct FFmpeg {
             subtitle.imageHeight = Int(rect.pointee.h)
             logger.debug("Image size: \(subtitle.imageWidth!)x\(subtitle.imageHeight!)")
 
-            let imageSize = Int(rect.pointee.linesize.0) * (subtitle.imageHeight ?? 0)
             if let bitmapData = rect.pointee.data.0 {
-                let buffer = UnsafeBufferPointer(start: bitmapData, count: imageSize)
-                subtitle.imageData = Data(buffer)
+                let width = subtitle.imageWidth ?? 0
+                let height = subtitle.imageHeight ?? 0
+                let lineSize = Int(rect.pointee.linesize.0)
+
+                // FFmpeg subtitle bitmaps may include padding at the end of each row.
+                // Repack rows to a tightly packed width * height buffer so downstream OCR
+                // interprets only actual image pixels.
+                var imageData = Data(capacity: width * height)
+                for row in 0 ..< height {
+                    let rowStart = bitmapData.advanced(by: row * lineSize)
+                    let rowBuffer = UnsafeBufferPointer(start: rowStart, count: width)
+                    imageData.append(contentsOf: rowBuffer)
+                }
+                subtitle.imageData = imageData
             }
         }
 

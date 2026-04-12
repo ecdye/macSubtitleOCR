@@ -11,7 +11,7 @@ import Foundation
 import UniformTypeIdentifiers
 import Vision
 
-private struct OCRSubtitleTaskInput: Sendable {
+private struct OCRSubtitleTaskInput {
     let index: Int
     let startTimestamp: TimeInterval?
     let endTimestamp: TimeInterval?
@@ -134,7 +134,8 @@ struct SubtitleProcessor {
         return imageSource.width == 0 || imageSource.height == 0
     }
 
-    private func recognizeText(from image: CGImage, textRecognitionSemaphore: AsyncSemaphore) async -> (String, [SubtitleLine]) {
+    private func recognizeText(from image: CGImage,
+                               textRecognitionSemaphore: AsyncSemaphore) async -> (String, [SubtitleLine]) {
         var text = ""
         var lines: [SubtitleLine] = []
 

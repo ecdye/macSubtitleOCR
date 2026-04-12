@@ -32,7 +32,7 @@ jobs:
           action: none
 
       - name: Build Tests
-        run: USE_FFMPEG=1 xcrun swift build --build-tests -Xswiftc -DGITHUB_ACTIONS -Xswiftc -DFFMPEG
+        run: USE_FFMPEG=1 xcrun swift build --build-tests -Xswiftc -DGITHUB_ACTIONS
 
       - name: Test FFmpeg Decoder
         timeout-minutes: 5

@@ -3,14 +3,14 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/19/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import CoreGraphics
 import Foundation
 
-// Subtitle instances are no longer shared across OCR tasks; they are only moved
-// between isolated contexts when collecting final results.
+/// Subtitle instances are no longer shared across OCR tasks; they are only moved
+/// between isolated contexts when collecting final results.
 final class Subtitle: @unchecked Sendable {
     var index: Int
     var text: String?
@@ -74,7 +74,7 @@ final class Subtitle: @unchecked Sendable {
     }
 }
 
-struct SubtitleImageSource: Sendable {
+struct SubtitleImageSource {
     let width: Int
     let height: Int
     let imageData: Data
@@ -83,7 +83,7 @@ struct SubtitleImageSource: Sendable {
 
     // MARK: - Methods
 
-    // Converts the image data to RGBA format using the palette
+    /// Converts the image data to RGBA format using the palette
     private func imageDataToRGBA() -> Data {
         let bytesPerPixel = 4
         let pixelCount = width * height
@@ -112,7 +112,7 @@ struct SubtitleImageSource: Sendable {
         return rgbaData
     }
 
-    // Converts the RGBA data to a CGImage
+    /// Converts the RGBA data to a CGImage
     func createImage(_ invert: Bool) -> CGImage? {
         var rgbaData = imageDataToRGBA()
         guard rgbaData.count == width * height * 4 else {
@@ -133,16 +133,15 @@ struct SubtitleImageSource: Sendable {
                     maxX = max(maxX, x)
                     minY = min(minY, y)
                     maxY = max(maxY, y)
-                    if !invert {
-                        rgbaData[pixelIndex] = 255 - rgbaData[pixelIndex]
-                        rgbaData[pixelIndex + 1] = 255 - rgbaData[pixelIndex + 1]
-                        rgbaData[pixelIndex + 2] = 255 - rgbaData[pixelIndex + 2]
-                    }
+                    let foreground: UInt8 = invert ? 255 : 0
+                    rgbaData[pixelIndex] = foreground
+                    rgbaData[pixelIndex + 1] = foreground
+                    rgbaData[pixelIndex + 2] = foreground
                 } else {
-                    // Set transparent pixels to white
-                    rgbaData[pixelIndex] = 255
-                    rgbaData[pixelIndex + 1] = 255
-                    rgbaData[pixelIndex + 2] = 255
+                    let background: UInt8 = invert ? 0 : 255
+                    rgbaData[pixelIndex] = background
+                    rgbaData[pixelIndex + 1] = background
+                    rgbaData[pixelIndex + 2] = background
                     rgbaData[pixelIndex + 3] = 255
                 }
             }

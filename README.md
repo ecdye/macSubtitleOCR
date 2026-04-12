@@ -52,7 +52,7 @@ To build with FFmpeg support, follow these steps:
 brew install ffmpeg
 git clone https://github.com/ecdye/macSubtitleOCR
 cd macSubtitleOCR
-USE_FFMPEG=1 swift build --configuration release -Xswiftc -DFFMPEG
+USE_FFMPEG=1 swift build --configuration release
 ```
 
 ## Running Tests

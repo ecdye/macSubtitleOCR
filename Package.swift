@@ -14,6 +14,7 @@ let libPath = "-L/usr/local/lib"
 #endif
 let cSettings: [CSetting] = (hasFFmpeg ? [CSetting.unsafeFlags([includePath])] : [CSetting.unsafeFlags([])])
 let linkerSettings: [LinkerSetting] = (hasFFmpeg ? [LinkerSetting.unsafeFlags([libPath])] : [LinkerSetting.unsafeFlags([])])
+let swiftSettings: [SwiftSetting] = hasFFmpeg ? [.define("FFMPEG")] : []
 
 let package = Package(
     name: "macSubtitleOCR",
@@ -30,6 +31,7 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ] + (hasFFmpeg ? ["CFFmpeg"] : []),
             cSettings: cSettings,
+            swiftSettings: swiftSettings,
             linkerSettings: linkerSettings),
         .testTarget(
             name: "macSubtitleOCRTests",
@@ -38,7 +40,8 @@ let package = Package(
             ],
             resources: [
                 .process("Resources")
-            ])
+            ],
+            swiftSettings: swiftSettings)
     ] + (hasFFmpeg ? [
         .systemLibrary(
             name: "CFFmpeg",
