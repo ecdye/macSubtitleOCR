@@ -9,7 +9,9 @@
 import CoreGraphics
 import Foundation
 
-class Subtitle: @unchecked Sendable {
+// Subtitle instances are no longer shared across OCR tasks; they are only moved
+// between isolated contexts when collecting final results.
+final class Subtitle: @unchecked Sendable {
     var index: Int
     var text: String?
     var startTimestamp: TimeInterval?
@@ -47,14 +49,84 @@ class Subtitle: @unchecked Sendable {
 
     // MARK: - Functions
 
+    func makeImageSource() -> SubtitleImageSource? {
+        guard
+            let imageWidth,
+            let imageData,
+            let imagePalette,
+            let numberOfColors,
+            imageWidth > 0
+        else {
+            return nil
+        }
+
+        let availableHeight = imageData.count / imageWidth
+        let resolvedHeight = min(imageHeight ?? availableHeight, availableHeight)
+        guard resolvedHeight > 0 else {
+            return nil
+        }
+
+        return SubtitleImageSource(width: imageWidth,
+                                   height: resolvedHeight,
+                                   imageData: imageData,
+                                   imagePalette: imagePalette,
+                                   numberOfColors: numberOfColors)
+    }
+}
+
+struct SubtitleImageSource: Sendable {
+    let width: Int
+    let height: Int
+    let imageData: Data
+    let imagePalette: [UInt8]
+    let numberOfColors: Int
+
+    // MARK: - Methods
+
+    // Converts the image data to RGBA format using the palette
+    private func imageDataToRGBA() -> Data {
+        let bytesPerPixel = 4
+        let pixelCount = width * height
+        var rgbaData = Data(capacity: pixelCount * bytesPerPixel)
+
+        for index in 0 ..< pixelCount {
+            let colorIndex = Int(imageData[index])
+            let paletteOffset = colorIndex * bytesPerPixel
+            guard
+                colorIndex >= 0,
+                colorIndex < numberOfColors,
+                paletteOffset + 3 < imagePalette.count
+            else {
+                rgbaData.append(contentsOf: [255, 255, 255, 255])
+                continue
+            }
+
+            rgbaData.append(contentsOf: [
+                imagePalette[paletteOffset],
+                imagePalette[paletteOffset + 1],
+                imagePalette[paletteOffset + 2],
+                imagePalette[paletteOffset + 3]
+            ])
+        }
+
+        return rgbaData
+    }
+
     // Converts the RGBA data to a CGImage
     func createImage(_ invert: Bool) -> CGImage? {
         var rgbaData = imageDataToRGBA()
+        guard rgbaData.count == width * height * 4 else {
+            return nil
+        }
 
-        var minX = imageWidth!, maxX = 0, minY = imageHeight!, maxY = 0
-        for y in 0 ..< imageHeight! {
-            for x in 0 ..< imageWidth! {
-                let pixelIndex = (y * imageWidth! + x) * 4
+        var minX = width
+        var maxX = -1
+        var minY = height
+        var maxY = -1
+
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let pixelIndex = (y * width + x) * 4
                 let alpha = rgbaData[pixelIndex + 3]
                 if alpha > 0 {
                     minX = min(minX, x)
@@ -76,17 +148,21 @@ class Subtitle: @unchecked Sendable {
             }
         }
 
+        guard minX < width, maxX >= 0, minY < height, maxY >= 0 else {
+            return nil
+        }
+
         guard let provider = CGDataProvider(data: rgbaData as CFData) else { return nil }
         let bitmapInfo = CGBitmapInfo.byteOrder32Big
             .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
         let colorSpace = CGColorSpaceCreateDeviceRGB()
 
         let image = CGImage(
-            width: imageWidth!,
-            height: imageHeight!,
+            width: width,
+            height: height,
             bitsPerComponent: 8,
             bitsPerPixel: 32,
-            bytesPerRow: imageWidth! * 4,
+            bytesPerRow: width * 4,
             space: colorSpace,
             bitmapInfo: bitmapInfo,
             provider: provider,
@@ -94,40 +170,7 @@ class Subtitle: @unchecked Sendable {
             shouldInterpolate: false,
             intent: .defaultIntent)
 
-        if minX == imageWidth! || maxX == 0 || minY == imageHeight! || maxY == 0 {
-            return nil
-        }
         let croppedRect = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
         return image?.cropping(to: croppedRect)
-    }
-
-    // MARK: - Methods
-
-    // Converts the image data to RGBA format using the palette
-    private func imageDataToRGBA() -> Data {
-        let bytesPerPixel = 4
-        imageHeight = imageData!.count / imageWidth!
-        var rgbaData = Data(capacity: imageWidth! * imageHeight! * bytesPerPixel)
-
-        for y in 0 ..< imageHeight! {
-            for x in 0 ..< imageWidth! {
-                let index = Int(y) * imageWidth! + Int(x)
-                let colorIndex = Int(imageData![index])
-
-                guard colorIndex < numberOfColors! else {
-                    continue
-                }
-
-                let paletteOffset = colorIndex * bytesPerPixel
-                rgbaData.append(contentsOf: [
-                    imagePalette![paletteOffset],
-                    imagePalette![paletteOffset + 1],
-                    imagePalette![paletteOffset + 2],
-                    imagePalette![paletteOffset + 3]
-                ])
-            }
-        }
-
-        return rgbaData
     }
 }
