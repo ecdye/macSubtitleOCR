@@ -11,6 +11,24 @@ import Foundation
 import UniformTypeIdentifiers
 import Vision
 
+private struct OCRSubtitleTaskInput: Sendable {
+    let index: Int
+    let startTimestamp: TimeInterval?
+    let endTimestamp: TimeInterval?
+    let imageSource: SubtitleImageSource?
+
+    init(_ subtitle: Subtitle) {
+        index = subtitle.index
+        startTimestamp = subtitle.startTimestamp
+        endTimestamp = subtitle.endTimestamp
+        imageSource = subtitle.makeImageSource()
+    }
+
+    func makeSubtitle(text: String) -> Subtitle {
+        Subtitle(index: index, text: text, startTimestamp: startTimestamp, endTimestamp: endTimestamp)
+    }
+}
+
 struct SubtitleProcessor {
     private let subtitles: [Subtitle]
     private let trackNumber: Int
@@ -44,21 +62,24 @@ struct SubtitleProcessor {
 
     func process() async throws -> macSubtitleOCRResult {
         let accumulator = SubtitleAccumulator()
-        let semaphore = AsyncSemaphore(limit: maxConcurrentTasks) // Limit concurrent tasks
+        let taskSemaphore = AsyncSemaphore(limit: maxConcurrentTasks)
+        let textRecognitionSemaphore = AsyncSemaphore(limit: shouldSerializeModernTextRecognition ? 1 : maxConcurrentTasks)
+        let taskInputs = subtitles.map(OCRSubtitleTaskInput.init)
 
         try await withThrowingDiscardingTaskGroup { group in
-            for subtitle in subtitles {
+            for taskInput in taskInputs {
                 group.addTask {
-                    // Wait for permission to start the task
-                    await semaphore.wait()
-                    let subIndex = subtitle.index
+                    await taskSemaphore.wait()
+                    defer { Task { await taskSemaphore.signal() } }
 
-                    guard !shouldSkip(subtitle), let subImage = subtitle.createImage(invert) else {
+                    let subIndex = taskInput.index
+
+                    guard !shouldSkip(taskInput), let imageSource = taskInput.imageSource,
+                          let subImage = imageSource.createImage(invert) else {
                         print(
                             "Found invalid image for track: \(trackNumber), index: \(subIndex), creating an empty placeholder!")
-                        subtitle.text = ""
-                        await accumulator.append(subtitle, SubtitleJSONResult(index: subIndex, lines: [], text: ""))
-                        await semaphore.signal()
+                        await accumulator.append(taskInput.makeSubtitle(text: ""),
+                                                 SubtitleJSONResult(index: subIndex, lines: [], text: ""))
                         return
                     }
 
@@ -73,23 +94,22 @@ struct SubtitleProcessor {
                         }
                     }
 
-                    let (subtitleText, subtitleLines) = await recognizeText(from: subImage)
+                    let (subtitleText, subtitleLines) = await recognizeText(from: subImage,
+                                                                            textRecognitionSemaphore: textRecognitionSemaphore)
+                    let correctedText: String
                     if language.contains("en"), !disableICorrection {
                         let pattern = #"\bl\b"# // Replace l with I when it's a single character
-                        subtitle.text = subtitleText.replacingOccurrences(
+                        correctedText = subtitleText.replacingOccurrences(
                             of: pattern,
                             with: "I",
                             options: .regularExpression)
                     } else {
-                        subtitle.text = subtitleText
+                        correctedText = subtitleText
                     }
-                    subtitle.imageData = nil // Clear the image data to save memory
 
-                    let jsonOut = SubtitleJSONResult(index: subIndex, lines: subtitleLines, text: subtitleText)
+                    let jsonOut = SubtitleJSONResult(index: subIndex, lines: subtitleLines, text: correctedText)
 
-                    // Safely append to the arrays using the actor
-                    await accumulator.append(subtitle, jsonOut)
-                    await semaphore.signal()
+                    await accumulator.append(taskInput.makeSubtitle(text: correctedText), jsonOut)
                 }
             }
         }
@@ -97,17 +117,37 @@ struct SubtitleProcessor {
         return await macSubtitleOCRResult(trackNumber: trackNumber, srt: accumulator.subtitles, json: accumulator.json)
     }
 
-    private func shouldSkip(_ subtitle: Subtitle) -> Bool {
-        subtitle.imageWidth == 0 || subtitle.imageHeight == 0
+    private var shouldSerializeModernTextRecognition: Bool {
+        guard !forceOldAPI else {
+            return false
+        }
+        if #available(macOS 15.0, *) {
+            return true
+        }
+        return false
     }
 
-    private func recognizeText(from image: CGImage) async -> (String, [SubtitleLine]) {
+    private func shouldSkip(_ taskInput: OCRSubtitleTaskInput) -> Bool {
+        guard let imageSource = taskInput.imageSource else {
+            return true
+        }
+        return imageSource.width == 0 || imageSource.height == 0
+    }
+
+    private func recognizeText(from image: CGImage, textRecognitionSemaphore: AsyncSemaphore) async -> (String, [SubtitleLine]) {
         var text = ""
         var lines: [SubtitleLine] = []
 
         if !forceOldAPI, #available(macOS 15.0, *) {
-            let request = createRecognizeTextRequest()
-            let observations = try? await request.perform(on: image) as [RecognizedTextObservation]
+            await textRecognitionSemaphore.wait()
+            let observations: [RecognizedTextObservation]?
+            do {
+                let request = createRecognizeTextRequest()
+                observations = try await request.perform(on: image) as [RecognizedTextObservation]
+            } catch {
+                observations = nil
+            }
+            await textRecognitionSemaphore.signal()
             let size = CGSize(width: image.width, height: image.height)
             processRecognizedText(observations, &text, &lines, size)
         } else {
