@@ -4,11 +4,6 @@ on:
   push:
     branches: [main]
     paths: ['**/*.swift']
-  pull_request:
-    branches: [main]
-    paths: ['**/*.swift']
-  schedule:
-    - cron: '0 0 * * *'
   workflow_dispatch: # Allows manual trigger
 
 jobs:
