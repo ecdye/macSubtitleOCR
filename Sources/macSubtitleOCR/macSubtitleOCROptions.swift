@@ -7,6 +7,7 @@
 //
 
 import ArgumentParser
+import Foundation
 
 struct Options: ParsableArguments {
     @Option(wrappedValue: "en", name: [.customShort("l"), .long],
@@ -15,7 +16,7 @@ struct Options: ParsableArguments {
                 valueName: "l"))
     var languages: String
 
-    @Option(wrappedValue: 4, name: [.customShort("t"), .long],
+    @Option(wrappedValue: ProcessInfo.processInfo.activeProcessorCount, name: [.customShort("t"), .long],
             help: ArgumentHelp("Maximum number of threads to use for OCR", valueName: "n"))
     var maxThreads: Int
 

@@ -63,7 +63,7 @@ struct SubtitleProcessor {
     func process() async throws -> macSubtitleOCRResult {
         let accumulator = SubtitleAccumulator()
         let taskSemaphore = AsyncSemaphore(limit: maxConcurrentTasks)
-        let textRecognitionSemaphore = AsyncSemaphore(limit: shouldSerializeModernTextRecognition ? 1 : maxConcurrentTasks)
+        let textRecognitionSemaphore = AsyncSemaphore(limit: maxConcurrentTasks)
         let taskInputs = subtitles.map(OCRSubtitleTaskInput.init)
 
         try await withThrowingDiscardingTaskGroup { group in
@@ -115,16 +115,6 @@ struct SubtitleProcessor {
         }
 
         return await macSubtitleOCRResult(trackNumber: trackNumber, srt: accumulator.subtitles, json: accumulator.json)
-    }
-
-    private var shouldSerializeModernTextRecognition: Bool {
-        guard !forceOldAPI else {
-            return false
-        }
-        if #available(macOS 15.0, *) {
-            return true
-        }
-        return false
     }
 
     private func shouldSkip(_ taskInput: OCRSubtitleTaskInput) -> Bool {
