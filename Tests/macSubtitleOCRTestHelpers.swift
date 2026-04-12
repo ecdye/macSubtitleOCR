@@ -3,10 +3,10 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 10/3/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
-// Function to compute the Levenshtein Distance between two strings
+/// Function to compute the Levenshtein Distance between two strings
 func levenshteinDistance(_ lhs: String, _ rhs: String) -> Int {
     let empty = [Int](repeating: 0, count: rhs.count)
     var last = [Int](0 ... rhs.count)
@@ -21,7 +21,7 @@ func levenshteinDistance(_ lhs: String, _ rhs: String) -> Int {
     return last.last!
 }
 
-// Function to calculate the similarity percentage
+/// Function to calculate the similarity percentage
 func similarityPercentage(of lhs: String, and rhs: String) -> Double {
     let distance = levenshteinDistance(lhs, rhs)
     let maxLength = max(lhs.count, rhs.count)

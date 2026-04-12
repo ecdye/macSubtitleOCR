@@ -3,7 +3,7 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 10/4/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import Foundation
@@ -65,7 +65,7 @@ struct VobSubIDX {
         }
     }
 
-    // Extract timestamp from a line starting with "timestamp:"
+    /// Extract timestamp from a line starting with "timestamp:"
     private func extractTimestamp(from line: String) -> TimeInterval? {
         guard line.starts(with: "timestamp:") else { return nil }
 
@@ -77,7 +77,7 @@ struct VobSubIDX {
         return convertTimestampToTimeInterval(timestampString)
     }
 
-    // Extract file offset from a line starting with "filepos:"
+    /// Extract file offset from a line starting with "filepos:"
     private func extractOffset(from line: String) -> UInt64? {
         guard let fileposRange = line.range(of: "filepos:") else { return nil }
 
@@ -85,7 +85,7 @@ struct VobSubIDX {
         return UInt64(offsetString, radix: 16) // Convert hex string to UInt64
     }
 
-    // Convert "hh:mm:ss:ms" timestamp string to TimeInterval (seconds)
+    /// Convert "hh:mm:ss:ms" timestamp string to TimeInterval (seconds)
     private func convertTimestampToTimeInterval(_ timestamp: String) -> TimeInterval? {
         let components = timestamp.split(separator: ":")
 
@@ -101,7 +101,7 @@ struct VobSubIDX {
         return (hours * 3600) + (minutes * 60) + seconds + (milliseconds / 1000)
     }
 
-    // Function to parse the palette from the line
+    /// Function to parse the palette from the line
     private func parsePalette(line: String) -> [UInt8] {
         let paletteString = line.replacingOccurrences(of: "palette: ", with: "")
         return paletteString.split(separator: ", ").compactMap { String($0).hexToBytes }.flatMap(\.self)

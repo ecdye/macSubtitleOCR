@@ -50,7 +50,7 @@ jobs:
           gpg --verify macSubtitleOCR-ffmpeg-${TAG}.tar.xz.asc macSubtitleOCR-ffmpeg-${TAG}.tar.xz
 
       - name: Publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
             token: ${{ secrets.GITHUB_TOKEN }}
             name: macSubtitleOCR ${{ steps.build.outputs.version }}

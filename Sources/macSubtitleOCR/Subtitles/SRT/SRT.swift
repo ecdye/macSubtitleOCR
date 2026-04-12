@@ -3,7 +3,7 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/19/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import Foundation
@@ -22,7 +22,7 @@ struct SRT {
 
     // MARK: - Functions
 
-    // Writes the SRT object to the file at the given URL
+    /// Writes the SRT object to the file at the given URL
     func write(toFileAt url: URL) {
         let srtContent = encodeSRT()
         do {
@@ -34,7 +34,7 @@ struct SRT {
 
     // MARK: - Methods
 
-    // Encodes the SRT object into SRT format and returns it as a string
+    /// Encodes the SRT object into SRT format and returns it as a string
     private func encodeSRT() -> String {
         var srtContent = ""
 

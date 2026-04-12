@@ -3,7 +3,7 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 11/12/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import Foundation
@@ -53,7 +53,7 @@ class MKVFileHandler {
         return nil
     }
 
-    // Find EBML element by ID, avoiding Cluster header
+    /// Find EBML element by ID, avoiding Cluster header
     func findElement(withID targetID: UInt32, _ tgtID2: UInt32? = nil, avoidCluster: Bool = true) -> (UInt64?, UInt32?) {
         var previousOffset = fileHandle.offsetInFile
         while let (elementID, elementSize) = tryParseElement() {

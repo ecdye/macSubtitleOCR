@@ -3,7 +3,7 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/19/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import Foundation
@@ -31,7 +31,7 @@ struct ODS {
         try parseODS(buffer, offset, segmentLength)
     }
 
-    // Decodes the run-length encoded (RLE) image data
+    /// Decodes the run-length encoded (RLE) image data
     func decodeRLEData() throws -> Data {
         let rleImageData = RLEData(data: encodedImageData, width: objectWidth, height: objectHeight)
         return try rleImageData.decodePGS()

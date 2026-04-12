@@ -3,7 +3,7 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/8/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import Foundation
@@ -26,13 +26,13 @@ struct PDS {
 
     // MARK: - Methods
 
-    // Parses the Palette Definition Segment (PDS) to extract the RGBA palette.
-    // PDS structure:
-    //   1 byte: Segment Type (0x16); already checked by the caller
-    //   1 byte: Palette ID (unused by us)
-    //   1 byte: Palette Version (unused by us)
-    //   Followed by a series of palette entries:
-    //       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
+    /// Parses the Palette Definition Segment (PDS) to extract the RGBA palette.
+    /// PDS structure:
+    ///   1 byte: Segment Type (0x16); already checked by the caller
+    ///   1 byte: Palette ID (unused by us)
+    ///   1 byte: Palette Version (unused by us)
+    ///   Followed by a series of palette entries:
+    ///       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
     private mutating func parsePDS(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) {
         // Start reading after the first 2 bytes (Palette ID and Version)
         var i = offset + 2

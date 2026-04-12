@@ -3,12 +3,12 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/16/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import Foundation
 
-// Function to read a fixed length number of bytes and convert in into a (Un)signed integer
+/// Function to read a fixed length number of bytes and convert in into a (Un)signed integer
 func readFixedLengthNumber(fileHandle: FileHandle, length: Int) -> Int64 {
     let data = fileHandle.readData(ofLength: length)
     var result: Int64 = 0
@@ -18,7 +18,7 @@ func readFixedLengthNumber(fileHandle: FileHandle, length: Int) -> Int64 {
     return result
 }
 
-// Encode the absolute timestamp as 4 bytes in big-endian format for PGS
+/// Encode the absolute timestamp as 4 bytes in big-endian format for PGS
 func encodePTSForPGS(_ timestamp: UInt64) -> [UInt8] {
     withUnsafeBytes(of: UInt32(timestamp).bigEndian) { Array($0) }
 }
@@ -44,7 +44,7 @@ func formatTime(_ time: UInt64) -> String {
     return String(format: "%02d:%02d:%02d:%03d", hours, minutes, seconds, milliseconds)
 }
 
-// Calculate the absolute timestamp with 90 kHz accuracy
+/// Calculate the absolute timestamp with 90 kHz accuracy
 func calculateAbsolutePTS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64) -> UInt64 {
     // The block timestamp is relative, so we add it to the cluster timestamp
     UInt64(clusterTimestamp + blockTimestamp) * 90

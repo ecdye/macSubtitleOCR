@@ -3,13 +3,13 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/16/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import Foundation
 
 extension Data {
-    // Function to remove null bytes (0x00) from Data
+    /// Function to remove null bytes (0x00) from Data
     mutating func removeNullBytes() {
         self = filter { $0 != 0x00 }
     }

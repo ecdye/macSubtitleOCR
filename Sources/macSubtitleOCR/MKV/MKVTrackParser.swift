@@ -3,7 +3,7 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/22/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 import Foundation
@@ -282,7 +282,7 @@ class MKVTrackParser: MKVFileHandler {
         return (blockSize, blockStartOffset)
     }
 
-    // Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
+    /// Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
     private func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
         let trackNumber = ebmlParser.readVINT(elementSize: true)
         let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2)

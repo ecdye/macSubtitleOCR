@@ -3,7 +3,7 @@
 // macSubtitleOCR
 //
 // Created by Ethan Dye on 9/25/24.
-// Copyright © 2024-2025 Ethan Dye. All rights reserved.
+// Copyright © 2024-2026 Ethan Dye. All rights reserved.
 //
 
 struct macSubtitleOCRResult {
@@ -12,13 +12,13 @@ struct macSubtitleOCRResult {
     var json: [SubtitleJSONResult]
 }
 
-struct SubtitleJSONResult: Sendable {
+struct SubtitleJSONResult {
     let index: Int
     let lines: [SubtitleLine]
     let text: String
 }
 
-struct SubtitleLine: Sendable {
+struct SubtitleLine {
     let text: String
     let confidence: Float
     let x: Int

@@ -21,7 +21,7 @@ let package = Package(
         .macOS("14.0")
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.5.0")
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.7.1")
     ],
     targets: [
         .executableTarget(
