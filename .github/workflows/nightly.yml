@@ -87,7 +87,7 @@ jobs:
         gpg --verify macSubtitleOCR-ffmpeg-nightly-${sha}.tar.xz.asc macSubtitleOCR-ffmpeg-nightly-${sha}.tar.xz
 
     - name: Publish
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         name: Nightly Build
