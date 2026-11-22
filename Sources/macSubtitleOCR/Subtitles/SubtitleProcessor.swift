@@ -13,25 +13,60 @@ import Vision
 
 private typealias TextRecognizer = @Sendable (CGImage) async -> (String, [SubtitleLine])
 
-/// A copy of `image` at twice the size, sitting on a white margin, or nil if it cannot be drawn.
-///
-/// The margin is there for a stroke that runs to the edge of the frame. Subtitle frames are cropped
-/// to their visible pixels, so a glyph can end up flush against the border with nowhere for the
-/// recognizer's box to extend, and it reads the line without that glyph: an image of "I can't." comes
-/// back as "can't." Any margin of a few pixels restores it.
-private func enlarged(_ image: CGImage) -> CGImage? {
-    let margin = 4
-    let width = image.width * 2 + margin * 2
-    let height = image.height * 2 + margin * 2
-    let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                            space: CGColorSpaceCreateDeviceRGB(),
-                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
-    guard let context else { return nil }
-    context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-    context.interpolationQuality = .high
-    context.draw(image, in: CGRect(x: margin, y: margin, width: image.width * 2, height: image.height * 2))
-    return context.makeImage()
+/// A subtitle image as the recognizer is given it, and how its pixels relate to the subtitle's.
+struct PreparedImage {
+    /// How the subtitle was enlarged and framed to make the prepared image.
+    struct Geometry: Equatable {
+        let scale: Int
+        let margin: Int
+
+        /// The rectangle in the subtitle's own pixels that `rect` covers in the prepared image.
+        ///
+        /// The margin is the same on every side, so this holds whichever corner the origin is in.
+        func original(_ rect: CGRect) -> CGRect {
+            let factor = CGFloat(scale)
+            return CGRect(x: (rect.minX - CGFloat(margin)) / factor, y: (rect.minY - CGFloat(margin)) / factor,
+                          width: rect.width / factor, height: rect.height / factor)
+        }
+    }
+
+    let image: CGImage
+    let geometry: Geometry
+
+    /// The image as given, for when it cannot be redrawn.
+    init(unchanged image: CGImage) {
+        self.image = image
+        geometry = Geometry(scale: 1, margin: 0)
+    }
+
+    /// `image` drawn flat onto white at three times the size inside a margin, or nil if it cannot be drawn.
+    ///
+    /// A subtitle image arrives with its glyphs dark on white but its anti-aliased edges still partly
+    /// transparent, and Vision reads those edges as noise; drawing it onto white settles them. It is
+    /// also cropped to its visible pixels, so a glyph can sit flush against the border with nowhere for
+    /// the recognizer's box to extend, and it reads the line without that glyph, most often a closing
+    /// full stop. The margin restores it. Enlarging helps every frame, not only small ones: it separates
+    /// strokes the recognizer otherwise merges, `vv` read as `w` or `I` as `|`. Over 1,312 DVD subtitle
+    /// lines a reader had confirmed, the share read exactly rose from 88% for the image as previously
+    /// given to 92% at twice the size and 93% at three times; four times was eight times slower and lost
+    /// single words to nothing.
+    init?(_ image: CGImage) {
+        let geometry = Geometry(scale: 3, margin: 16)
+        let width = image.width * geometry.scale + geometry.margin * 2
+        let height = image.height * geometry.scale + geometry.margin * 2
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpaceCreateDeviceRGB(),
+                                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+        guard let context else { return nil }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: geometry.margin, y: geometry.margin,
+                                       width: image.width * geometry.scale, height: image.height * geometry.scale))
+        guard let drawn = context.makeImage() else { return nil }
+        self.image = drawn
+        self.geometry = geometry
+    }
 }
 
 private struct OCRSubtitleTaskInput {
@@ -179,15 +214,23 @@ struct SubtitleProcessor {
                                                                        alternates: [String])? {
         guard let first = candidates.first else { return nil }
         guard expectsLatinScript else {
-            return (first.0, first.1, candidates.dropFirst().map(\.1))
+            return (first.0, first.1, others(candidates.map(\.1), than: first.1))
         }
 
         let repaired = candidates.map { ($0.0, LatinConfusables.normalize($0.1)) }
         let chosen = !containsForeignLetters(repaired[0].1)
             ? repaired[0]
             : repaired.first { !containsForeignLetters($0.1) } ?? repaired[0]
-        let alternates = repaired.map(\.1).filter { $0 != chosen.1 }
-        return (chosen.0, chosen.1, alternates)
+        return (chosen.0, chosen.1, others(repaired.map(\.1), than: chosen.1))
+    }
+
+    /// The readings other than `chosen`, each once, in the recognizer's order.
+    ///
+    /// Two candidates can read the same, as the recognizer returns them or once repairing characters
+    /// drawn as Latin ones has made them alike.
+    private func others(_ readings: [String], than chosen: String) -> [String] {
+        var seen: Set = [chosen]
+        return readings.filter { seen.insert($0).inserted }
     }
 
     private func shouldSkip(_ taskInput: OCRSubtitleTaskInput) -> Bool {
@@ -203,14 +246,13 @@ struct SubtitleProcessor {
     /// makes it build a fresh engine per image. Those constructions are not thread safe and corrupt each
     /// other when they overlap, so a single request is reused for the whole track instead.
     ///
-    /// An image that recognizes as nothing at all is read twice more before it is written off as blank,
-    /// because a cue carrying correct timing and no text reads as valid output and hides its own loss.
-    /// Language correction can discard an observation outright rather than return a reading its language
-    /// model cannot account for, so a short line offering it no context, a subtitle holding nothing but
-    /// a team name for instance, comes back empty; switching correction off recovers the text the
-    /// detector already had. A small image can also fall under whatever size the recognizer wants,
-    /// which doubling it clears. Both readings are only ever reached from nothing, so neither can cost
-    /// a subtitle a reading it already had.
+    /// Every image is read as `PreparedImage` draws it. One that recognizes as nothing at all is read
+    /// again before it is written off as blank, because a cue carrying correct timing and no text reads
+    /// as valid output and hides its own loss. Language correction can discard an observation outright
+    /// rather than return a reading its language model cannot account for, so a short line offering it
+    /// no context, a subtitle holding nothing but a team name for instance, comes back empty; switching
+    /// correction off recovers the text the detector already had. That reading is only ever reached from
+    /// nothing, so it cannot cost a subtitle a reading it already had.
     private func makeTextRecognizer() -> TextRecognizer {
         if !forceOldAPI, #available(macOS 15.0, *) {
             let request = createRecognizeTextRequest(usingLanguageCorrection: !disableLanguageCorrection)
@@ -227,16 +269,11 @@ struct SubtitleProcessor {
             }
 
             return { image in
-                var observations = await read(image)
-                if observations.isEmpty, let enlarged = enlarged(image) {
-                    observations = await read(enlarged)
-                }
+                let page = PreparedImage(image) ?? PreparedImage(unchanged: image)
+                let observations = await read(page.image)
                 var text = ""
                 var lines: [SubtitleLine] = []
-                // Bounding boxes arrive normalized, so scaling them by the original image keeps them in
-                // its coordinates whichever copy was read.
-                let size = CGSize(width: image.width, height: image.height)
-                processRecognizedText(observations, &text, &lines, size)
+                processRecognizedText(observations, &text, &lines, page, CGSize(width: image.width, height: image.height))
                 return (text, lines)
             }
         }
@@ -261,13 +298,11 @@ struct SubtitleProcessor {
                         return uncorrected.results ?? []
                     }
 
-                    var results = read(image)
-                    if results.isEmpty, let enlarged = enlarged(image) {
-                        results = read(enlarged)
-                    }
+                    let page = PreparedImage(image) ?? PreparedImage(unchanged: image)
+                    let results = read(page.image)
                     var text = ""
                     var lines: [SubtitleLine] = []
-                    processRecognizedText(results, &text, &lines, image.width, image.height)
+                    processRecognizedText(results, &text, &lines, page, image.width, image.height)
                     continuation.resume(returning: (text, lines))
                 }
             }
@@ -321,9 +356,12 @@ struct SubtitleProcessor {
         return request
     }
 
+    /// Collect the lines recognized in `page`, with their boxes in the pixels of the subtitle it was
+    /// drawn from, which is `size`.
     @available(macOS 15.0, *)
     private func processRecognizedText(_ result: [RecognizedTextObservation]?, _ text: inout String,
-                                       _ lines: inout [SubtitleLine], _ size: CGSize) {
+                                       _ lines: inout [SubtitleLine], _ page: PreparedImage, _ size: CGSize) {
+        let pageSize = CGSize(width: page.image.width, height: page.image.height)
         text = result?.compactMap { observation in
             let candidates = observation.topCandidates(candidatesToConsider)
             guard let (candidate, string, alternates) = bestCandidate(among: candidates.map { ($0, $0.string) })
@@ -331,7 +369,7 @@ struct SubtitleProcessor {
             let confidence = candidate.confidence
             let stringRange = string.startIndex ..< string.endIndex
             let boundingBox = candidate.boundingBox(for: stringRange)?.boundingBox
-            let rect = boundingBox?.toImageCoordinates(size, origin: .upperLeft) ?? .zero
+            let rect = page.geometry.original(boundingBox?.toImageCoordinates(pageSize, origin: .upperLeft) ?? .zero)
             let line = SubtitleLine(
                 text: string,
                 confidence: confidence,
@@ -346,8 +384,11 @@ struct SubtitleProcessor {
         }.joined(separator: "\n") ?? ""
     }
 
+    /// Collect the lines recognized in `page`, with their boxes in the pixels of the subtitle it was
+    /// drawn from, which is `width` by `height`.
     private func processRecognizedText(_ observations: [VNRecognizedTextObservation]?, _ text: inout String,
-                                       _ lines: inout [SubtitleLine], _ width: Int, _ height: Int) {
+                                       _ lines: inout [SubtitleLine], _ page: PreparedImage, _: Int,
+                                       _ height: Int) {
         text = observations?.compactMap { observation in
             let candidates = observation.topCandidates(candidatesToConsider)
             guard let (candidate, string, alternates) = bestCandidate(among: candidates.map { ($0, $0.string) })
@@ -355,7 +396,8 @@ struct SubtitleProcessor {
             let confidence = candidate.confidence
             let stringRange = string.startIndex ..< string.endIndex
             let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox
-            let rect = VNImageRectForNormalizedRect(boundingBox ?? .zero, width, height)
+            let rect = page.geometry.original(
+                VNImageRectForNormalizedRect(boundingBox ?? .zero, page.image.width, page.image.height))
 
             let line = SubtitleLine(
                 text: string,

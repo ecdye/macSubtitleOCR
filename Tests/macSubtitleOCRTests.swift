@@ -248,30 +248,33 @@ private struct OCRSamples: Decodable {
 /// The frames in `ocr-samples.json` are real subtitle glyphs because rendered ones are too clean to
 /// stand in for anti-aliasing. What the callers here provoke is a recognizer decision about the words
 /// or about the size of the frame rather than about the shapes, so drawing the text is enough.
-private func renderedSubtitle(_ text: String, index: Int, pointSize: CGFloat = 40) throws -> Subtitle {
+private func renderedSubtitle(_ text: String, index: Int, pointSize: CGFloat = 40, padding: Int = 4,
+                              transparent: Bool = false) throws -> Subtitle {
     let font = CTFontCreateWithName("Helvetica" as CFString, pointSize, nil)
     let attributes: [NSAttributedString.Key: Any] = [
         NSAttributedString.Key(kCTFontAttributeName as String): font,
         NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1)
     ]
     let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
-    let bounds = CTLineGetBoundsWithOptions(line, [])
-    let width = Int(bounds.width.rounded(.up)) + 8
-    let height = Int(bounds.height.rounded(.up)) + 8
+    // With no padding the frame is cropped to the glyphs' outlines, as a subpicture is cropped to its ink.
+    let bounds = CTLineGetBoundsWithOptions(line, padding == 0 ? .useGlyphPathBounds : [])
+    let width = Int(bounds.width.rounded(.up)) + 2 * padding
+    let height = Int(bounds.height.rounded(.up)) + 2 * padding
 
     let context = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                                          bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
                                          bitmapInfo: CGImageAlphaInfo.none.rawValue))
     context.setFillColor(CGColor(gray: 0, alpha: 1))
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-    context.textPosition = CGPoint(x: 4, y: 4 - bounds.minY)
+    context.textPosition = CGPoint(x: CGFloat(padding) - bounds.minX, y: CGFloat(padding) - bounds.minY)
     CTLineDraw(line, context)
 
     let pixels = try #require(context.data)
-    // A gray level doubles as its own palette index, and every pixel is opaque.
+    // A gray level doubles as its own palette index. Opaque, the text sits on black; transparent, the
+    // level is the coverage of white text over nothing, as a DVD subpicture is drawn.
     let palette: [UInt8] = (0 ..< 256).flatMap { level -> [UInt8] in
         let gray = UInt8(level)
-        return [gray, gray, gray, 255]
+        return transparent ? [255, 255, 255, gray] : [gray, gray, gray, 255]
     }
 
     return Subtitle(index: index,
@@ -305,4 +308,22 @@ private func renderedSubtitle(_ text: String, index: Int, pointSize: CGFloat = 4
                                           nil, false, false, false, false, makeOutputDirectory(), 1)
     let recognized = try await processor.process().srt.first?.text ?? ""
     #expect(recognized == "Wait")
+}
+
+/// A subpicture is cropped to its ink and drawn over nothing, so its last glyph touches the edge of a
+/// transparent frame. Read like that, the recognizer drops the glyph, most often a closing full stop.
+@Test func glyphAtTheEdgeOfATransparentFrameIsRead() async throws {
+    let subtitle = try renderedSubtitle("OK.", index: 1, pointSize: 28, padding: 0, transparent: true)
+    let processor = try SubtitleProcessor(for: [subtitle], from: 0, withOptions: false, false, "en",
+                                          nil, false, false, false, false, makeOutputDirectory(), 1)
+    let recognized = try await processor.process().srt.first?.text ?? ""
+    #expect(recognized == "OK.")
+}
+
+@Test func boxesFromThePreparedImageAreMappedBackToTheSubtitle() {
+    let prepared = PreparedImage.Geometry(scale: 2, margin: 16)
+    #expect(prepared.original(CGRect(x: 16, y: 16, width: 200, height: 40))
+        == CGRect(x: 0, y: 0, width: 100, height: 20))
+    #expect(prepared.original(CGRect(x: 36, y: 56, width: 10, height: 10))
+        == CGRect(x: 10, y: 20, width: 5, height: 5))
 }
