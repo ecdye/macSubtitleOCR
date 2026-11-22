@@ -14,7 +14,6 @@ struct VobSubParser {
 
     let subtitle: Subtitle
     private let masterPalette: [UInt8]
-    private let minimumControlHeaderSize = 22
 
     // MARK: - Lifecycle
 
@@ -69,11 +68,13 @@ struct VobSubParser {
             offset += 1 // Skip PES miscellaneous data
             let extByteOne = buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self)
             offset += 1
-            let firstPacket = (extByteOne & 0x80) == 0x80 || (extByteOne & 0xC0) == 0xC0
+            // The PTS flag, not the header length, says whether a timestamp is present: a packet
+            // continuing a subpicture may pad its header with 0xFF stuffing bytes instead.
+            let firstPacket = (extByteOne & 0x80) == 0x80
 
             let ptsDataLength = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self))
             offset += 1
-            if ptsDataLength == 5 {
+            if firstPacket, ptsDataLength >= 5 {
                 var presentationTimestamp: UInt64 = 0
                 presentationTimestamp = UInt64(buffer[offset + 4]) >> 1
                 presentationTimestamp += UInt64(buffer[offset + 3]) << 7
@@ -121,74 +122,98 @@ struct VobSubParser {
             }
         }
 
-        parseCommandHeader(controlHeader, offset: relativeControlOffset)
+        parseControlSequences(controlHeader, offset: relativeControlOffset)
     }
 
-    private func parseCommandHeader(_ header: Data, offset: Int) {
-        let date = TimeInterval((header.getUInt16BE()! << 10) / 90)
-        let endOfControl = max(minimumControlHeaderSize, Int(header.getUInt16BE(at: 2)!) - 4 - offset)
-        if endOfControl > header.count {
-            print("Control header is too short for subtitle: \(subtitle.index), got \(header.count) bytes, errors may occur")
+    /// Walk the subpicture's chain of control sequences, as ffmpeg's `decode_dvd_subtitles` does.
+    ///
+    /// Each sequence is a delay, the offset of the next sequence, and commands ending in 0xFF;
+    /// the last sequence points at itself. `header` holds the bytes from `controlStart`, the
+    /// offset of the first sequence within the subpicture. The start and stop display commands
+    /// usually sit in different sequences, so reading only the first loses the end time.
+    private func parseControlSequences(_ header: Data, offset controlStart: Int) {
+        let presented = subtitle.startTimestamp!
+        var sequence = controlStart
+        while true {
+            let local = sequence - controlStart
+            guard local >= 0, let date = header.getUInt16BE(at: local),
+                  let next = header.getUInt16BE(at: local + 2) else {
+                print("Control sequence for subtitle \(subtitle.index) lies outside its header, errors may occur")
+                return
+            }
+            // A delay counts in units of 1024/90000 s from the presentation timestamp. ffmpeg
+            // rounds it down to whole milliseconds; the shift needs more than the 16 bits it is read in.
+            let delay = TimeInterval((Int(date) << 10) / 90) / 1000
+            parseCommands(header, from: local + 4, at: presented + delay)
+            let nextSequence = Int(next)
+            if nextSequence == sequence {
+                return
+            }
+            if nextSequence < sequence {
+                print("Invalid control sequence offset for subtitle \(subtitle.index), errors may occur")
+                return
+            }
+            sequence = nextSequence
         }
+    }
 
-        var index = 4
-
-        while index < endOfControl {
+    /// Apply one control sequence's commands, which take effect at `time`.
+    ///
+    /// The image is taken from the first sequence that describes it, since a later one
+    /// only repeats it or changes its contrast to fade it.
+    private func parseCommands(_ header: Data, from start: Int, at time: TimeInterval) {
+        var index = start
+        while index < header.count {
             let command = header[index]
             index += 1
-
-            switch command {
-            case 1:
-                subtitle.startTimestamp! += date
-            case 2:
-                subtitle.endTimestamp = subtitle.startTimestamp! + date
-            case 3:
-                var byte = header[index]
-                index += 1
-                if subtitle.imagePalette == nil {
-                    subtitle.imagePalette = [UInt8](repeating: 0, count: 4)
-                }
-                subtitle.imagePalette![3] = byte >> 4
-                subtitle.imagePalette![2] = byte & 0x0F
-                byte = header[index]
-                index += 1
-                subtitle.imagePalette![1] = byte >> 4
-                subtitle.imagePalette![0] = byte & 0x0F
-            case 4:
-                var byte = header[index]
-                index += 1
-                if subtitle.imageAlpha == nil {
-                    subtitle.imageAlpha = [UInt8](repeating: 0, count: 4)
-                } else {
-                    // If the alpha is already set, don't overwrite it. This typically happens when fade in/out is used.
-                    index += 1
-                    break
-                }
-                subtitle.imageAlpha![3] = byte >> 4
-                subtitle.imageAlpha![2] = byte & 0x0F
-                byte = header[index]
-                index += 1
-                subtitle.imageAlpha![1] = byte >> 4
-                subtitle.imageAlpha![0] = byte & 0x0F
-            case 5:
-                if subtitle.imageXOffset != nil || subtitle.imageYOffset != nil {
-                    break // Don't overwrite the offsets if they're already set, only happens in bad files
-                }
-                subtitle.imageXOffset = Int(header[index]) << 4 | Int(header[index + 1] >> 4)
-                subtitle.imageWidth = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2])) - subtitle
-                    .imageXOffset! + 1
-                index += 3
-                subtitle.imageYOffset = Int(header[index]) << 4 | Int(header[index + 1] >> 4)
-                subtitle.imageHeight = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2])) - subtitle
-                    .imageYOffset! + 1
-                index += 3
-            case 6:
-                subtitle.evenOffset = Int(header.getUInt16BE(at: index)! - 4)
-                subtitle.oddOffset = Int(header.getUInt16BE(at: index + 2)! - 4)
-                index += 4
-            default:
-                break
+            let operands = [0x03: 2, 0x04: 2, 0x05: 6, 0x06: 4][command] ?? 0
+            guard index + operands <= header.count else {
+                print("Control command \(command) for subtitle \(subtitle.index) is truncated, errors may occur")
+                return
             }
+            switch command {
+            case 0x00:
+                break // Forced display: shown whatever the player's subtitle setting.
+            case 0x01:
+                subtitle.startTimestamp = time
+            case 0x02:
+                subtitle.endTimestamp = time
+            case 0x03:
+                if subtitle.imagePalette == nil {
+                    subtitle.imagePalette = [
+                        header[index + 1] & 0x0F,
+                        header[index + 1] >> 4,
+                        header[index] & 0x0F,
+                        header[index] >> 4
+                    ]
+                }
+            case 0x04:
+                if subtitle.imageAlpha == nil {
+                    subtitle.imageAlpha = [
+                        header[index + 1] & 0x0F,
+                        header[index + 1] >> 4,
+                        header[index] & 0x0F,
+                        header[index] >> 4
+                    ]
+                }
+            case 0x05:
+                if subtitle.imageXOffset == nil, subtitle.imageYOffset == nil {
+                    subtitle.imageXOffset = Int(header[index]) << 4 | Int(header[index + 1] >> 4)
+                    subtitle.imageWidth = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2]))
+                        - subtitle.imageXOffset! + 1
+                    subtitle.imageYOffset = Int(header[index + 3]) << 4 | Int(header[index + 4] >> 4)
+                    subtitle.imageHeight = (Int(header[index + 4] & 0x0F) << 8 | Int(header[index + 5]))
+                        - subtitle.imageYOffset! + 1
+                }
+            case 0x06:
+                if subtitle.evenOffset == nil, subtitle.oddOffset == nil {
+                    subtitle.evenOffset = Int(header.getUInt16BE(at: index)!) - 4
+                    subtitle.oddOffset = Int(header.getUInt16BE(at: index + 2)!) - 4
+                }
+            default:
+                return // 0xFF ends the sequence; like ffmpeg, so does a command it does not know.
+            }
+            index += operands
         }
     }
 
