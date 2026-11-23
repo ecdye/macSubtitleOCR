@@ -151,11 +151,8 @@ struct SubtitleImageSource {
             }
         }
 
-        guard minX < width, maxX >= 0, minY < height, maxY >= 0 else {
-            return nil
-        }
-
-        guard let provider = CGDataProvider(data: rgbaData as CFData) else { return nil }
+        guard minX < width, maxX >= 0, minY < height, maxY >= 0,
+              let provider = CGDataProvider(data: rgbaData as CFData) else { return nil }
         // Subtitle palettes carry straight alpha, so `premultipliedLast` is not what the buffer holds.
         // It composites to the same pixels regardless: wherever alpha is partial these palettes pin the
         // color to black or white, and both readings agree at either end. Recognition does not agree,

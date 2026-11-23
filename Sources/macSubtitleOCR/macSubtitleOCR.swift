@@ -120,7 +120,16 @@ struct macSubtitleOCR: AsyncParsableCommand {
     #if FFMPEG
     private func processFFmpegDecoder() async throws -> [macSubtitleOCRResult] {
         var results: [macSubtitleOCRResult] = []
-        let ffmpeg = try FFmpeg(input)
+        // A bare VobSub .sub is a plain MPEG-PS stream: FFmpeg only gets the palette and frame size when
+        // it opens the .idx, and without them it guesses a palette that turns filled glyphs hollow.
+        var ffmpegInput = input
+        if input.hasSuffix(".sub") {
+            let idx = String(input.dropLast(".sub".count)) + ".idx"
+            if FileManager.default.fileExists(atPath: idx) {
+                ffmpegInput = idx
+            }
+        }
+        let ffmpeg = try FFmpeg(ffmpegInput)
 
         for result in ffmpeg.subtitleTracks {
             logger.debug("Processing subtitle track: \(result.key)")
