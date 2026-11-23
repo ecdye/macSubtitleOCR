@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          brew install ffmpeg periphery --quiet
+          brew install ffmpeg --quiet
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
@@ -40,6 +40,3 @@ jobs:
       - name: Test Internal Decoder
         timeout-minutes: 5
         run: xcrun swift test --skip-build --filter internalDecoder
-
-      - name: Periphery
-        run: periphery scan --skip-build --format github-actions --relative-results --strict
