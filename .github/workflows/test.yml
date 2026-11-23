@@ -26,10 +26,9 @@ jobs:
           brew install ffmpeg periphery --quiet
 
       - name: Select Xcode
-        uses: mxcl/xcodebuild@d3ee9b419c1be9a988086c58fe0988f32d99cfc5 # v3.6.0
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          swift: '6'
-          action: none
+          xcode-version: '^26'
 
       - name: Build Tests
         run: USE_FFMPEG=1 xcrun swift build --build-tests -Xswiftc -DGITHUB_ACTIONS

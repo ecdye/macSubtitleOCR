@@ -22,10 +22,9 @@ jobs:
       run: brew install ffmpeg
 
     - name: Select Xcode
-      uses: mxcl/xcodebuild@d3ee9b419c1be9a988086c58fe0988f32d99cfc5 # v3.6.0
+      uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
       with:
-        swift: '6'
-        action: none
+        xcode-version: '^26'
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
