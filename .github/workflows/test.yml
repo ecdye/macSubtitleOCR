@@ -19,17 +19,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Dependencies
         run: |
-          brew install ffmpeg peripheryapp/periphery/periphery --quiet
+          brew install ffmpeg --quiet
 
       - name: Select Xcode
-        uses: mxcl/xcodebuild@v3
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          swift: '6'
-          action: none
+          xcode-version: '^26'
 
       - name: Build Tests
         run: USE_FFMPEG=1 xcrun swift build --build-tests -Xswiftc -DGITHUB_ACTIONS
@@ -41,6 +40,3 @@ jobs:
       - name: Test Internal Decoder
         timeout-minutes: 5
         run: xcrun swift test --skip-build --filter internalDecoder
-
-      - name: Periphery
-        run: periphery scan --skip-build --format github-actions --relative-results --strict

@@ -59,7 +59,7 @@ class MKVFileHandler {
         while let (elementID, elementSize) = tryParseElement() {
             guard fileHandle.offsetInFile < endOfFile else { return (nil, nil) }
 
-            if elementID == EBML.cluster && avoidCluster {
+            if elementID == EBML.cluster, avoidCluster {
                 logger.debug("Encountered Cluster: seeking back to before the cluster header")
                 fileHandle.seek(toFileOffset: previousOffset)
                 return (nil, nil)

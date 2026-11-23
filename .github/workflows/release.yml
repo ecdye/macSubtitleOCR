@@ -14,10 +14,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v7.0.0
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
         with:
           gpg_private_key: "${{ secrets.RELEASE_GPG_PRIVATE_KEY }}"
           passphrase: "${{ secrets.RELEASE_GPG_PASSPHRASE }}"
@@ -26,10 +26,9 @@ jobs:
         run: brew install ffmpeg
 
       - name: Select Xcode
-        uses: mxcl/xcodebuild@v3
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          swift: '6'
-          action: none
+          xcode-version: '^26'
 
       - name: Build Standalone
         id: build
@@ -50,7 +49,7 @@ jobs:
           gpg --verify macSubtitleOCR-ffmpeg-${TAG}.tar.xz.asc macSubtitleOCR-ffmpeg-${TAG}.tar.xz
 
       - name: Publish
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
             token: ${{ secrets.GITHUB_TOKEN }}
             name: macSubtitleOCR ${{ steps.build.outputs.version }}
