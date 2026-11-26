@@ -327,3 +327,75 @@ private func renderedSubtitle(_ text: String, index: Int, pointSize: CGFloat = 4
     #expect(prepared.original(CGRect(x: 36, y: 56, width: 10, height: 10))
         == CGRect(x: 10, y: 20, width: 5, height: 5))
 }
+
+/// Every line's box is measured from the top of the subtitle, so the lines of a subtitle are listed
+/// with their `y` increasing.
+@Test func lineBoxesAreMeasuredFromTheTop() async throws {
+    let outputPath = try makeOutputDirectory()
+    var runner = try macSubtitleOCR.parse([TestFilePaths.sup.path, outputPath, "--json", "--max-threads", "2"])
+    await runner.run()
+
+    let data = try Data(contentsOf: URL(fileURLWithPath: "\(outputPath)/track_0.json"))
+    let images = try #require(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+    var multiline = 0
+    for image in images {
+        let lines = try #require(image["lines"] as? [[String: Any]])
+        guard lines.count > 1 else { continue }
+        multiline += 1
+        let tops = try lines.map { try #require($0["y"] as? Int) }
+        #expect(tops == tops.sorted() && Set(tops).count == tops.count, "image \(image["image"] ?? "?"): \(tops)")
+    }
+    #expect(multiline > 0)
+}
+
+private func placed(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat,
+                    upright: Bool = true) -> PlacedLine {
+    PlacedLine(text: text, confidence: 1, rect: CGRect(x: x, y: y, width: width, height: height),
+               alternates: [], upright: upright)
+}
+
+/// A line's upward direction, from its bottom left corner to its top left, says which way up it was read.
+@Test func rotatedReadingsAreRecognizedFromTheirCorners() {
+    // Measured from the bottom left, as Vision reports corners.
+    #expect(SubtitleProcessor.isUpright(topLeft: CGPoint(x: 10, y: 90), bottomLeft: CGPoint(x: 10, y: 40)))
+    // Slanted text still reads upright.
+    #expect(SubtitleProcessor.isUpright(topLeft: CGPoint(x: 18, y: 90), bottomLeft: CGPoint(x: 10, y: 40)))
+    // Upside down: the line's top is below its bottom, and its left is on the right.
+    #expect(!SubtitleProcessor.isUpright(topLeft: CGPoint(x: 60, y: 2), bottomLeft: CGPoint(x: 60, y: 49)))
+    // A quarter turn either way.
+    #expect(!SubtitleProcessor.isUpright(topLeft: CGPoint(x: 10, y: 40), bottomLeft: CGPoint(x: 60, y: 40)))
+    #expect(!SubtitleProcessor.isUpright(topLeft: CGPoint(x: 60, y: 40), bottomLeft: CGPoint(x: 10, y: 40)))
+}
+
+/// Lines are read by position, whatever order the recognizer returned them in.
+@Test func linesAreOrderedByPosition() {
+    let top = placed("Thank you very much.", x: 0, y: -4, width: 378, height: 34)
+    let bottom = placed("Oh!", x: 166, y: 26, width: 43, height: 28)
+    #expect(SubtitleProcessor.readingOrder([bottom, top]).map(\.text) == ["Thank you very much.", "Oh!"])
+
+    // The pieces of one displayed row stay side by side, left first, between the rows around them.
+    let first = placed("No rules? Yeah, OK, well,", x: 0, y: 0, width: 300, height: 28)
+    let left = placed("how", x: 0, y: 30, width: 50, height: 26)
+    let right = placed("about I call the council", x: 60, y: 31, width: 280, height: 28)
+    #expect(SubtitleProcessor.readingOrder([right, first, left]).map(\.text)
+        == ["No rules? Yeah, OK, well,", "how", "about I call the council"])
+}
+
+/// A line read upside down is replaced by the upright reading of the same place and put where it is
+/// drawn, while every line read upright is left as it was.
+@Test func rotatedLinesAreReplacedByTheirUprightReading() {
+    let rotated = placed("¡40", x: 166, y: 26, width: 43, height: 28, upright: false)
+    let top = placed("Thank you very much.", x: 0, y: -4, width: 378, height: 34)
+    let upright = [
+        placed("Thank you very mush.", x: 0, y: -4, width: 378, height: 34),
+        placed("Oh!", x: 168, y: 27, width: 40, height: 27)
+    ]
+
+    let (text, lines) = SubtitleProcessor.assemble([rotated, top], upright: upright)
+    #expect(text == "Thank you very much.\nOh!")
+    #expect(lines.map(\.y) == [0, 27])
+
+    // With no upright reading in its place, the rotated reading is kept, still in its place.
+    let (kept, _) = SubtitleProcessor.assemble([rotated, top], upright: [upright[0]])
+    #expect(kept == "Thank you very much.\n¡40")
+}

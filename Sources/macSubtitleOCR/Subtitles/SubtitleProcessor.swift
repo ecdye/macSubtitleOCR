@@ -69,6 +69,21 @@ struct PreparedImage {
     }
 }
 
+/// A recognized line, with its box in the pixels of the subtitle measured from the top left.
+struct PlacedLine {
+    let text: String
+    let confidence: Float
+    let rect: CGRect
+    let alternates: [String]
+    /// Whether the recognizer read the line the right way up.
+    let upright: Bool
+
+    var subtitleLine: SubtitleLine {
+        SubtitleLine(text: text, confidence: confidence, x: max(0, Int(rect.minX)), width: Int(rect.width),
+                     y: max(0, Int(rect.minY)), height: Int(rect.height), alternates: alternates)
+    }
+}
+
 private struct OCRSubtitleTaskInput {
     let index: Int
     let startTimestamp: TimeInterval?
@@ -253,7 +268,13 @@ struct SubtitleProcessor {
     /// no context, a subtitle holding nothing but a team name for instance, comes back empty; switching
     /// correction off recovers the text the detector already had. That reading is only ever reached from
     /// nothing, so it cannot cost a subtitle a reading it already had.
+    ///
+    /// A line read rotated is read again as drawn, by `readUpright`, and the lines are then put in
+    /// reading order by position; `assemble` says why both are needed.
     private func makeTextRecognizer() -> TextRecognizer {
+        // Rereading is rare, so one at a time costs nothing and keeps its engine builds from overlapping.
+        let uprightQueue = DispatchQueue(label: "com.ecdye.macSubtitleOCR.uprightRecognition")
+
         if !forceOldAPI, #available(macOS 15.0, *) {
             let request = createRecognizeTextRequest(usingLanguageCorrection: !disableLanguageCorrection)
             let uncorrected = disableLanguageCorrection
@@ -270,11 +291,15 @@ struct SubtitleProcessor {
 
             return { image in
                 let page = PreparedImage(image) ?? PreparedImage(unchanged: image)
-                let observations = await read(page.image)
-                var text = ""
-                var lines: [SubtitleLine] = []
-                processRecognizedText(observations, &text, &lines, page, CGSize(width: image.width, height: image.height))
-                return (text, lines)
+                let lines = await read(page.image).compactMap { placedLine($0, page) }
+                guard lines.contains(where: { !$0.upright }) else {
+                    return Self.assemble(lines, upright: [])
+                }
+                // `VNImageRequestHandler.perform` blocks, so it is kept off the cooperative pool.
+                let upright = await withCheckedContinuation { continuation in
+                    uprightQueue.async { continuation.resume(returning: readUpright(page)) }
+                }
+                return Self.assemble(lines, upright: upright)
             }
         }
 
@@ -299,11 +324,9 @@ struct SubtitleProcessor {
                     }
 
                     let page = PreparedImage(image) ?? PreparedImage(unchanged: image)
-                    let results = read(page.image)
-                    var text = ""
-                    var lines: [SubtitleLine] = []
-                    processRecognizedText(results, &text, &lines, page, image.width, image.height)
-                    continuation.resume(returning: (text, lines))
+                    let lines = read(page.image).compactMap { placedLine($0, page) }
+                    let upright = lines.allSatisfy(\.upright) ? [] : uprightQueue.sync { readUpright(page) }
+                    continuation.resume(returning: Self.assemble(lines, upright: upright))
                 }
             }
         }
@@ -344,11 +367,13 @@ struct SubtitleProcessor {
         return request
     }
 
-    private func createLegacyRecognizeTextRequest(usingLanguageCorrection: Bool) -> VNRecognizeTextRequest {
+    private func createLegacyRecognizeTextRequest(usingLanguageCorrection: Bool,
+                                                  revision: Int = VNRecognizeTextRequestRevision3)
+        -> VNRecognizeTextRequest {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = getOCRMode()
         request.usesLanguageCorrection = usingLanguageCorrection
-        request.revision = VNRecognizeTextRequestRevision3
+        request.revision = revision
         request.recognitionLanguages = language.split(separator: ",").map { String($0) }
         if let customWords {
             request.customWords = customWords
@@ -356,61 +381,110 @@ struct SubtitleProcessor {
         return request
     }
 
-    /// Collect the lines recognized in `page`, with their boxes in the pixels of the subtitle it was
-    /// drawn from, which is `size`.
-    @available(macOS 15.0, *)
-    private func processRecognizedText(_ result: [RecognizedTextObservation]?, _ text: inout String,
-                                       _ lines: inout [SubtitleLine], _ page: PreparedImage, _ size: CGSize) {
-        let pageSize = CGSize(width: page.image.width, height: page.image.height)
-        text = result?.compactMap { observation in
-            let candidates = observation.topCandidates(candidatesToConsider)
-            guard let (candidate, string, alternates) = bestCandidate(among: candidates.map { ($0, $0.string) })
-            else { return "" }
-            let confidence = candidate.confidence
-            let stringRange = string.startIndex ..< string.endIndex
-            let boundingBox = candidate.boundingBox(for: stringRange)?.boundingBox
-            let rect = page.geometry.original(boundingBox?.toImageCoordinates(pageSize, origin: .upperLeft) ?? .zero)
-            let line = SubtitleLine(
-                text: string,
-                confidence: confidence,
-                x: max(0, Int(rect.minX)),
-                width: Int(rect.size.width),
-                y: max(0, Int(size.height - rect.minY - rect.size.height)),
-                height: Int(rect.size.height),
-                alternates: alternates)
-            lines.append(line)
-
-            return string
-        }.joined(separator: "\n") ?? ""
+    /// The lines of `page` as revision 2 of the recognizer reads them.
+    ///
+    /// Revision 3 decides for itself which way up each line is drawn (Apple's notes for it cite better
+    /// recognition of rotated text), and a short line whose glyphs look much the same either way up can
+    /// come back upside down: "Oh!" read as "¡40". Nothing in the request turns that decision off.
+    /// Revision 2 reads every line the way up it is drawn, so it reads such a line correctly. It is used
+    /// for nothing else, because revision 3 reads upright text better and revision 2 is deprecated.
+    ///
+    /// If revision 2 cannot read the image at all, as it cannot for a language it does not support,
+    /// this returns no lines and the rotated reading stands.
+    private func readUpright(_ page: PreparedImage) -> [PlacedLine] {
+        let request = createLegacyRecognizeTextRequest(usingLanguageCorrection: !disableLanguageCorrection,
+                                                       revision: VNRecognizeTextRequestRevision2)
+        try? VNImageRequestHandler(cgImage: page.image, options: [:]).perform([request])
+        return (request.results ?? []).compactMap { placedLine($0, page) }
     }
 
-    /// Collect the lines recognized in `page`, with their boxes in the pixels of the subtitle it was
-    /// drawn from, which is `width` by `height`.
-    private func processRecognizedText(_ observations: [VNRecognizedTextObservation]?, _ text: inout String,
-                                       _ lines: inout [SubtitleLine], _ page: PreparedImage, _: Int,
-                                       _ height: Int) {
-        text = observations?.compactMap { observation in
-            let candidates = observation.topCandidates(candidatesToConsider)
-            guard let (candidate, string, alternates) = bestCandidate(among: candidates.map { ($0, $0.string) })
-            else { return "" }
-            let confidence = candidate.confidence
-            let stringRange = string.startIndex ..< string.endIndex
-            let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox
-            let rect = page.geometry.original(
-                VNImageRectForNormalizedRect(boundingBox ?? .zero, page.image.width, page.image.height))
+    /// One recognized line, with its box in the pixels of the subtitle `page` was drawn from.
+    @available(macOS 15.0, *)
+    private func placedLine(_ observation: RecognizedTextObservation, _ page: PreparedImage) -> PlacedLine? {
+        let pageSize = CGSize(width: page.image.width, height: page.image.height)
+        let candidates = observation.topCandidates(candidatesToConsider)
+        guard let (candidate, string, alternates) = bestCandidate(among: candidates.map { ($0, $0.string) })
+        else { return nil }
+        let stringRange = string.startIndex ..< string.endIndex
+        let boundingBox = candidate.boundingBox(for: stringRange)?.boundingBox
+        let rect = page.geometry.original(boundingBox?.toImageCoordinates(pageSize, origin: .upperLeft) ?? .zero)
+        let upright = Self.isUpright(topLeft: observation.topLeft.toImageCoordinates(pageSize),
+                                     bottomLeft: observation.bottomLeft.toImageCoordinates(pageSize))
+        return PlacedLine(text: string, confidence: candidate.confidence, rect: rect, alternates: alternates,
+                          upright: upright)
+    }
 
-            let line = SubtitleLine(
-                text: string,
-                confidence: confidence,
-                x: max(0, Int(rect.minX)),
-                width: Int(rect.size.width),
-                y: max(0, Int(CGFloat(height) - rect.minY - rect.size.height)),
-                height: Int(rect.size.height),
-                alternates: alternates)
-            lines.append(line)
+    /// One recognized line, with its box in the pixels of the subtitle `page` was drawn from.
+    private func placedLine(_ observation: VNRecognizedTextObservation, _ page: PreparedImage) -> PlacedLine? {
+        let candidates = observation.topCandidates(candidatesToConsider)
+        guard let (candidate, string, alternates) = bestCandidate(among: candidates.map { ($0, $0.string) })
+        else { return nil }
+        let stringRange = string.startIndex ..< string.endIndex
+        let boundingBox = try? candidate.boundingBox(for: stringRange)?.boundingBox
+        // Vision measures from the bottom left; the box is turned to measure from the top left.
+        let fromBottom = VNImageRectForNormalizedRect(boundingBox ?? .zero, page.image.width, page.image.height)
+        let rect = page.geometry.original(CGRect(x: fromBottom.minX,
+                                                 y: CGFloat(page.image.height) - fromBottom.maxY,
+                                                 width: fromBottom.width, height: fromBottom.height))
+        let upright = Self.isUpright(
+            topLeft: VNImagePointForNormalizedPoint(observation.topLeft, page.image.width, page.image.height),
+            bottomLeft: VNImagePointForNormalizedPoint(observation.bottomLeft, page.image.width, page.image.height))
+        return PlacedLine(text: string, confidence: candidate.confidence, rect: rect, alternates: alternates,
+                          upright: upright)
+    }
 
-            return string
-        }.joined(separator: "\n") ?? ""
+    /// Whether a line whose corners the recognizer reports at these points was read the right way up.
+    ///
+    /// The corners are named for the line as the recognizer read it, in image pixels measured from the
+    /// bottom left, so the line's upward direction runs from `bottomLeft` to `topLeft`. Read the right
+    /// way up, that direction points up the image; read rotated, it points sideways or down. A subtitle
+    /// is drawn level and upright, so a line whose upward direction is nearer sideways than up was read
+    /// rotated.
+    static func isUpright(topLeft: CGPoint, bottomLeft: CGPoint) -> Bool {
+        let rise = topLeft.y - bottomLeft.y
+        return rise > abs(topLeft.x - bottomLeft.x)
+    }
+
+    /// The text and lines of a subtitle from the lines recognized in it.
+    ///
+    /// A line in `lines` read rotated is replaced by the lines of `upright` centered within its box,
+    /// those being the same glyphs read the way up they are drawn. Where there are none, the rotated
+    /// reading is kept, since it is still what the recognizer saw.
+    ///
+    /// The lines are then put in reading order by position. The recognizer's own order is reading order
+    /// only for lines it read upright: a line read rotated comes where the rotated reading would put it,
+    /// so the bottom line of a subtitle read upside down comes first.
+    static func assemble(_ lines: [PlacedLine], upright: [PlacedLine]) -> (String, [SubtitleLine]) {
+        var taken = Set<Int>()
+        let reread = lines.flatMap { line -> [PlacedLine] in
+            guard !line.upright else { return [line] }
+            let inside = upright.indices.filter { index in
+                let candidate = upright[index]
+                return candidate.upright && !taken.contains(index)
+                    && line.rect.contains(CGPoint(x: candidate.rect.midX, y: candidate.rect.midY))
+            }
+            guard !inside.isEmpty else { return [line] }
+            taken.formUnion(inside)
+            return inside.map { upright[$0] }
+        }
+        let ordered = readingOrder(reread).map(\.subtitleLine)
+        return (ordered.map(\.text).joined(separator: "\n"), ordered)
+    }
+
+    /// `lines` in the order they are read: rows from the top down, and within a row from the left.
+    ///
+    /// A line whose vertical middle lies within the height of a row's topmost line is on that row. That
+    /// keeps together the pieces of one displayed row that the recognizer returned as separate lines.
+    static func readingOrder(_ lines: [PlacedLine]) -> [PlacedLine] {
+        var rows: [[PlacedLine]] = []
+        for line in lines.sorted(by: { $0.rect.midY < $1.rect.midY }) {
+            if let top = rows.last?.first, (top.rect.minY ... top.rect.maxY).contains(line.rect.midY) {
+                rows[rows.count - 1].append(line)
+            } else {
+                rows.append([line])
+            }
+        }
+        return rows.flatMap { $0.sorted { $0.rect.minX < $1.rect.minX } }
     }
 
     private func saveImage(_ image: CGImage, index: Int) throws {
