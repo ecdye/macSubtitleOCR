@@ -16,4 +16,5 @@ enum macSubtitleOCRError: Error {
     case invalidODSDataLength(length: Int)
     case invalidPDSDataLength(length: Int)
     case invalidODSDimensions(_ string: String)
+    case invalidVobSubSubpicture(_ string: String)
 }

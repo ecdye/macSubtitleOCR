@@ -124,3 +124,46 @@ private let pts: UInt64 = 107834400
     #expect(subtitle.startTimestamp == 1198.16)
     #expect(subtitle.endTimestamp == 1198.16 + 2.992)
 }
+
+/// An idx listing one subtitle per `(timestamp, filepos)` pair, with a grey palette.
+private func idx(_ entries: [(String, Int)]) -> String {
+    let palette = Array(repeating: "808080", count: 16).joined(separator: ", ")
+    let lines = entries.map { "timestamp: \($0.0), filepos: \(String($0.1, radix: 16, uppercase: true))" }
+    return (["palette: \(palette)", "id: en, index: 0"] + lines).joined(separator: "\n")
+}
+
+private func vobSub(_ bytes: [UInt8], idx: String) throws -> [Subtitle] {
+    try bytes.withUnsafeBytes { buffer in try VobSub(buffer, idx).subtitles }
+}
+
+@Test func vobSubOffsetWithoutAPackHeaderLeavesAPlaceholder() throws {
+    // The first filepos points at bytes that are not a pack header.
+    let garbage = [UInt8](repeating: 0, count: 32)
+    let valid = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263))
+    let subtitles = try vobSub(garbage + valid,
+                               idx: idx([("00:19:50:000", 0), ("00:19:58:160", garbage.count)]))
+    #expect(subtitles.count == 2)
+    #expect(subtitles[0].index == 1)
+    #expect(subtitles[0].startTimestamp == 1190)
+    #expect(subtitles[0].imageData == nil)
+    #expect(subtitles[1].index == 2)
+    #expect(subtitles[1].imageWidth == 4)
+}
+
+@Test func vobSubOffsetAtAContinuationPacketLeavesAPlaceholder() throws {
+    // The first filepos points at a packet without a timestamp, which cannot start a subpicture.
+    let spu = subpicture(stopDelay: 263)
+    let continuation = pack(flags: 0x00, headerData: [], payload: Array(spu[5...]))
+    let valid = pack(flags: 0x80, headerData: ptsBytes(pts), payload: spu)
+    let subtitles = try vobSub(continuation + valid,
+                               idx: idx([("00:19:50:000", 0), ("00:19:58:160", continuation.count)]))
+    #expect(subtitles.count == 2)
+    #expect(subtitles[0].startTimestamp == 1190)
+    #expect(subtitles[0].imageData == nil)
+    #expect(subtitles[1].imageWidth == 4)
+}
+
+@Test func vobSubParserRejectsASubpictureWithoutAPackHeader() {
+    let bytes = [UInt8](repeating: 0, count: 32)
+    #expect(throws: macSubtitleOCRError.self) { try parse(bytes, idxTimestamp: 0) }
+}

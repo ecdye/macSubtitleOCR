@@ -41,6 +41,9 @@ struct VobSubParser {
         repeat {
             let startOffset = offset
             guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.psPacket else {
+                guard firstPacketFound else {
+                    throw macSubtitleOCRError.invalidVobSubSubpicture("No VobSub PS packet at offset \(offset)")
+                }
                 print("No VobSub PS packet at offset \(offset), trying to decode anyway")
                 break
             }
@@ -53,6 +56,9 @@ struct VobSubParser {
 
             guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.pesPacket
             else {
+                guard firstPacketFound else {
+                    throw macSubtitleOCRError.invalidVobSubSubpicture("No VobSub PES packet at offset \(offset)")
+                }
                 print("No VobSub PES packet at offset \(offset), trying to decode anyway")
                 break
             }
@@ -100,6 +106,9 @@ struct VobSubParser {
                 firstPacketFound = true
             } else if firstPacketFound {
                 controlOffset! += trueHeaderSize
+            } else {
+                throw macSubtitleOCRError.invalidVobSubSubpicture(
+                    "VobSub packet at offset \(startOffset) does not start a subpicture")
             }
 
             let difference = max(0, nextPSOffset - controlOffset! - controlHeaderCopied)
