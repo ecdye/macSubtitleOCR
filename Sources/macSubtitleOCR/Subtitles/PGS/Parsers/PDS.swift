@@ -56,9 +56,11 @@ struct PDS {
     }
 
     private func yCrCbToRGB(y: UInt8, cr: UInt8, cb: UInt8) -> (red: UInt8, green: UInt8, blue: UInt8) {
-        let y = min(max(Double(y) - 16.0, 0), 255.0)
-        let cr = min(max(Double(cr) - 128, 0), 255.0)
-        let cb = min(max(Double(cb) - 128.0, 0), 255.0)
+        // Luma sits in 16...235 and is floored at black. Chroma is an offset from 128 and is negative
+        // for half of all colors, so it must not be clamped.
+        let y = max(Double(y) - 16.0, 0)
+        let cr = Double(cr) - 128.0
+        let cb = Double(cb) - 128.0
         let yCbCr = simd_double3(y, cb, cr)
 
         // Color conversion matrix for BT.709
@@ -68,10 +70,10 @@ struct PDS {
 
         let rgb = yCbCr * matrix
 
-        // Clamp to 0-255
-        let red = UInt8(min(max(rgb[0], 0), 255))
-        let green = UInt8(min(max(rgb[1], 0), 255))
-        let blue = UInt8(min(max(rgb[2], 0), 255))
+        // Clamp to 0-255 and round to the nearest level
+        let red = UInt8(min(max(rgb[0], 0), 255).rounded())
+        let green = UInt8(min(max(rgb[1], 0), 255).rounded())
+        let blue = UInt8(min(max(rgb[2], 0), 255).rounded())
 
         return (red: red, green: green, blue: blue)
     }
