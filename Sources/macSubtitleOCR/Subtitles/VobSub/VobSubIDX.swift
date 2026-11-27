@@ -11,10 +11,40 @@ import Foundation
 struct VobSubIDX {
     // MARK: - Properties
 
-    private(set) var timestamps: [TimeInterval] = []
-    private(set) var offsets: [UInt64] = []
+    /// One subtitle stream of the idx: an `id:` block and the `timestamp:` lines under it.
+    struct Stream {
+        /// The `index:` of the stream's `id:` line. Its packets in the `.sub` carry substream ID `0x20 + index`.
+        let index: Int
+        var language: String?
+        /// Each subtitle's time, with the `delay:` in effect for it already added.
+        var timestamps: [TimeInterval] = []
+        var offsets: [UInt64] = []
+        /// The `delay:` in effect for each subtitle, in seconds.
+        var delays: [TimeInterval] = []
+    }
+
+    /// Every stream the idx declares or lists timestamps for, in the order they first appear.
+    ///
+    /// A VobSubRip idx often holds several languages, each in its own `id:` block, all sharing one
+    /// `.sub`. Timestamps before any `id:` line belong to stream 0, and an `id:` line repeating an
+    /// earlier index continues that stream, as in FFmpeg.
+    private(set) var streams: [Stream] = []
     private(set) var palette: [UInt8] = []
-    private(set) var language: String?
+
+    /// The timestamps of the first stream, for an idx holding a single one.
+    var timestamps: [TimeInterval] {
+        streams.first?.timestamps ?? []
+    }
+
+    /// The file positions of the first stream, for an idx holding a single one.
+    var offsets: [UInt64] {
+        streams.first?.offsets ?? []
+    }
+
+    /// The language of the first stream, for an idx holding a single one.
+    var language: String? {
+        streams.first?.language
+    }
 
     // MARK: - Lifecycle
 
@@ -39,32 +69,81 @@ struct VobSubIDX {
 
     private mutating func parseIdxFile(idxData: String) throws {
         let lines = idxData.split(separator: "\n")
+        var current: Int?
+        var delay = 0
 
         for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            // Handle palette line
             if trimmedLine.starts(with: "palette:") {
                 palette = parsePalette(line: trimmedLine)
-                continue
             } else if trimmedLine.starts(with: "id:") {
-                if let id = extractLanguage(from: trimmedLine) {
-                    language = id
+                let position = try stream(at: extractStreamIndex(from: trimmedLine))
+                if streams[position].language == nil {
+                    streams[position].language = extractLanguage(from: trimmedLine)
                 }
-                continue
-            } else if !trimmedLine.starts(with: "timestamp:") {
-                continue
+                current = position
+            } else if trimmedLine.starts(with: "delay:") {
+                delay = extractDelay(from: trimmedLine)
+            } else if trimmedLine.starts(with: "timestamp:") {
+                guard let timestamp = extractTimestamp(from: trimmedLine),
+                      let offset = extractOffset(from: trimmedLine)
+                else {
+                    continue
+                }
+                let position = current ?? stream(at: 0)
+                current = position
+                let seconds = TimeInterval(delay) / 1000
+                streams[position].offsets.append(offset)
+                streams[position].timestamps.append(timestamp + seconds)
+                streams[position].delays.append(seconds)
             }
-
-            // Handle timestamp and filepos in one go
-            guard let timestamp = extractTimestamp(from: trimmedLine),
-                  let offset = extractOffset(from: trimmedLine)
-            else {
-                continue
-            }
-            offsets.append(offset)
-            timestamps.append(timestamp)
         }
+    }
+
+    /// The position in `streams` of the stream with `index`, adding it if it is not there yet.
+    private mutating func stream(at index: Int) -> Int {
+        if let position = streams.firstIndex(where: { $0.index == index }) {
+            return position
+        }
+        streams.append(Stream(index: index))
+        return streams.count - 1
+    }
+
+    /// Extract the stream index from a line like "id: en, index: 0".
+    ///
+    /// A line without one is taken as index 0, as FFmpeg does. Substream IDs leave room for 32
+    /// streams, so, as in FFmpeg, a larger index is an error.
+    private func extractStreamIndex(from line: String) throws -> Int {
+        guard let range = line.range(of: "index:") else { return 0 }
+        let value = line[range.upperBound...].trimmingCharacters(in: .whitespaces)
+        guard let index = Int(value.prefix { $0.isNumber }) else { return 0 }
+        guard index < 32 else {
+            throw macSubtitleOCRError.fileReadError("VobSub stream index \(index) is not between 0 and 31")
+        }
+        return index
+    }
+
+    /// Extract the delay in milliseconds from a line like "delay: -00:00:01:500".
+    ///
+    /// Read as FFmpeg's `vobsub_read_header` reads it: an optional sign, then up to four
+    /// colon-separated fields of hours, minutes, seconds and milliseconds, any missing ones 0.
+    /// Each `delay:` line replaces the one before it, rather than adding to it, and applies to
+    /// every timestamp after it, in whatever stream, until the next.
+    private func extractDelay(from line: String) -> Int {
+        var value = line.dropFirst("delay:".count).drop { $0 == " " || $0 == "\t" }
+        var sign = 1
+        if let first = value.first, first == "-" || first == "+" {
+            sign = first == "-" ? -1 : 1
+            value = value.dropFirst()
+        }
+        var fields = [0, 0, 0, 0]
+        for (position, field) in value.split(separator: ":", omittingEmptySubsequences: false).prefix(4)
+            .enumerated() {
+            guard let number = Int(field.trimmingCharacters(in: .whitespaces)) else { break }
+            fields[position] = number
+        }
+        return ((fields[0] * 3600 + fields[1] * 60 + fields[2]) * 1000 + fields[3]) * sign
     }
 
     /// Extract the language from a line like "id: en, index: 0"
