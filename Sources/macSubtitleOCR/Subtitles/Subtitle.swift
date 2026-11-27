@@ -83,76 +83,92 @@ struct SubtitleImageSource {
 
     // MARK: - Methods
 
-    /// Converts the image data to RGBA format using the palette
-    private func imageDataToRGBA() -> Data {
-        let bytesPerPixel = 4
-        let pixelCount = width * height
-        var rgbaData = Data(capacity: pixelCount * bytesPerPixel)
-
-        for index in 0 ..< pixelCount {
-            let colorIndex = Int(imageData[index])
-            let paletteOffset = colorIndex * bytesPerPixel
-            guard
-                colorIndex < numberOfColors,
-                paletteOffset + 3 < imagePalette.count
-            else {
-                // An index with no palette entry has no color to draw, so leave it transparent.
-                rgbaData.append(contentsOf: [0, 0, 0, 0])
-                continue
+    /// The RGBA pixel each palette index is drawn as, in memory order, and whether it is visible.
+    ///
+    /// Every pixel depends only on its palette index, so the whole conversion is worked out once per
+    /// index rather than once per pixel. An index whose palette entry has alpha is ink and counts toward
+    /// the crop. Invert rather than flatten ink to a single color: subtitle glyphs are anti-aliased and
+    /// usually carry an outline, and forcing every visible pixel to one value fattens the strokes until
+    /// counters close up and OCR misreads them. Transparent entries, and indices with no palette entry
+    /// at all, become opaque white so the glyphs sit on a plain background.
+    private func pixelTable(_ invert: Bool) -> (colors: [UInt32], visible: [Bool]) {
+        var colors = [UInt32](repeating: UInt32.max, count: 256)
+        var visible = [Bool](repeating: false, count: 256)
+        for colorIndex in 0 ..< min(max(numberOfColors, 0), 256) {
+            let paletteOffset = colorIndex * 4
+            guard paletteOffset + 3 < imagePalette.count else { break }
+            let alpha = imagePalette[paletteOffset + 3]
+            guard alpha > 0 else { continue }
+            var red = imagePalette[paletteOffset]
+            var green = imagePalette[paletteOffset + 1]
+            var blue = imagePalette[paletteOffset + 2]
+            if !invert {
+                red = 255 - red
+                green = 255 - green
+                blue = 255 - blue
             }
-
-            rgbaData.append(contentsOf: [
-                imagePalette[paletteOffset],
-                imagePalette[paletteOffset + 1],
-                imagePalette[paletteOffset + 2],
-                imagePalette[paletteOffset + 3]
-            ])
+            let pixel = UInt32(red) | UInt32(green) << 8 | UInt32(blue) << 16 | UInt32(alpha) << 24
+            colors[colorIndex] = pixel.littleEndian
+            visible[colorIndex] = true
         }
-
-        return rgbaData
+        return (colors, visible)
     }
 
-    /// Converts the RGBA data to a CGImage
+    /// Converts the palette indices to a CGImage cropped to the visible pixels, or nil if there are none.
     func createImage(_ invert: Bool) -> CGImage? {
-        var rgbaData = imageDataToRGBA()
-        guard rgbaData.count == width * height * 4 else {
+        let pixelCount = width * height
+        guard width > 0, height > 0, imageData.count >= pixelCount else {
             return nil
         }
 
+        let (colors, visible) = pixelTable(invert)
         var minX = width
         var maxX = -1
         var minY = height
         var maxY = -1
+        var croppedData = Data()
 
-        for y in 0 ..< height {
-            for x in 0 ..< width {
-                let pixelIndex = (y * width + x) * 4
-                let alpha = rgbaData[pixelIndex + 3]
-                if alpha > 0 {
-                    minX = min(minX, x)
-                    maxX = max(maxX, x)
-                    minY = min(minY, y)
-                    maxY = max(maxY, y)
-                    // Invert rather than flatten to a single color: subtitle glyphs are anti-aliased
-                    // and usually carry an outline, and forcing every visible pixel to one value fattens
-                    // the strokes until counters close up and OCR misreads them.
-                    if !invert {
-                        rgbaData[pixelIndex] = 255 - rgbaData[pixelIndex]
-                        rgbaData[pixelIndex + 1] = 255 - rgbaData[pixelIndex + 1]
-                        rgbaData[pixelIndex + 2] = 255 - rgbaData[pixelIndex + 2]
+        imageData.withUnsafeBytes { (indices: UnsafeRawBufferPointer) in
+            let indices = indices.bindMemory(to: UInt8.self)
+            visible.withUnsafeBufferPointer { visible in
+                for y in 0 ..< height {
+                    let row = y * width
+                    var first = 0
+                    while first < width, !visible[Int(indices[row + first])] {
+                        first += 1
                     }
-                } else {
-                    // Transparent pixels become opaque white so the glyphs sit on a plain background.
-                    rgbaData[pixelIndex] = 255
-                    rgbaData[pixelIndex + 1] = 255
-                    rgbaData[pixelIndex + 2] = 255
-                    rgbaData[pixelIndex + 3] = 255
+                    guard first < width else { continue }
+                    var last = width - 1
+                    while !visible[Int(indices[row + last])] {
+                        last -= 1
+                    }
+                    minX = min(minX, first)
+                    maxX = max(maxX, last)
+                    minY = min(minY, y)
+                    maxY = y
+                }
+            }
+            guard maxX >= 0 else { return }
+
+            let croppedWidth = maxX - minX + 1
+            let croppedHeight = maxY - minY + 1
+            croppedData = Data(count: croppedWidth * croppedHeight * 4)
+            croppedData.withUnsafeMutableBytes { (output: UnsafeMutableRawBufferPointer) in
+                let output = output.bindMemory(to: UInt32.self)
+                colors.withUnsafeBufferPointer { colors in
+                    var outputIndex = 0
+                    for y in minY ... maxY {
+                        let row = y * width
+                        for x in minX ... maxX {
+                            output[outputIndex] = colors[Int(indices[row + x])]
+                            outputIndex += 1
+                        }
+                    }
                 }
             }
         }
 
-        guard minX < width, maxX >= 0, minY < height, maxY >= 0,
-              let provider = CGDataProvider(data: rgbaData as CFData) else { return nil }
+        guard maxX >= 0, let provider = CGDataProvider(data: croppedData as CFData) else { return nil }
         // Subtitle palettes carry straight alpha, so `premultipliedLast` is not what the buffer holds.
         // It composites to the same pixels regardless: wherever alpha is partial these palettes pin the
         // color to black or white, and both readings agree at either end. Recognition does not agree,
@@ -163,20 +179,18 @@ struct SubtitleImageSource {
             .union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
         let colorSpace = CGColorSpaceCreateDeviceRGB()
 
-        let image = CGImage(
-            width: width,
-            height: height,
+        let croppedWidth = maxX - minX + 1
+        return CGImage(
+            width: croppedWidth,
+            height: maxY - minY + 1,
             bitsPerComponent: 8,
             bitsPerPixel: 32,
-            bytesPerRow: width * 4,
+            bytesPerRow: croppedWidth * 4,
             space: colorSpace,
             bitmapInfo: bitmapInfo,
             provider: provider,
             decode: nil,
             shouldInterpolate: false,
             intent: .defaultIntent)
-
-        let croppedRect = CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
-        return image?.cropping(to: croppedRect)
     }
 }
