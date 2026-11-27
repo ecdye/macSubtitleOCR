@@ -15,6 +15,8 @@ class MKVTrackParser: MKVFileHandler {
     private(set) var tracks: [MKVTrack] = []
     private var codecPrivate = [Int: String]()
     private var languages = [Int: String]()
+    /// Nanoseconds per Cluster and Block timestamp tick, from the Segment Info.
+    private(set) var timestampScale = defaultTimestampScale
     /// Codec IDs of the subtitle tracks that were passed over because they are not ones asked for.
     private(set) var skippedSubtitleCodecs: [String] = []
 
@@ -67,8 +69,14 @@ class MKVTrackParser: MKVFileHandler {
 
         // Step 1: Locate the Segment element
         guard let segmentSize = locateSegment() else { return nil }
-        let segmentEndOffset = fileHandle.offsetInFile + segmentSize
+        let segmentDataOffset = fileHandle.offsetInFile
+        let segmentEndOffset = segmentDataOffset + segmentSize
         logger.debug("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset)")
+
+        timestampScale = readTimestampScale() ?? defaultTimestampScale
+        // swiftformat:disable:next redundantSelf
+        logger.debug("Timestamp scale: \(self.timestampScale) ns")
+        fileHandle.seek(toFileOffset: segmentDataOffset)
 
         var trackData = [Int: Data]()
 
@@ -159,6 +167,21 @@ class MKVTrackParser: MKVFileHandler {
         return nil
     }
 
+    /// Reads TimestampScale from the Segment Info that comes before the first Cluster, or returns `nil` if
+    /// there is none or it is zero. Leaves the file offset wherever the search stopped.
+    private func readTimestampScale() -> UInt64? {
+        guard let (infoSize, _) = findElement(withID: EBML.segmentInfo) as? (UInt64, UInt32) else { return nil }
+        let endOfInfoOffset = fileHandle.offsetInFile + infoSize
+        while fileHandle.offsetInFile < endOfInfoOffset, let (elementID, elementSize) = tryParseElement() {
+            let endOfElementOffset = fileHandle.offsetInFile + elementSize
+            if elementID == EBML.timestampScale {
+                return readUnsignedInteger(ofSize: elementSize).flatMap { $0 > 0 ? $0 : nil }
+            }
+            fileHandle.seek(toFileOffset: endOfElementOffset)
+        }
+        return nil
+    }
+
     /// Reads an EBML unsigned integer element of `size` bytes, or returns `nil` if it is empty or too wide.
     private func readUnsignedInteger(ofSize size: UInt64) -> UInt64? {
         guard (1 ... 8).contains(size) else { return nil }
@@ -207,7 +230,7 @@ class MKVTrackParser: MKVFileHandler {
 
     private func handlePGSBlock(for blockTrackNumber: UInt64, with blockTimestamp: Int64, _ blockSize: UInt64,
                                 _ clusterTimestamp: Int64, _ blockStartOffset: UInt64, _ trackData: inout [Int: Data]) {
-        let absPTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp)
+        let absPTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp, timestampScale: timestampScale)
         let pgsPTS = encodePTSForPGS(absPTS)
         let pgsHeader = Data([0x50, 0x47] + pgsPTS + [0x00, 0x00, 0x00, 0x00])
 
@@ -234,7 +257,7 @@ class MKVTrackParser: MKVFileHandler {
 
     private func handleVobSubBlock(for blockTrackNumber: UInt64, with blockTimestamp: Int64, _ blockSize: UInt64,
                                    _ clusterTimestamp: Int64, _ blockStartOffset: UInt64, _ trackData: inout [Int: Data]) {
-        let absolutePTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp)
+        let absolutePTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp, timestampScale: timestampScale)
         let vobSubPTS = encodePTSForVobSub(from: absolutePTS)
 
         var segmentSize = Int(blockSize - (fileHandle.offsetInFile - blockStartOffset))
@@ -314,7 +337,8 @@ class MKVTrackParser: MKVFileHandler {
     /// Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
     private func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int64) {
         let trackNumber = ebmlParser.readVINT(elementSize: true)
-        let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2)
+        // The timestamp is a signed 16-bit offset from the cluster timestamp.
+        let timestamp = Int64(Int16(truncatingIfNeeded: readFixedLengthNumber(fileHandle: fileHandle, length: 2)))
         let suffix = fileHandle.readData(ofLength: 1).first ?? 0
 
         let lacingFlag = (suffix >> 1) & 0x03 // Bits 1 and 2 are the lacing type (unused by us, kept for debugging)
