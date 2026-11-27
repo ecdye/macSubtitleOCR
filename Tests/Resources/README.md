@@ -37,7 +37,10 @@ the number of cues, how many reference cues were matched to one, how many of tho
 (whitespace aside), and the start and end time error of matched cues, max and mean. A reference cue is
 matched to the output cue it overlaps most, or failing that the one starting nearest it within a
 second. The decode or parse time and the OCR time are reported separately but never asserted, since
-CI runners vary too much. The tables are printed and, in GitHub Actions, added to the job summary. The
+CI runners vary too much. So that neither decoder is charged for loading Vision's models, `sintel.sup`
+is OCR'd untimed once for each set of languages and options before the first timed OCR that uses it,
+and the two decoders take turns going first from one input to the next, since the first also reads the
+input from a cold cache. The tables are printed and, in GitHub Actions, added to the job summary. The
 test only exists in the FFmpeg build (`USE_FFMPEG=1`):
 
 ```sh
