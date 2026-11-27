@@ -49,11 +49,12 @@ class MKVTrackParser: MKVFileHandler {
             }
         }
 
-        let trackData = extractTrackData(for: subtitleTracks)
-        trackData?.forEach { trackNumber, data in
+        // Go through the tracks by number, as dictionary order changes from run to run.
+        let trackData = extractTrackData(for: subtitleTracks) ?? [:]
+        for (trackNumber, data) in trackData.sorted(by: { $0.key < $1.key }) {
             if data.isEmpty {
                 print("Found empty track data for track \(trackNumber), skipping track!")
-                return
+                continue
             }
             tracks.append(MKVTrack(
                 trackNumber: trackNumber,
