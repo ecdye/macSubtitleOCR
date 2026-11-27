@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import simd
 
 struct PDS {
     // MARK: - Properties
@@ -16,12 +15,16 @@ struct PDS {
 
     // MARK: - Lifecycle
 
-    init(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
+    /// Parses the palette definition segment at `offset`.
+    ///
+    /// `videoHeight` comes from the presentation composition segment and picks the color matrix: BT.601
+    /// up to 576 lines and BT.709 above, or when the height is not known, as FFmpeg does.
+    init(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int, videoHeight: Int = 0) throws {
         let count = buffer.count - offset
         guard count >= 7, segmentLength <= count, (segmentLength - 2) % 5 == 0 else {
             throw macSubtitleOCRError.invalidPDSDataLength(length: count)
         }
-        parsePDS(buffer, offset, segmentLength)
+        parsePDS(buffer, offset, segmentLength, bt709: videoHeight <= 0 || videoHeight > 576)
     }
 
     // MARK: - Methods
@@ -33,7 +36,8 @@ struct PDS {
     ///   1 byte: Palette Version (unused by us)
     ///   Followed by a series of palette entries:
     ///       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
-    private mutating func parsePDS(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) {
+    private mutating func parsePDS(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int,
+                                   bt709: Bool) {
         // Start reading after the first 2 bytes (Palette ID and Version)
         var i = offset + 2
         while i + 4 <= (offset + segmentLength) {
@@ -44,7 +48,7 @@ struct PDS {
             let alpha = buffer[i + 4]
 
             // Convert YCrCb to RGB
-            let rgb = yCrCbToRGB(y: y, cr: cr, cb: cb)
+            let rgb = PDS.yCrCbToRGB(y: y, cr: cr, cb: cb, bt709: bt709)
 
             // Store RGBA values to palette table
             palette[Int(index) * 4 + 0] = rgb.red
@@ -55,26 +59,52 @@ struct PDS {
         }
     }
 
-    private func yCrCbToRGB(y: UInt8, cr: UInt8, cb: UInt8) -> (red: UInt8, green: UInt8, blue: UInt8) {
-        // Luma sits in 16...235 and is floored at black. Chroma is an offset from 128 and is negative
-        // for half of all colors, so it must not be clamped.
-        let y = max(Double(y) - 16.0, 0)
-        let cr = Double(cr) - 128.0
-        let cb = Double(cb) - 128.0
-        let yCbCr = simd_double3(y, cb, cr)
+    /// Converts a limited range YCbCr color to RGB exactly as FFmpeg's PGS decoder does, so both decoders
+    /// give Vision the same image.
+    ///
+    /// This is the 10 bit fixed point arithmetic of `YUV_TO_RGB1_CCIR`, `YUV_TO_RGB1_CCIR_BT709` and
+    /// `YUV_TO_RGB2_CCIR` in libavutil/colorspace.h. Chroma is an offset from 128 and luma an offset from
+    /// 16, both signed, and only the final sums are clamped to 0...255.
+    private static func yCrCbToRGB(y: UInt8, cr: UInt8, cb: UInt8,
+                                   bt709: Bool) -> (red: UInt8, green: UInt8, blue: UInt8) {
+        let cb = Int(cb) - 128
+        let cr = Int(cr) - 128
+        let coefficients = bt709 ? bt709Coefficients : bt601Coefficients
+        let redAdd = oneHalf + coefficients.crToRed * cr
+        let greenAdd = oneHalf - coefficients.cbToGreen * cb - coefficients.crToGreen * cr
+        let blueAdd = oneHalf + coefficients.cbToBlue * cb
+        let y = (Int(y) - 16) * fixedPoint(255.0 / 219.0)
 
-        // Color conversion matrix for BT.709
-        let matrix = simd_double3x3(simd_double3(1.164, 0, 1.793),
-                                    simd_double3(1.164, -0.213, -0.533),
-                                    simd_double3(1.164, 2.112, 0))
+        func clamp(_ value: Int) -> UInt8 {
+            UInt8(min(max(value >> scaleBits, 0), 255))
+        }
+        return (red: clamp(y + redAdd), green: clamp(y + greenAdd), blue: clamp(y + blueAdd))
+    }
 
-        let rgb = yCbCr * matrix
+    private struct Coefficients {
+        let crToRed: Int
+        let cbToGreen: Int
+        let crToGreen: Int
+        let cbToBlue: Int
 
-        // Clamp to 0-255 and round to the nearest level
-        let red = UInt8(min(max(rgb[0], 0), 255).rounded())
-        let green = UInt8(min(max(rgb[1], 0), 255).rounded())
-        let blue = UInt8(min(max(rgb[2], 0), 255).rounded())
+        /// Scales full range matrix coefficients to limited range chroma, as the `_CCIR` macros do.
+        init(crToRed: Double, cbToGreen: Double, crToGreen: Double, cbToBlue: Double) {
+            self.crToRed = fixedPoint(crToRed * 255.0 / 224.0)
+            self.cbToGreen = fixedPoint(cbToGreen * 255.0 / 224.0)
+            self.crToGreen = fixedPoint(crToGreen * 255.0 / 224.0)
+            self.cbToBlue = fixedPoint(cbToBlue * 255.0 / 224.0)
+        }
+    }
 
-        return (red: red, green: green, blue: blue)
+    private static let scaleBits = 10
+    private static let oneHalf = 1 << (scaleBits - 1)
+    private static let bt601Coefficients = Coefficients(crToRed: 1.40200, cbToGreen: 0.34414,
+                                                        crToGreen: 0.71414, cbToBlue: 1.77200)
+    private static let bt709Coefficients = Coefficients(crToRed: 1.5747, cbToGreen: 0.1873,
+                                                        crToGreen: 0.4682, cbToBlue: 1.8556)
+
+    /// FFmpeg's `FIX`: the value in 10 bit fixed point, rounded half up.
+    private static func fixedPoint(_ value: Double) -> Int {
+        Int(value * Double(1 << scaleBits) + 0.5)
     }
 }

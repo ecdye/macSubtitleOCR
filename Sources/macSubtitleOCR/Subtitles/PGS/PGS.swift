@@ -104,7 +104,7 @@ struct PGS {
             switch segmentType {
             case 0x14:
                 do {
-                    pds = try PDS(buffer, offset, segmentLength)
+                    pds = try PDS(buffer, offset, segmentLength, videoHeight: videoHeight)
                     offset += segmentLength
                 } catch let macSubtitleOCRError.invalidPDSDataLength(length) {
                     print("Invalid PDS length: \(length), abandoning remaining segments!", to: &stderr)
