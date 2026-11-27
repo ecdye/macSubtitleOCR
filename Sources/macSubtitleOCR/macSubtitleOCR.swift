@@ -89,9 +89,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecID)")
                 if experimentalOptions.saveSubtitleFile {
-                    mkvStream.saveSubtitleTrackData(
-                        trackNumber: track.trackNumber,
-                        outputDirectory: URL(fileURLWithPath: outputDirectory))
+                    try mkvStream.saveSubtitleTrackData(track, outputDirectory: URL(fileURLWithPath: outputDirectory))
                 }
 
                 if track.codecID == "S_HDMV/PGS" {

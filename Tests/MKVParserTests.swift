@@ -76,3 +76,29 @@ func mkvTruncatedInTracksStops() throws {
     let tracks = try parsedTracks(atPath: path)
     #expect(tracks.isEmpty)
 }
+
+@Test
+func mkvSaveSubtitleTrackDataWritesEachTrack() throws {
+    let parser = try MKVSubtitleExtractor(filePath: TestFilePaths.mkv.path)
+    try parser.parseTracks(for: codecs)
+    #expect(!parser.tracks.isEmpty)
+
+    let directory = URL.temporaryDirectory.appendingPathComponent("macSubtitleOCRTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    for track in parser.tracks {
+        try parser.saveSubtitleTrackData(track, outputDirectory: directory)
+    }
+
+    for track in parser.tracks {
+        let base = directory.appendingPathComponent("track_\(track.trackNumber)")
+        if track.codecID == "S_HDMV/PGS" {
+            #expect(try Data(contentsOf: base.appendingPathExtension("sup")) == track.trackData)
+        } else {
+            #expect(try Data(contentsOf: base.appendingPathExtension("sub")) == track.trackData)
+            let idx = try String(contentsOf: base.appendingPathExtension("idx"), encoding: .utf8)
+            #expect(idx == track.idxData)
+        }
+    }
+}
