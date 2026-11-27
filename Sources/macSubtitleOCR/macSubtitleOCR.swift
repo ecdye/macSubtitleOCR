@@ -78,6 +78,12 @@ struct macSubtitleOCR: AsyncParsableCommand {
         } else if input.hasSuffix(".mkv") || input.hasSuffix(".mks") {
             let mkvStream = try MKVSubtitleExtractor(filePath: input)
             try mkvStream.parseTracks(for: ["S_HDMV/PGS", "S_VOBSUB"])
+            if mkvStream.tracks.isEmpty {
+                let found = mkvStream.skippedSubtitleCodecs
+                let detail = found.isEmpty ? "no subtitle tracks" : "only \(found.joined(separator: ", "))"
+                throw macSubtitleOCRError.invalidInputFile(
+                    "No PGS or VobSub subtitle tracks found, the file has \(detail)\(Self.ffmpegHint)")
+            }
             for track in mkvStream.tracks {
                 logger.debug("Found subtitle track: \(track.trackNumber), Codec: \(track.codecID)")
                 if experimentalOptions.saveSubtitleFile {
@@ -111,10 +117,20 @@ struct macSubtitleOCR: AsyncParsableCommand {
                                                    languages: options.languages)
             results.append(result)
         } else {
-            throw macSubtitleOCRError.invalidInputFile("Invalid input file type \((input as NSString).pathExtension)")
+            throw macSubtitleOCRError.invalidInputFile(
+                "Invalid input file type \((input as NSString).pathExtension)\(Self.ffmpegHint)")
         }
 
         return results
+    }
+
+    /// Points at the FFmpeg decoder when the internal one cannot read an input, if this build has it.
+    private static var ffmpegHint: String {
+        #if FFMPEG
+        "; the FFmpeg decoder (--ffmpeg-decoder) reads other formats, such as DVB subtitles"
+        #else
+        ""
+        #endif
     }
 
     #if FFMPEG
@@ -130,6 +146,10 @@ struct macSubtitleOCR: AsyncParsableCommand {
             }
         }
         let ffmpeg = try FFmpeg(ffmpegInput)
+
+        if ffmpeg.subtitleTracks.isEmpty {
+            throw macSubtitleOCRError.invalidInputFile("No bitmap subtitles found in \(input)")
+        }
 
         for result in ffmpeg.subtitleTracks {
             logger.debug("Processing subtitle track: \(result.key)")

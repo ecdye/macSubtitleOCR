@@ -37,11 +37,13 @@ let package = Package(
             name: "macSubtitleOCRTests",
             dependencies: [
                 .target(name: "macSubtitleOCR")
-            ],
+            ] + (hasFFmpeg ? ["CFFmpeg"] : []),
             resources: [
                 .process("Resources")
             ],
-            swiftSettings: swiftSettings)
+            cSettings: cSettings,
+            swiftSettings: swiftSettings,
+            linkerSettings: linkerSettings)
     ] + (hasFFmpeg ? [
         .systemLibrary(
             name: "CFFmpeg",

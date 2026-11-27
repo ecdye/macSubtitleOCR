@@ -40,3 +40,7 @@ jobs:
       - name: Test Internal Decoder
         timeout-minutes: 5
         run: xcrun swift test --skip-build --filter internalDecoder
+
+      - name: Test Everything Else
+        timeout-minutes: 5
+        run: xcrun swift test --skip-build --skip ffmpegDecoder --skip internalDecoder

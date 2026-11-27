@@ -56,104 +56,92 @@ struct FFmpeg {
         var packet = av_packet_alloc()
         defer { av_packet_free(&packet) }
         var subtitle = AVSubtitle()
+        var frames = [Int: [DecodedSubtitleFrame]]()
 
         // Read frames for the specific subtitle stream
         while av_read_frame(fmtCtx, packet) >= 0 {
             defer { av_packet_unref(packet) }
             let streamNumber = Int(packet!.pointee.stream_index)
-            if streams[streamNumber] == nil {
+            guard let stream = streams[streamNumber] else {
                 continue // Skip if stream is not a subtitle stream
             }
-            let stream = streams[streamNumber]!
             logger.debug("Got packet for stream \(streamNumber)")
-
-            let codecId = stream.codecID
-            let timeBase: AVRational
-            if codecId == AV_CODEC_ID_HDMV_PGS_SUBTITLE {
-                // This fix is assuming that the tracks were from MKV files and so were encoded with a double timebase
-                // first of the normal MKV timebase (1/1000) and then the normal PGS timebase (1/90000)
-                // for some reason, it seems like there is an extra 0 in the timebase, so we need to divide by 10.
-                // This is a hacky fix and should be replaced with a better solution in the future.
-                timeBase = av_mul_q(AVRational(num: 1, den: 1000), AVRational(num: 1, den: 900000))
-                logger.debug("Fixed Stream TB to: \(timeBase.num)/\(timeBase.den)")
-            } else {
-                timeBase = stream.timeBase
-            }
 
             // Decode subtitle packet
             var gotSubtitle: Int32 = 0
-            guard avcodec_decode_subtitle2(stream.codecContext, &subtitle, &gotSubtitle, packet) > 0 else {
+            guard avcodec_decode_subtitle2(stream.codecContext, &subtitle, &gotSubtitle, packet) >= 0 else {
                 logger.warning("Failed to decode subtitle for stream \(streamNumber), skipping...")
                 continue
             }
+            guard gotSubtitle != 0 else { continue }
+            defer { avsubtitle_free(&subtitle) }
 
-            if gotSubtitle != 0 {
-                defer { avsubtitle_free(&subtitle) }
-                var trackSubtitles = subtitleTracks[streamNumber] ?? []
-                for i in 0 ..< Int(subtitle.num_rects) {
-                    let rect = subtitle.rects[i]!
-                    let sub = extractImageData(from: rect, index: trackSubtitles.count + 1)
-                    let pts = convertToTimeInterval(packet!.pointee.pts, timeBase: stream.timeBase)
-                    sub.startTimestamp = pts + convertToTimeInterval(subtitle.start_display_time, timeBase: timeBase)
-                    sub.endTimestamp = pts + convertToTimeInterval(subtitle.end_display_time, timeBase: timeBase)
-                    logger.debug("Track \(streamNumber) - Times: \(sub.startTimestamp!) --> \(sub.endTimestamp!)")
-                    trackSubtitles.append(sub)
+            // The decoder rescales the packet's timestamp to AV_TIME_BASE; the packet's own is the fallback.
+            let presentationTime = subtitle.pts != Int64.min
+                ? convertToTimeInterval(subtitle.pts, timeBase: AVRational(num: 1, den: AV_TIME_BASE))
+                : convertToTimeInterval(packet!.pointee.pts, timeBase: stream.timeBase)
+
+            // A frame with no rects is kept: it is what takes the caption before it off the screen.
+            var rects: [DecodedSubtitleFrame.Rect] = []
+            for i in 0 ..< Int(subtitle.num_rects) {
+                if let rect = extractRect(subtitle.rects[i]!) {
+                    rects.append(rect)
                 }
-                subtitleTracks[streamNumber] = trackSubtitles
+            }
+            let frame = DecodedSubtitleFrame(presentationTime: presentationTime,
+                                             startDisplayTime: subtitle.start_display_time,
+                                             endDisplayTime: subtitle.end_display_time,
+                                             rects: rects)
+            logger.debug("Track \(streamNumber) - \(presentationTime): \(rects.count) rects")
+            frames[streamNumber, default: []].append(frame)
+        }
+
+        for (streamNumber, streamFrames) in frames {
+            let subtitles = SubtitleTimeline.subtitles(from: streamFrames)
+            if !subtitles.isEmpty {
+                subtitleTracks[streamNumber] = subtitles
             }
         }
     }
 
-    private func extractImageData(from rect: UnsafeMutablePointer<AVSubtitleRect>, index: Int) -> Subtitle {
-        let subtitle = Subtitle(index: index, numberOfColors: Int(rect.pointee.nb_colors))
-
-        // Check if the subtitle is an image (bitmap)
-        if rect.pointee.type == SUBTITLE_BITMAP {
-            // Extract palette (if available)
-            if rect.pointee.nb_colors > 0, let paletteData = rect.pointee.data.1 {
-                if subtitle.imagePalette == nil {
-                    subtitle.imagePalette = []
-                }
-                for i in 0 ..< 256 {
-                    #if _endian(little)
-                    let b = paletteData[i * 4 + 0]
-                    let g = paletteData[i * 4 + 1]
-                    let r = paletteData[i * 4 + 2]
-                    #else
-                    let r = paletteData[i * 4 + 0]
-                    let g = paletteData[i * 4 + 1]
-                    let b = paletteData[i * 4 + 2]
-                    #endif
-                    let a = paletteData[i * 4 + 3]
-
-                    subtitle.imagePalette?.append(contentsOf: [r, g, b, a])
-                }
-            }
-
-            // Extract image data (bitmap)
-            subtitle.imageWidth = Int(rect.pointee.w)
-            subtitle.imageHeight = Int(rect.pointee.h)
-            logger.debug("Image size: \(subtitle.imageWidth!)x\(subtitle.imageHeight!)")
-
-            if let bitmapData = rect.pointee.data.0 {
-                let width = subtitle.imageWidth ?? 0
-                let height = subtitle.imageHeight ?? 0
-                let lineSize = Int(rect.pointee.linesize.0)
-
-                // FFmpeg subtitle bitmaps may include padding at the end of each row.
-                // Repack rows to a tightly packed width * height buffer so downstream OCR
-                // interprets only actual image pixels.
-                var imageData = Data(capacity: width * height)
-                for row in 0 ..< height {
-                    let rowStart = bitmapData.advanced(by: row * lineSize)
-                    let rowBuffer = UnsafeBufferPointer(start: rowStart, count: width)
-                    imageData.append(contentsOf: rowBuffer)
-                }
-                subtitle.imageData = imageData
-            }
+    private func extractRect(_ rect: UnsafeMutablePointer<AVSubtitleRect>) -> DecodedSubtitleFrame.Rect? {
+        let width = Int(rect.pointee.w)
+        let height = Int(rect.pointee.h)
+        let colors = Int(rect.pointee.nb_colors)
+        guard rect.pointee.type == SUBTITLE_BITMAP, width > 0, height > 0, colors > 0,
+              let bitmapData = rect.pointee.data.0, let paletteData = rect.pointee.data.1 else {
+            return nil
         }
 
-        return subtitle
+        // Entries are native endian 0xAARRGGBB words. Only `nb_colors` of them are guaranteed to exist.
+        var palette: [UInt8] = []
+        palette.reserveCapacity(min(colors, 256) * 4)
+        for i in 0 ..< min(colors, 256) {
+            #if _endian(little)
+            let b = paletteData[i * 4 + 0]
+            let g = paletteData[i * 4 + 1]
+            let r = paletteData[i * 4 + 2]
+            let a = paletteData[i * 4 + 3]
+            #else
+            let a = paletteData[i * 4 + 0]
+            let r = paletteData[i * 4 + 1]
+            let g = paletteData[i * 4 + 2]
+            let b = paletteData[i * 4 + 3]
+            #endif
+            palette += [r, g, b, a]
+        }
+
+        // FFmpeg subtitle bitmaps may include padding at the end of each row.
+        // Repack rows to a tightly packed width * height buffer so downstream OCR
+        // interprets only actual image pixels.
+        let lineSize = Int(rect.pointee.linesize.0)
+        var indices = Data(capacity: width * height)
+        for row in 0 ..< height {
+            indices.append(UnsafeBufferPointer(start: bitmapData.advanced(by: row * lineSize), count: width))
+        }
+
+        return DecodedSubtitleFrame.Rect(x: Int(rect.pointee.x), y: Int(rect.pointee.y),
+                                         width: width, height: height, indices: indices, palette: palette)
     }
 
     private func convertToTimeInterval(_ pts: some BinaryInteger, timeBase: AVRational) -> TimeInterval {
