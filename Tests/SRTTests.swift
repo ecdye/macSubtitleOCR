@@ -68,10 +68,10 @@ private func subtitle(_ index: Int, _ start: TimeInterval, _ end: TimeInterval? 
     #expect(cues[2] == Cue(index: 3, start: "00:00:06,000", end: "00:00:06,000"))
 }
 
-/// The next cue is the next one written, whatever the indexes are.
+/// The next cue is the next one in the list, whatever the indexes are, and cues are numbered from 1.
 @Test func nextCueIsFoundByPosition() throws {
     let cues = try encode([subtitle(3, 1), subtitle(7, 3), subtitle(8, 30)])
-    #expect(cues.map(\.index) == [3, 7, 8])
+    #expect(cues.map(\.index) == [1, 2, 3])
     #expect(cues[0].end == "00:00:03,000")
     #expect(cues[1].end == "00:00:08,000")
     #expect(cues[2].end == "00:00:35,000")
@@ -83,4 +83,96 @@ private func subtitle(_ index: Int, _ start: TimeInterval, _ end: TimeInterval? 
     _ = try encode(subtitles)
     #expect(subtitles[0].endTimestamp == nil)
     #expect(subtitles[1].endTimestamp == 20)
+}
+
+// Issue #86: a cue with no recognized text was written with an empty body, giving two blank lines in
+// a row, which several SRT parsers reject.
+
+/// Writes `subtitles` with the SRT writer and returns the file's contents.
+private func encodeRaw(_ subtitles: [Subtitle]) throws -> String {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("SRTTests-\(UUID().uuidString).srt")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try SRT(subtitles: subtitles).write(toFileAt: url)
+    return try String(contentsOf: url, encoding: .utf8)
+}
+
+private func blank(_ index: Int, _ start: TimeInterval?, _ text: String? = nil) -> Subtitle {
+    Subtitle(index: index, text: text, startTimestamp: start, endTimestamp: nil)
+}
+
+/// A cue with no text is left out and the cues written are numbered from 1.
+@Test func blankCuesAreSkippedAndRenumbered() throws {
+    let srt = try encodeRaw([blank(1, 0), subtitle(2, 10, 12), blank(3, 20), subtitle(4, 30, 32)])
+    #expect(srt == """
+    1
+    00:00:10,000 --> 00:00:12,000
+    Line 2
+
+    2
+    00:00:30,000 --> 00:00:32,000
+    Line 4
+
+
+    """)
+}
+
+/// Text of only spaces and newlines counts as no text.
+@Test func whitespaceOnlyTextIsBlank() throws {
+    let srt = try encodeRaw([subtitle(1, 1, 2), blank(2, 3, " \n\t "), blank(3, 4, ""), subtitle(4, 5, 6)])
+    #expect(srt == """
+    1
+    00:00:01,000 --> 00:00:02,000
+    Line 1
+
+    2
+    00:00:05,000 --> 00:00:06,000
+    Line 4
+
+
+    """)
+}
+
+/// The blank cue's image was still on screen, so the cue before it ends when the blank cue starts,
+/// not when the next written cue does.
+@Test func cueBeforeBlankCueEndsAtItsStart() throws {
+    let srt = try encodeRaw([subtitle(1, 1), blank(2, 3), subtitle(3, 20)])
+    #expect(srt == """
+    1
+    00:00:01,000 --> 00:00:03,000
+    Line 1
+
+    2
+    00:00:20,000 --> 00:00:25,000
+    Line 3
+
+
+    """)
+}
+
+/// A cue with no start time cannot be written, so it is left out; the cue before it ends at the
+/// next start time there is.
+@Test func cueWithoutStartIsSkipped() throws {
+    let srt = try encodeRaw([
+        subtitle(1, 1),
+        Subtitle(index: 2, text: "No start", startTimestamp: nil, endTimestamp: 4),
+        subtitle(3, 3)
+    ])
+    #expect(srt == """
+    1
+    00:00:01,000 --> 00:00:03,000
+    Line 1
+
+    2
+    00:00:03,000 --> 00:00:08,000
+    Line 3
+
+
+    """)
+}
+
+/// When no cue has text, the file is still written, and is empty.
+@Test func allBlankCuesWriteEmptyFile() throws {
+    let srt = try encodeRaw([blank(1, 1), blank(2, 3, "  "), blank(3, nil)])
+    #expect(srt.isEmpty)
 }
