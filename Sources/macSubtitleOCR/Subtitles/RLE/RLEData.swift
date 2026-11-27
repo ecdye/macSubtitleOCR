@@ -7,9 +7,12 @@
 //
 
 import Foundation
+import os
 
 struct RLEData {
     // MARK: - Properties
+
+    private static let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "RLE")
 
     private var width: Int
     private var height: Int
@@ -29,58 +32,86 @@ struct RLEData {
 
     // MARK: - Functions
 
+    /// Decodes a PGS object's run-length encoded bitmap into one palette index per pixel.
+    ///
+    /// Each line is a series of runs ended by an end-of-line code. A well formed bitmap decodes exactly as
+    /// it always has. A malformed one is decoded as far as possible rather than rejected, as FFmpeg
+    /// does, so the subtitle is not lost: a line that ends early is padded with index 0, a run past the end
+    /// of its line is cut off there, lines past the object's height are ignored, and pixels missing at the
+    /// end of the data are left as index 0. Index 0 is the background colour of the short run codes, and an
+    /// index the palette does not define is fully transparent.
     func decodePGS() throws -> Data {
         if data.isEmpty || width <= 0 || height <= 0 {
             return data
         }
-        var pixelCount = 0
-        var lineCount = 0
-        var iterator = data.makeIterator()
+        let (pixelCount, overflow) = width.multipliedReportingOverflow(by: height)
+        guard !overflow else {
+            throw macSubtitleOCRError.invalidRLE("PGS image dimensions overflow.")
+        }
 
-        var image = Data()
+        let width = width
+        let height = height
+        var image = Data(count: pixelCount)
+        var line = 0
+        var column = 0
+        var shortLines = 0
+        var clippedPixels = 0
 
-        while var color: UInt8 = iterator.next(), lineCount < height {
-            var run = 1
+        image.withUnsafeMutableBytes { (output: UnsafeMutableRawBufferPointer) in
+            guard let pixels = output.baseAddress else { return }
+            data.withUnsafeBytes { (input: UnsafeRawBufferPointer) in
+                let end = input.count
+                var position = 0
+                while line < height, position < end {
+                    var color = input[position]
+                    position += 1
+                    var run = 1
 
-            if color == 0x00 {
-                guard let flags = iterator.next() else {
-                    throw macSubtitleOCRError.invalidRLE("Ran out of RLE data reading a run-length flag.")
-                }
-                run = Int(flags & 0x3F)
-                if flags & 0x40 != 0 {
-                    guard let extendedRun = iterator.next() else {
-                        throw macSubtitleOCRError.invalidRLE("Ran out of RLE data reading an extended run length.")
+                    if color == 0x00 {
+                        guard position < end else { return }
+                        let flags = input[position]
+                        position += 1
+                        run = Int(flags & 0x3F)
+                        if flags & 0x40 != 0 {
+                            guard position < end else { return }
+                            run = (run << 8) | Int(input[position])
+                            position += 1
+                        }
+                        if flags & 0x80 != 0 {
+                            guard position < end else { return }
+                            color = input[position]
+                            position += 1
+                        }
+
+                        if run == 0 {
+                            // End of line; whatever the line did not fill stays index 0.
+                            if column < width {
+                                shortLines += 1
+                            }
+                            line += 1
+                            column = 0
+                            continue
+                        }
                     }
-                    run = (run << 8) + Int(extendedRun)
-                }
-                if flags & 0x80 != 0 {
-                    guard let runColor = iterator.next() else {
-                        throw macSubtitleOCRError.invalidRLE("Ran out of RLE data reading a run color.")
-                    }
-                    color = runColor
-                } else {
-                    color = 0
-                }
-            }
 
-            // Ensure run is valid and doesn't exceed pixel buffer
-            if run > 0, pixelCount + run <= width * height {
-                // Fill the pixel data with the decoded color
-                image.append(contentsOf: repeatElement(color, count: run))
-                pixelCount += run
-            } else if run == 0 {
-                // New Line: Check if pixels align correctly
-                if pixelCount % width > 0 {
-                    throw macSubtitleOCRError
-                        .invalidRLE("Decoded \(pixelCount % width) pixels, but line should be \(width) pixels.")
+                    let count = min(run, width - column)
+                    clippedPixels += run - count
+                    // The buffer starts zeroed, so runs of index 0, most of any subtitle, need no write.
+                    if count > 0, color != 0 {
+                        memset(pixels + line * width + column, Int32(color), count)
+                    }
+                    column += count
                 }
-                lineCount += 1
             }
         }
 
-        // Check if we decoded enough pixels
-        if pixelCount < width * height {
-            throw macSubtitleOCRError.invalidRLE("Insufficient RLE data for subtitle.")
+        let complete = line == height || (line == height - 1 && column == width)
+        if shortLines > 0 || clippedPixels > 0 || !complete {
+            Self.logger.debug("""
+            Malformed PGS RLE in a \(width)x\(height) object: padded \(shortLines) short lines, \
+            dropped \(clippedPixels) pixels past a line end, \
+            \(complete ? "all lines present" : "data ended at line \(line + 1)")
+            """)
         }
 
         return image
