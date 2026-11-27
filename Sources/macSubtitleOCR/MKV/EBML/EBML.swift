@@ -11,6 +11,10 @@ import Foundation
 enum EBML {
     static let block: UInt32 = 0xA1
     static let blockGroup: UInt32 = 0xA0
+    /// The IDs a BlockGroup may hold: its own children, and the Void and CRC-32 elements allowed anywhere.
+    static let blockGroupChildren: Set<UInt32> = [
+        block, 0xA2, 0x75A1, 0x9B, 0xFA, 0xFB, 0xFD, 0xA4, 0x75A2, 0x8E, 0xC8, 0xEC, 0xBF
+    ]
     static let chapters: UInt32 = 0x1043_A770
     static let cluster: UInt32 = 0x1F43_B675
     static let codecID: UInt32 = 0x86

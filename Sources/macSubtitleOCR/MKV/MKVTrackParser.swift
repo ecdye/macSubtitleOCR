@@ -307,12 +307,15 @@ class MKVTrackParser: MKVFileHandler {
             // swiftformat:disable:next redundantSelf
             logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")
 
-            guard let (blockSize, blockStartOffset) = findBlockTypeAndSize() else { break }
+            guard let (blockSize, blockStartOffset, groupEndOffset) = findBlockTypeAndSize(until: endOffset)
+            else { break }
 
+            // A Block must also end within its BlockGroup, when the end of the group is known.
+            let blockLimit = groupEndOffset ?? endOffset
             let (blockEndOffset, overflow) = blockStartOffset.addingReportingOverflow(blockSize)
-            guard !overflow, blockEndOffset <= endOffset else {
-                logger.debug("Block at \(blockStartOffset) of size \(blockSize) runs past its Cluster, skipping")
-                fileHandle.seek(toFileOffset: max(endOffset, blockStartOffset))
+            guard !overflow, blockEndOffset <= blockLimit else {
+                logger.debug("Block at \(blockStartOffset) of size \(blockSize) runs past its parent, skipping")
+                fileHandle.seek(toFileOffset: groupEndOffset ?? max(endOffset, blockStartOffset))
                 continue
             }
 
@@ -322,7 +325,7 @@ class MKVTrackParser: MKVFileHandler {
                   let payloadSize = Int(exactly: blockEndOffset - fileHandle.offsetInFile)
             else {
                 logger.debug("Block at \(blockStartOffset) of size \(blockSize) is too short for its header, skipping")
-                fileHandle.seek(toFileOffset: blockEndOffset)
+                fileHandle.seek(toFileOffset: groupEndOffset ?? blockEndOffset)
                 continue
             }
 
@@ -331,8 +334,8 @@ class MKVTrackParser: MKVFileHandler {
             } else if tracks[blockTrackNumber] == "S_VOBSUB" {
                 handleVobSubBlock(for: blockTrackNumber, with: blockTimestamp, payloadSize, clusterTimestamp, &trackData)
             }
-            // Skip the rest of the block, all of it if it is for a different track.
-            fileHandle.seek(toFileOffset: blockEndOffset)
+            // Skip the rest of the block, all of it if it is for a different track, and the rest of its group.
+            fileHandle.seek(toFileOffset: groupEndOffset ?? blockEndOffset)
         }
     }
 
@@ -415,18 +418,55 @@ class MKVTrackParser: MKVFileHandler {
     }
     // swiftformat:enable all
 
-    private func findBlockTypeAndSize() -> (blockSize: UInt64, blockStartOffset: UInt64)? {
-        guard case (var blockSize?, let blockType?) = findElement(withID: EBML.simpleBlock, EBML.blockGroup) else {
-            return nil
-        }
+    /// Finds the next SimpleBlock, or the Block of the next BlockGroup, before `endOffset`, leaving the file at
+    /// the start of the block's data. Returns the block's size and data offset, and the end of its BlockGroup
+    /// when it is in one whose end is known.
+    ///
+    /// A BlockGroup with no Block is skipped. The Block is searched for only within its group, which ends at
+    /// its size or at `endOffset`, whichever is first. A group of unknown size, or one whose size runs to or
+    /// past the end of the file, has no known end, so it also ends at the first element that cannot be in a
+    /// BlockGroup, and the search goes on from that element.
+    ///
+    /// BlockDuration is passed over, as are the group's other children.
+    private func findBlockTypeAndSize(until endOffset: UInt64)
+        -> (blockSize: UInt64, blockStartOffset: UInt64, groupEndOffset: UInt64?)? {
+        while fileHandle.offsetInFile < endOffset {
+            guard case let (elementSize?, elementID?) = findElement(withID: EBML.simpleBlock, EBML.blockGroup)
+            else { return nil }
+            let dataOffset = fileHandle.offsetInFile
+            guard elementID == EBML.blockGroup else { return (elementSize, dataOffset, nil) }
 
-        var blockStartOffset = fileHandle.offsetInFile
-        if blockType == EBML.blockGroup {
-            guard let (newSize, _) = findElement(withID: EBML.block) as? (UInt64, UInt32) else { return nil }
-            blockSize = newSize
-            blockStartOffset = fileHandle.offsetInFile
+            // tryParseElement cuts an unknown size, or one past the end of the file, at the end of the file.
+            let hasKnownEnd = dataOffset + elementSize < endOfFile
+            let groupEndOffset = max(min(dataOffset + elementSize, endOffset), dataOffset)
+            if let blockSize = findBlock(until: groupEndOffset, stopAtNonChild: !hasKnownEnd) {
+                return (blockSize, fileHandle.offsetInFile, hasKnownEnd ? groupEndOffset : nil)
+            }
+            logger.debug("BlockGroup at \(dataOffset) has no Block, skipping")
+            if hasKnownEnd {
+                fileHandle.seek(toFileOffset: groupEndOffset)
+            }
         }
-        return (blockSize, blockStartOffset)
+        return nil
+    }
+
+    /// Reads the children of a BlockGroup up to `groupEndOffset` and returns the size of its Block, leaving the
+    /// file at the start of the Block's data, or returns `nil` if there is no Block. If `stopAtNonChild`, the
+    /// group ends before the first element that cannot be in a BlockGroup, and the file is left there.
+    private func findBlock(until groupEndOffset: UInt64, stopAtNonChild: Bool) -> UInt64? {
+        while fileHandle.offsetInFile < groupEndOffset {
+            let childOffset = fileHandle.offsetInFile
+            guard let (childID, childSize) = tryParseElement() else { return nil }
+            if childID == EBML.block {
+                return childSize
+            }
+            if stopAtNonChild, !EBML.blockGroupChildren.contains(childID) {
+                fileHandle.seek(toFileOffset: childOffset)
+                return nil
+            }
+            fileHandle.seek(toFileOffset: fileHandle.offsetInFile + childSize)
+        }
+        return nil
     }
 
     /// Reads the track number and timestamp from a Block or SimpleBlock header, leaving the file at the end of
