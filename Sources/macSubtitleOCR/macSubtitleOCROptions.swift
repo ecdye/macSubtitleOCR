@@ -40,6 +40,12 @@ struct Options: ParsableArguments {
 
     @Flag(help: "Disable correction of 'l' to 'I' in OCR results")
     var disableICorrection = false
+
+    func validate() throws {
+        guard maxThreads >= 1 else {
+            throw ValidationError("--max-threads must be at least 1")
+        }
+    }
 }
 
 struct ExperimentalOptions: ParsableArguments {
