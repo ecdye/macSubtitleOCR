@@ -167,3 +167,106 @@ private func vobSub(_ bytes: [UInt8], idx: String) throws -> [Subtitle] {
     let bytes = [UInt8](repeating: 0, count: 32)
     #expect(throws: macSubtitleOCRError.self) { try parse(bytes, idxTimestamp: 0) }
 }
+
+// MARK: - Malformed subpictures
+
+/// Parse `malformed` as the first subtitle and a valid subpicture after it as the second, and
+/// check that the first becomes a placeholder while the second still decodes.
+private func expectPlaceholderBeforeValid(_ malformed: [UInt8]) throws {
+    let valid = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263))
+    let subtitles = try vobSub(malformed + valid,
+                               idx: idx([("00:19:50:000", 0), ("00:19:58:160", malformed.count)]))
+    #expect(subtitles.count == 2)
+    #expect(subtitles[0].startTimestamp == 1190)
+    #expect(subtitles[0].imageData == nil)
+    #expect(subtitles[1].imageWidth == 4)
+    #expect(subtitles[1].endTimestamp == 1198.16 + 2.992)
+}
+
+/// Parse a valid subtitle followed by `malformed`, which runs to the end of the file, and check
+/// that the valid one still decodes and the malformed one becomes a placeholder.
+private func expectPlaceholderAfterValid(_ malformed: [UInt8], at offset: Int? = nil) throws {
+    let valid = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263))
+    let subtitles = try vobSub(valid + malformed,
+                               idx: idx([("00:19:58:160", 0), ("00:20:10:000", valid.count + (offset ?? 0))]))
+    #expect(subtitles.count == 2)
+    #expect(subtitles[0].imageWidth == 4)
+    #expect(subtitles[1].startTimestamp == 1210)
+    #expect(subtitles[1].imageData == nil)
+}
+
+/// A valid subpicture packet with its PES length field, after the PES start code, replaced.
+private func packWithPESLength(_ length: UInt16) -> [UInt8] {
+    var bytes = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263))
+    bytes[packHeader.count + 4] = UInt8(length >> 8)
+    bytes[packHeader.count + 5] = UInt8(length & 0xFF)
+    return bytes
+}
+
+/// A valid subpicture packet with the subpicture's size or control offset field replaced.
+private func packWithSubpicture(size: UInt16? = nil, controlOffset: UInt16? = nil) -> [UInt8] {
+    var spu = subpicture(stopDelay: 263)
+    if let size {
+        spu[0] = UInt8(size >> 8)
+        spu[1] = UInt8(size & 0xFF)
+    }
+    if let controlOffset {
+        spu[2] = UInt8(controlOffset >> 8)
+        spu[3] = UInt8(controlOffset & 0xFF)
+    }
+    return pack(flags: 0x80, headerData: ptsBytes(pts), payload: spu)
+}
+
+@Test func vobSubOffsetInTheLastBytesOfTheFileLeavesAPlaceholder() throws {
+    // The last filepos starts a pack header that the end of the file cuts off.
+    try expectPlaceholderAfterValid(Array(packHeader.prefix(6)))
+    try expectPlaceholderAfterValid([0, 0, 1], at: 2)
+}
+
+@Test func vobSubOffsetPastTheEndOfTheFileLeavesAPlaceholder() throws {
+    try expectPlaceholderAfterValid([], at: 100)
+}
+
+@Test func vobSubPESLengthPastTheEndOfTheFileLeavesAPlaceholder() throws {
+    try expectPlaceholderAfterValid(packWithPESLength(0xFFFF))
+}
+
+@Test func vobSubPESLengthShorterThanItsHeaderLeavesAPlaceholder() throws {
+    // A PES length of 3 ends the packet inside its own header.
+    try expectPlaceholderBeforeValid(packWithPESLength(3))
+}
+
+@Test func vobSubZeroPESLengthLeavesAPlaceholder() throws {
+    try expectPlaceholderBeforeValid(packWithPESLength(0))
+}
+
+@Test func vobSubControlOffsetBelowFourLeavesAPlaceholder() throws {
+    // The control offset counts from the start of the subpicture, which begins with 4 bytes of header.
+    try expectPlaceholderBeforeValid(packWithSubpicture(controlOffset: 2))
+}
+
+@Test func vobSubControlOffsetPastTheSubpictureLeavesAPlaceholder() throws {
+    try expectPlaceholderBeforeValid(packWithSubpicture(controlOffset: 0xFFF0))
+}
+
+@Test func vobSubSizePastTheEndOfTheFileLeavesAPlaceholder() throws {
+    try expectPlaceholderAfterValid(packWithSubpicture(size: 0xFFF0, controlOffset: 0xFF00))
+}
+
+@Test func vobSubTruncatedSecondPacketLeavesAPlaceholder() throws {
+    // The subpicture continues into a second packet that the end of the file cuts off.
+    let spu = subpicture(stopDelay: 263)
+    let split = pack(flags: 0x80, headerData: ptsBytes(pts), payload: Array(spu[..<5]))
+        + pack(flags: 0x00, headerData: [], payload: Array(spu[5...]))
+    try expectPlaceholderAfterValid(Array(split[..<(split.count - 10)]))
+}
+
+@Test func vobSubParserRejectsAnOffsetPastTheEndOfTheBuffer() {
+    let bytes = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263))
+    #expect(throws: macSubtitleOCRError.self) {
+        try bytes.withUnsafeBytes { buffer in
+            try VobSubParser(index: 1, buffer: buffer, timestamp: 0, offset: UInt64.max,
+                             nextOffset: UInt64.max, idxPalette: palette)
+        }
+    }
+}

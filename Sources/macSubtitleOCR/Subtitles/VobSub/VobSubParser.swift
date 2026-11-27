@@ -37,10 +37,13 @@ struct VobSubParser {
         var relativeControlOffset = 0
         var rleLengthFound = 0
 
-        var offset = Int(offset)
+        guard var offset = Int(exactly: offset), offset < buffer.count else {
+            throw macSubtitleOCRError.invalidVobSubSubpicture(
+                "VobSub offset \(offset) is past the end of the file (\(buffer.count) bytes)")
+        }
         repeat {
             let startOffset = offset
-            guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.psPacket else {
+            guard (try? buffer.bigEndian(UInt32.self, at: offset)) == MPEG2PacketType.psPacket else {
                 guard firstPacketFound else {
                     throw macSubtitleOCRError.invalidVobSubSubpicture("No VobSub PS packet at offset \(offset)")
                 }
@@ -51,11 +54,10 @@ struct VobSubParser {
 
             offset += 6 // System clock reference
             offset += 3 // Multiplexer rate
-            let stuffingLength = buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self) & 7
+            let stuffingLength = try buffer.bigEndian(UInt8.self, at: offset) & 7
             offset += 1 + Int(stuffingLength)
 
-            guard buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self).bigEndian == MPEG2PacketType.pesPacket
-            else {
+            guard (try? buffer.bigEndian(UInt32.self, at: offset)) == MPEG2PacketType.pesPacket else {
                 guard firstPacketFound else {
                     throw macSubtitleOCRError.invalidVobSubSubpicture("No VobSub PES packet at offset \(offset)")
                 }
@@ -64,29 +66,34 @@ struct VobSubParser {
             }
             offset += 4
 
-            let pesLength = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
+            let pesLength = try Int(buffer.bigEndian(UInt16.self, at: offset))
             if pesLength == 0 {
-                throw macSubtitleOCRError.invalidInputFile("VobSub PES packet length is 0 at offset: \(offset)")
+                throw macSubtitleOCRError.invalidVobSubSubpicture("VobSub PES packet length is 0 at offset \(offset)")
             }
             offset += 2
             let nextPSOffset = offset + pesLength
+            guard nextPSOffset <= buffer.count else {
+                throw macSubtitleOCRError.invalidVobSubSubpicture(
+                    "VobSub PES packet at offset \(offset) runs \(nextPSOffset - buffer.count) bytes past the end of the file")
+            }
 
             offset += 1 // Skip PES miscellaneous data
-            let extByteOne = buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self)
+            let extByteOne = try buffer.bigEndian(UInt8.self, at: offset)
             offset += 1
             // The PTS flag, not the header length, says whether a timestamp is present: a packet
             // continuing a subpicture may pad its header with 0xFF stuffing bytes instead.
             let firstPacket = (extByteOne & 0x80) == 0x80
 
-            let ptsDataLength = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt8.self))
+            let ptsDataLength = try Int(buffer.bigEndian(UInt8.self, at: offset))
             offset += 1
             if firstPacket, ptsDataLength >= 5 {
+                let pts = try (0 ..< 5).map { try buffer.bigEndian(UInt8.self, at: offset + $0) }
                 var presentationTimestamp: UInt64 = 0
-                presentationTimestamp = UInt64(buffer[offset + 4]) >> 1
-                presentationTimestamp += UInt64(buffer[offset + 3]) << 7
-                presentationTimestamp += UInt64(buffer[offset + 2] & 0xFE) << 14
-                presentationTimestamp += UInt64(buffer[offset + 1]) << 22
-                presentationTimestamp += UInt64(buffer[offset] & 0x0E) << 29
+                presentationTimestamp = UInt64(pts[4]) >> 1
+                presentationTimestamp += UInt64(pts[3]) << 7
+                presentationTimestamp += UInt64(pts[2] & 0xFE) << 14
+                presentationTimestamp += UInt64(pts[1]) << 22
+                presentationTimestamp += UInt64(pts[0] & 0x0E) << 29
                 subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90000
             }
             offset += ptsDataLength
@@ -95,10 +102,21 @@ struct VobSubParser {
 
             var trueHeaderSize = offset - startOffset
             if firstPacket, ptsDataLength >= 5 {
-                let size = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
+                let size = try Int(buffer.bigEndian(UInt16.self, at: offset))
                 offset += 2
-                relativeControlOffset = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
+                relativeControlOffset = try Int(buffer.bigEndian(UInt16.self, at: offset))
                 offset += 2
+                // The control sequences follow the 4 byte size and control offset and the RLE data,
+                // and end the subpicture.
+                guard relativeControlOffset >= 4, relativeControlOffset <= size else {
+                    throw macSubtitleOCRError.invalidVobSubSubpicture(
+                        "VobSub control offset \(relativeControlOffset) at offset \(offset - 2) " +
+                            "is outside its subpicture of \(size) bytes")
+                }
+                guard offset - 4 + size <= buffer.count else {
+                    throw macSubtitleOCRError.invalidVobSubSubpicture(
+                        "VobSub subpicture of \(size) bytes at offset \(offset - 4) runs past the end of the file")
+                }
                 let rleSize = relativeControlOffset - 4
                 controlSize = size - rleSize - 4 // 4 bytes for the size and control offset
                 controlOffset = offset + rleSize
@@ -110,9 +128,17 @@ struct VobSubParser {
                 throw macSubtitleOCRError.invalidVobSubSubpicture(
                     "VobSub packet at offset \(startOffset) does not start a subpicture")
             }
+            guard offset <= nextPSOffset else {
+                throw macSubtitleOCRError.invalidVobSubSubpicture(
+                    "VobSub PES header at offset \(startOffset) runs past the end of its packet")
+            }
 
             let difference = max(0, nextPSOffset - controlOffset! - controlHeaderCopied)
             let rleFragmentSize = nextPSOffset - offset - difference
+            guard rleFragmentSize >= 0 else {
+                throw macSubtitleOCRError.invalidVobSubSubpicture(
+                    "VobSub control data at offset \(controlOffset! + controlHeaderCopied) starts inside a packet header")
+            }
             subtitle.imageData!.append(contentsOf: buffer[offset ..< offset + rleFragmentSize])
             rleLengthFound += rleFragmentSize
             offset += rleFragmentSize
@@ -252,5 +278,19 @@ struct VobSubParser {
             evenOffset: subtitle.evenOffset ?? 0,
             oddOffset: subtitle.oddOffset ?? 0)
         subtitle.imageData = try rleData.decodeVobSub()
+    }
+}
+
+private extension UnsafeRawBufferPointer {
+    /// Read a big-endian integer at `offset`, throwing if it does not lie wholly within the buffer.
+    ///
+    /// `loadUnaligned` and subscripting only check their bounds in debug builds, and offsets in a
+    /// VobSub come from the file, so a malformed one would otherwise read outside the buffer.
+    func bigEndian<T: FixedWidthInteger>(_: T.Type, at offset: Int) throws -> T {
+        guard offset >= 0, offset <= count - MemoryLayout<T>.size else {
+            throw macSubtitleOCRError.invalidVobSubSubpicture(
+                "VobSub subpicture runs past the end of the file at offset \(offset)")
+        }
+        return T(bigEndian: loadUnaligned(fromByteOffset: offset, as: T.self))
     }
 }
