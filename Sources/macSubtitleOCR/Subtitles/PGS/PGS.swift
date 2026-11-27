@@ -113,7 +113,7 @@ struct PGS {
                 }
             case 0x15:
                 do {
-                    guard segmentLength > 11 else {
+                    guard segmentLength >= 4 else {
                         throw macSubtitleOCRError.invalidODSDataLength(length: segmentLength)
                     }
                     let objectID = buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian
