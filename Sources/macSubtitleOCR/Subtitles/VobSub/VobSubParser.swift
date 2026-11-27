@@ -53,9 +53,16 @@ struct VobSubParser {
             throw macSubtitleOCRError.invalidVobSubSubpicture(
                 "VobSub offset \(offset) is past the end of the file (\(buffer.count) bytes)")
         }
+        // Where the subpicture's packets end: the next subtitle's filepos, or the end of the file
+        // when the idx does not list them in order.
+        let end = nextOffset > offset ? Int(min(nextOffset, UInt64(buffer.count))) : buffer.count
         repeat {
             let startOffset = offset
-            guard (try? buffer.bigEndian(UInt32.self, at: offset)) == MPEG2PacketType.psPacket else {
+            // Padding ending the previous pack, or packets of other streams, can stand where the next
+            // pack header is expected. The bytes from `startOffset` to the subpicture's own PES packet,
+            // whatever they hold, push the control sequences further on.
+            offset = try skipOtherPackets(buffer, from: offset, to: end)
+            guard offset < end, (try? buffer.bigEndian(UInt32.self, at: offset)) == MPEG2PacketType.psPacket else {
                 guard firstPacketFound else {
                     throw macSubtitleOCRError.invalidVobSubSubpicture("No VobSub PS packet at offset \(offset)")
                 }
@@ -68,6 +75,15 @@ struct VobSubParser {
             offset += 3 // Multiplexer rate
             let stuffingLength = try buffer.bigEndian(UInt8.self, at: offset) & 7
             offset += 1 + Int(stuffingLength)
+
+            // A system header, padding, or packets of other streams can come before the subpicture's
+            // packet in its pack, which may hold none of it.
+            offset = try skipOtherPackets(buffer, from: offset, to: end)
+            if firstPacketFound, offset < end,
+               (try? buffer.bigEndian(UInt32.self, at: offset)) == MPEG2PacketType.psPacket {
+                controlOffset! += offset - startOffset
+                continue
+            }
 
             guard (try? buffer.bigEndian(UInt32.self, at: offset)) == MPEG2PacketType.pesPacket else {
                 guard firstPacketFound else {
@@ -185,6 +201,30 @@ struct VobSubParser {
         }
 
         parseControlSequences(controlHeader, offset: relativeControlOffset)
+    }
+
+    /// Skip the packets at `offset`, up to `end`, that are not a pack header or private stream 1.
+    ///
+    /// DVD packs are filled out to 2048 bytes with padding packets (0xBE), a pack header may be
+    /// followed by a system header (0xBB), and packets of the video and audio streams can sit
+    /// between the packets of a subpicture. Each of these gives its length in the 16 bits after its
+    /// start code, and FFmpeg's MPEG-PS demuxer skips them by it.
+    ///
+    /// - Returns: The offset of the first start code that is not one of them, or `end`.
+    private func skipOtherPackets(_ buffer: UnsafeRawBufferPointer, from offset: Int, to end: Int) throws -> Int {
+        var offset = offset
+        while offset < end, let startCode = try? buffer.bigEndian(UInt32.self, at: offset),
+              startCode >> 8 == 0x01, startCode & 0xFF >= 0xBB, startCode != MPEG2PacketType.pesPacket {
+            // A packet is at least its 6 byte start code and length, so each one skipped moves on.
+            let packetEnd = try offset + 6 + Int(buffer.bigEndian(UInt16.self, at: offset + 4))
+            guard packetEnd <= end else {
+                throw macSubtitleOCRError.invalidVobSubSubpicture(
+                    "VobSub packet \(String(format: "0x%08X", startCode)) at offset \(offset) runs " +
+                        "\(packetEnd - end) bytes past the end of its subpicture")
+            }
+            offset = packetEnd
+        }
+        return offset
     }
 
     /// Walk the subpicture's chain of control sequences, as ffmpeg's `decode_dvd_subtitles` does.

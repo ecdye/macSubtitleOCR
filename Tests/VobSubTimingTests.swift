@@ -394,3 +394,88 @@ private func interleavedStreams() -> (bytes: [UInt8], secondOffset: Int) {
     let outputs = try FileManager.default.contentsOfDirectory(atPath: outputPath).filter { $0.hasSuffix(".srt") }
     #expect(outputs.sorted() == ["track_0.srt", "track_1.srt"])
 }
+
+// MARK: - Padding and other packets
+
+/// A packet of MPEG stream `id` with `length` bytes of content, such as a padding packet (0xBE),
+/// a system header (0xBB) or a video PES packet (0xE0).
+private func otherPacket(_ id: UInt8, length: Int) -> [UInt8] {
+    [0, 0, 1, id, UInt8(length >> 8), UInt8(length & 0xFF)] + [UInt8](repeating: 0xFF, count: length)
+}
+
+/// Insert `packet` into `pack` straight after its pack header.
+private func afterPackHeader(_ pack: [UInt8], _ packet: [UInt8]) -> [UInt8] {
+    Array(pack[..<packHeader.count]) + packet + Array(pack[packHeader.count...])
+}
+
+/// A subpicture split over two packs after its fifth byte.
+private func splitSubpicture() -> (first: [UInt8], second: [UInt8]) {
+    let spu = subpicture(stopDelay: 263)
+    return (pack(flags: 0x80, headerData: ptsBytes(pts), payload: Array(spu[..<5])),
+            pack(flags: 0x00, headerData: [], payload: Array(spu[5...])))
+}
+
+/// Check that `bytes`, holding one subpicture with other packets among its own, decodes as the
+/// subpicture does whole in one packet.
+private func expectSameAsUnsplit(_ bytes: [UInt8]) throws {
+    let expected = try parse(pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263)),
+                             idxTimestamp: 1198.16)
+    let subtitle = try parse(bytes, idxTimestamp: 1198.16)
+    #expect(subtitle.imageWidth == 4)
+    #expect(subtitle.imageData == expected.imageData)
+    #expect(subtitle.imagePalette == expected.imagePalette)
+    #expect(subtitle.startTimestamp == 1198.16)
+    #expect(subtitle.endTimestamp == 1198.16 + 2.992)
+}
+
+@Test func vobSubSubpictureSkipsPaddingBetweenItsPackets() throws {
+    // DVD packs are padded to 2048 bytes with a padding packet after the subpicture's PES packet.
+    let (first, second) = splitSubpicture()
+    try expectSameAsUnsplit(first + otherPacket(0xBE, length: 100) + second)
+    // Padding can also come before the subpicture's PES packet in its pack, and end the last pack.
+    try expectSameAsUnsplit(first + otherPacket(0xBE, length: 100)
+        + afterPackHeader(second, otherPacket(0xBE, length: 10)) + otherPacket(0xBE, length: 50))
+}
+
+@Test func vobSubSubpictureSkipsASystemHeader() throws {
+    let (first, second) = splitSubpicture()
+    let systemHeader = otherPacket(0xBB, length: 12)
+    try expectSameAsUnsplit(afterPackHeader(first, systemHeader) + afterPackHeader(second, systemHeader))
+}
+
+@Test func vobSubSubpictureSkipsPacketsOfOtherStreamTypes() throws {
+    // A video packet in its own pack, and an audio packet in the subpicture's second pack.
+    let (first, second) = splitSubpicture()
+    let video = packHeader + otherPacket(0xE0, length: 300)
+    try expectSameAsUnsplit(first + video + afterPackHeader(second, otherPacket(0xC0, length: 40)))
+}
+
+@Test func vobSubSubpictureSkipsZeroLengthPadding() throws {
+    // A padding packet may be its 6 byte header alone.
+    let (first, second) = splitSubpicture()
+    let padding = otherPacket(0xBE, length: 0)
+    try expectSameAsUnsplit(padding + first + padding + padding + afterPackHeader(second, padding) + padding)
+}
+
+@Test func vobSubFileposAtPaddingBeforeTheSubpictureIsRead() throws {
+    let valid = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263))
+    let subtitles = try vobSub(otherPacket(0xBE, length: 20) + valid, idx: idx([("00:19:58:160", 0)]))
+    #expect(subtitles.first?.imageWidth == 4)
+    #expect(subtitles.first?.endTimestamp == 1198.16 + 2.992)
+}
+
+@Test func vobSubFileposAtAPackWithoutASubpicturePacketLeavesAPlaceholder() throws {
+    // The first filepos points at a pack holding only video.
+    try expectPlaceholderBeforeValid(packHeader + otherPacket(0xE0, length: 30))
+    try expectPlaceholderBeforeValid(otherPacket(0xBE, length: 30))
+}
+
+@Test(.timeLimit(.minutes(1))) func vobSubOtherPacketWithABadLengthLeavesAPlaceholder() throws {
+    // A padding packet whose length runs past its subpicture into the next one.
+    try expectPlaceholderBeforeValid(packHeader + [0, 0, 1, 0xBE, 0xFF, 0xFF, 0xFF, 0xFF])
+    // Packets whose length the end of the file cuts off, before and inside a subpicture.
+    try expectPlaceholderAfterValid([0, 0, 1, 0xBE, 0])
+    try expectPlaceholderAfterValid(packHeader + [0, 0, 1, 0xBB])
+    let (first, second) = splitSubpicture()
+    try expectPlaceholderAfterValid(first + [0, 0, 1, 0xBE, 0x01, 0x00, 0xFF] + second)
+}
