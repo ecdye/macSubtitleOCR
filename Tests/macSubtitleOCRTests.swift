@@ -71,7 +71,7 @@ private func runTest(with options: [String]) async throws {
 
     // Run tests
     var runner = try macSubtitleOCR.parse(options)
-    await runner.run()
+    try await runner.run()
 
     let tracks = try FileManager.default.contentsOfDirectory(atPath: outputPath)
         .compactMap { name -> Int? in
@@ -222,7 +222,7 @@ private struct OCRSamples: Decodable {
 @Test func alternatesAreOfferedPerLine() async throws {
     let outputPath = try makeOutputDirectory()
     var runner = try macSubtitleOCR.parse([TestFilePaths.sup.path, outputPath, "--json", "--max-threads", "2"])
-    await runner.run()
+    try await runner.run()
 
     let data = try Data(contentsOf: URL(fileURLWithPath: "\(outputPath)/track_0.json"))
     let images = try #require(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])

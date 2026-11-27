@@ -23,13 +23,8 @@ struct SRT {
     // MARK: - Functions
 
     /// Writes the SRT object to the file at the given URL
-    func write(toFileAt url: URL) {
-        let srtContent = encodeSRT()
-        do {
-            try srtContent.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            print("Failed to write SRT content to file: \(error.localizedDescription)", to: &stderr)
-        }
+    func write(toFileAt url: URL) throws {
+        try encodeSRT().write(to: url, atomically: true, encoding: .utf8)
     }
 
     // MARK: - Methods

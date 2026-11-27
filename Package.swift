@@ -36,7 +36,8 @@ let package = Package(
         .testTarget(
             name: "macSubtitleOCRTests",
             dependencies: [
-                .target(name: "macSubtitleOCR")
+                .target(name: "macSubtitleOCR"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
             ] + (hasFFmpeg ? ["CFFmpeg"] : []),
             resources: [
                 .process("Resources")
