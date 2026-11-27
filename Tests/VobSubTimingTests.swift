@@ -28,8 +28,9 @@ private func ptsBytes(_ pts: UInt64) -> [UInt8] {
 ///
 /// `headerData` is what follows the PES header-data-length byte: a timestamp when `flags`
 /// says there is one, and otherwise stuffing, which MPEG allows and fills with 0xFF.
-private func pack(flags: UInt8, headerData: [UInt8], payload: [UInt8]) -> [UInt8] {
-    let body: [UInt8] = [0x81, flags, UInt8(headerData.count)] + headerData + [0x20] + payload
+/// `substream` is the subpicture stream ID, `0x20` plus the idx stream index.
+private func pack(flags: UInt8, headerData: [UInt8], payload: [UInt8], substream: UInt8 = 0x20) -> [UInt8] {
+    let body: [UInt8] = [0x81, flags, UInt8(headerData.count)] + headerData + [substream] + payload
     return packHeader + [0, 0, 1, 0xBD, UInt8(body.count >> 8), UInt8(body.count & 0xFF)] + body
 }
 
@@ -269,4 +270,127 @@ private func packWithSubpicture(size: UInt16? = nil, controlOffset: UInt16? = ni
                              nextOffset: UInt64.max, idxPalette: palette)
         }
     }
+}
+
+// MARK: - Several streams in one file
+
+/// An idx with one `id:` block per `(language, index, entries)`, each listing `(timestamp, filepos)`
+/// pairs, with a grey palette. `prelude` lines come between the palette and the first block.
+private func idx(streams: [(String, Int, [(String, Int)])], prelude: [String] = []) -> String {
+    let palette = Array(repeating: "808080", count: 16).joined(separator: ", ")
+    var lines = ["palette: \(palette)"] + prelude
+    for (language, index, entries) in streams {
+        lines.append("id: \(language), index: \(index)")
+        lines += entries.map { "timestamp: \($0.0), filepos: \(String($0.1, radix: 16, uppercase: true))" }
+    }
+    return lines.joined(separator: "\n")
+}
+
+/// Write `bytes` and `idx` as a `.sub`/`.idx` pair in a new temporary directory.
+private func writeVobSub(_ bytes: [UInt8], idx: String) throws -> (sub: URL, idx: URL) {
+    let directory = URL.temporaryDirectory.appendingPathComponent("VobSubTimingTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let sub = directory.appendingPathComponent("test.sub")
+    let idxURL = directory.appendingPathComponent("test.idx")
+    try Data(bytes).write(to: sub)
+    try idx.write(to: idxURL, atomically: true, encoding: .utf8)
+    return (sub, idxURL)
+}
+
+/// 20:03.160, five seconds after `pts`, as a 90 kHz presentation timestamp.
+private let laterPTS: UInt64 = pts + 5 * 90000
+
+/// A stream 0 subpicture split over two packets with a whole stream 1 subpicture between them,
+/// as in a VobSubRip `.sub` holding two languages. Returns the bytes and the offset of the
+/// stream 1 packet.
+private func interleavedStreams() -> (bytes: [UInt8], secondOffset: Int) {
+    let spu = subpicture(stopDelay: 263)
+    let first = pack(flags: 0x80, headerData: ptsBytes(pts), payload: Array(spu[..<5]))
+    let other = pack(flags: 0x80, headerData: ptsBytes(laterPTS), payload: subpicture(stopDelay: 100),
+                     substream: 0x21)
+    let rest = pack(flags: 0x00, headerData: [], payload: Array(spu[5...]))
+    return (first + other + rest, first.count)
+}
+
+@Test func vobSubSubpictureSkipsPacketsOfAnotherStream() throws {
+    // Only stream 0 is listed; its second packet comes after a packet of substream 0x21.
+    let (bytes, _) = interleavedStreams()
+    let files = try writeVobSub(bytes, idx: idx(streams: [("en", 0, [("00:19:58:160", 0)])]))
+    let subtitles = try VobSub(files.sub, files.idx).subtitles
+    let expected = try parse(pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263)),
+                             idxTimestamp: 1198.16)
+    #expect(subtitles.count == 1)
+    #expect(subtitles.first?.imageWidth == 4)
+    #expect(subtitles.first?.imageData == expected.imageData)
+    #expect(subtitles.first?.startTimestamp == 1198.16)
+    #expect(subtitles.first?.endTimestamp == 1198.16 + 2.992)
+}
+
+@Test func vobSubReadsEachStreamOfTheIdxAsItsOwnTrack() throws {
+    let (bytes, secondOffset) = interleavedStreams()
+    let files = try writeVobSub(bytes, idx: idx(streams: [
+        ("en", 0, [("00:19:58:160", 0)]),
+        ("fr", 1, [("00:20:03:160", secondOffset)])
+    ]))
+    let vobSub = try VobSub(files.sub, files.idx)
+    #expect(vobSub.tracks.map(\.index) == [0, 1])
+    #expect(vobSub.tracks.map(\.language) == ["en", "fr"])
+    try #require(vobSub.tracks.map(\.subtitles.count) == [1, 1])
+
+    let english = vobSub.tracks[0].subtitles[0]
+    #expect(english.imageWidth == 4)
+    #expect(english.endTimestamp == 1198.16 + 2.992)
+
+    // 100 units is 1.137 s: (100 << 10) / 90 = 1137 ms.
+    let french = vobSub.tracks[1].subtitles[0]
+    #expect(french.imageWidth == 4)
+    #expect(french.startTimestamp == TimeInterval(laterPTS) / 90000)
+    #expect(french.endTimestamp == TimeInterval(laterPTS) / 90000 + 1.137)
+}
+
+@Test func vobSubFileposAtAnotherStreamsPacketLeavesAPlaceholder() throws {
+    // Stream 1's filepos points at a packet of substream 0x20, stream 0's.
+    let valid = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263))
+    let files = try writeVobSub(valid, idx: idx(streams: [
+        ("en", 0, [("00:19:58:160", 0)]),
+        ("fr", 1, [("00:19:50:000", 0)])
+    ]))
+    let vobSub = try VobSub(files.sub, files.idx)
+    try #require(vobSub.tracks.map(\.subtitles.count) == [1, 1])
+    #expect(vobSub.tracks[0].subtitles[0].imageWidth == 4)
+    #expect(vobSub.tracks[1].subtitles[0].imageData == nil)
+    #expect(vobSub.tracks[1].subtitles[0].startTimestamp == 1190)
+}
+
+@Test func vobSubStreamZeroAcceptsSubstreamZero() throws {
+    // VobSub tracks extracted from an MKV are written with substream ID 0x00.
+    let bytes = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263), substream: 0x00)
+    let files = try writeVobSub(bytes, idx: idx(streams: [("en", 0, [("00:19:58:160", 0)])]))
+    #expect(try VobSub(files.sub, files.idx).subtitles.first?.imageWidth == 4)
+    #expect(try vobSub(bytes, idx: idx([("00:19:58:160", 0)])).first?.imageWidth == 4)
+}
+
+@Test func vobSubDelayShiftsThePresentationTimestamp() throws {
+    let valid = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 263))
+    for (line, seconds) in [("delay: 00:00:01:500", 1.5), ("delay: -00:00:02:250", -2.25)] {
+        let files = try writeVobSub(valid, idx: idx(streams: [("en", 0, [("00:19:58:160", 0)])], prelude: [line]))
+        let subtitle = try #require(VobSub(files.sub, files.idx).subtitles.first)
+        let start = try #require(subtitle.startTimestamp)
+        let end = try #require(subtitle.endTimestamp)
+        #expect(abs(start - (1198.16 + seconds)) < 1e-9)
+        #expect(abs(end - (1198.16 + seconds + 2.992)) < 1e-9)
+    }
+}
+
+@Test func vobSubCLIWritesATrackPerStream() async throws {
+    let (bytes, secondOffset) = interleavedStreams()
+    let files = try writeVobSub(bytes, idx: idx(streams: [
+        ("en", 0, [("00:19:58:160", 0)]),
+        ("fr", 1, [("00:20:03:160", secondOffset)])
+    ]))
+    let outputPath = try makeOutputDirectory()
+    var runner = try macSubtitleOCR.parse([files.idx.path, outputPath])
+    try await runner.run()
+    let outputs = try FileManager.default.contentsOfDirectory(atPath: outputPath).filter { $0.hasSuffix(".srt") }
+    #expect(outputs.sorted() == ["track_0.srt", "track_1.srt"])
 }

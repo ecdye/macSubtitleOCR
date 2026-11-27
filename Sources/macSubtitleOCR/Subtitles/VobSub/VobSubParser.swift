@@ -14,13 +14,25 @@ struct VobSubParser {
 
     let subtitle: Subtitle
     private let masterPalette: [UInt8]
+    private let substream: Int?
+    private let delay: TimeInterval
 
     // MARK: - Lifecycle
 
+    /// Read the subpicture whose first packet is at `offset`.
+    ///
+    /// - Parameters:
+    ///   - substream: The idx stream index the subpicture belongs to, or nil to read every packet.
+    ///     A packet belongs to stream `n` when the low 5 bits of its substream ID are `n`, as FFmpeg
+    ///     checks it. DVD subpictures use IDs `0x20 + n`, and VobSub tracks extracted from an MKV
+    ///     are written with `0x00` for stream 0, which this also accepts.
+    ///   - delay: The idx `delay:` in seconds, added to the presentation timestamp of the packet.
     init(index: Int, buffer: UnsafeRawBufferPointer, timestamp: TimeInterval, offset: UInt64,
-         nextOffset: UInt64, idxPalette: [UInt8]) throws {
+         nextOffset: UInt64, idxPalette: [UInt8], substream: Int? = nil, delay: TimeInterval = 0) throws {
         subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
+        self.substream = substream
+        self.delay = delay
         try readSubFrame(buffer: buffer, offset: offset, nextOffset: nextOffset)
         try decodeImage()
         try decodePalette()
@@ -86,6 +98,21 @@ struct VobSubParser {
 
             let ptsDataLength = try Int(buffer.bigEndian(UInt8.self, at: offset))
             offset += 1
+
+            // Packets of the other streams in the file can sit between the packets of this subpicture.
+            let streamID = try buffer.bigEndian(UInt8.self, at: offset + ptsDataLength)
+            if let substream, Int(streamID & 0x1F) != substream {
+                guard firstPacketFound else {
+                    throw macSubtitleOCRError.invalidVobSubSubpicture(
+                        "VobSub packet at offset \(startOffset) belongs to substream " +
+                            "\(String(format: "0x%02X", streamID)), not stream \(substream)")
+                }
+                // Skip the packet whole. The control sequences then start that much further on.
+                controlOffset! += nextPSOffset - startOffset
+                offset = nextPSOffset
+                continue
+            }
+
             if firstPacket, ptsDataLength >= 5 {
                 let pts = try (0 ..< 5).map { try buffer.bigEndian(UInt8.self, at: offset + $0) }
                 var presentationTimestamp: UInt64 = 0
@@ -94,11 +121,11 @@ struct VobSubParser {
                 presentationTimestamp += UInt64(pts[2] & 0xFE) << 14
                 presentationTimestamp += UInt64(pts[1]) << 22
                 presentationTimestamp += UInt64(pts[0] & 0x0E) << 29
-                subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90000
+                subtitle.startTimestamp = TimeInterval(presentationTimestamp) / 90000 + delay
             }
             offset += ptsDataLength
 
-            offset += 1 // Stream ID
+            offset += 1 // Stream ID, checked above
 
             var trueHeaderSize = offset - startOffset
             if firstPacket, ptsDataLength >= 5 {
