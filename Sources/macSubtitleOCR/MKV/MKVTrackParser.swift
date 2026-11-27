@@ -15,6 +15,8 @@ class MKVTrackParser: MKVFileHandler {
     private(set) var tracks: [MKVTrack] = []
     private var codecPrivate = [Int: String]()
     private var languages = [Int: String]()
+    /// Codec IDs of the subtitle tracks that were passed over because they are not ones asked for.
+    private(set) var skippedSubtitleCodecs: [String] = []
 
     // MARK: - Functions
 
@@ -146,6 +148,9 @@ class MKVTrackParser: MKVFileHandler {
             }
             if codecs.contains(codecID) {
                 return (trackNumber, codecID)
+            }
+            if codecID.hasPrefix("S_") {
+                skippedSubtitleCodecs.append(codecID)
             }
         }
         return nil
