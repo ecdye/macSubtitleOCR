@@ -29,7 +29,10 @@ struct VobSubIDX {
     /// `.sub`. Timestamps before any `id:` line belong to stream 0, and an `id:` line repeating an
     /// earlier index continues that stream, as in FFmpeg.
     private(set) var streams: [Stream] = []
-    private(set) var palette: [UInt8] = []
+    /// The 16 RGB colors of the `palette:` line, 3 bytes each, or nil when the idx has none.
+    ///
+    /// Read as FFmpeg reads it, so a line with fewer than 16 colors leaves the rest black.
+    private(set) var palette: [UInt8]?
 
     /// The timestamps of the first stream, for an idx holding a single one.
     var timestamps: [TimeInterval] {
@@ -76,7 +79,7 @@ struct VobSubIDX {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
             if trimmedLine.starts(with: "palette:") {
-                palette = parsePalette(line: trimmedLine)
+                palette = parsePalette(trimmedLine.dropFirst("palette:".count))
             } else if trimmedLine.starts(with: "id:") {
                 let position = try stream(at: extractStreamIndex(from: trimmedLine))
                 if streams[position].language == nil {
@@ -192,9 +195,27 @@ struct VobSubIDX {
         return (hours * 3600) + (minutes * 60) + seconds + (milliseconds / 1000)
     }
 
-    /// Function to parse the palette from the line
-    private func parsePalette(line: String) -> [UInt8] {
-        let paletteString = line.replacingOccurrences(of: "palette: ", with: "")
-        return paletteString.split(separator: ", ").compactMap { String($0).hexToBytes }.flatMap(\.self)
+    /// Read the colors of a `palette:` line as FFmpeg's `ff_dvdsub_parse_palette` does.
+    ///
+    /// It always reads 16 colors, each with `strtoul` in base 16 followed by any commas and spaces
+    /// after it. A missing color reads as 0, black. Text that is not a hex number also reads as 0 and
+    /// is not skipped, so every color after it is black too. Only the low 24 bits of each are kept.
+    private func parsePalette(_ text: Substring) -> [UInt8] {
+        String(text).withCString { start in
+            var position = UnsafeMutablePointer(mutating: start)
+            var palette = [UInt8]()
+            palette.reserveCapacity(48)
+            for _ in 0 ..< 16 {
+                var end: UnsafeMutablePointer<CChar>?
+                let color = UInt32(truncatingIfNeeded: strtoul(position, &end, 16))
+                position = end ?? position
+                palette += [UInt8(color >> 16 & 0xFF), UInt8(color >> 8 & 0xFF), UInt8(color & 0xFF)]
+                // A comma, or a space as av_isspace counts them.
+                while position.pointee == 0x2C || position.pointee == 0x20 || (0x09 ... 0x0D).contains(position.pointee) {
+                    position += 1
+                }
+            }
+            return palette
+        }
     }
 }

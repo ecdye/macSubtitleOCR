@@ -71,7 +71,7 @@ struct VobSub {
     // MARK: - Methods
 
     /// Decode the subtitles of `stream`, reading only packets of `substream` (any when nil).
-    private func extractSubtitleImages(buffer: UnsafeRawBufferPointer, stream: VobSubIDX.Stream, palette: [UInt8],
+    private func extractSubtitleImages(buffer: UnsafeRawBufferPointer, stream: VobSubIDX.Stream, palette: [UInt8]?,
                                        substream: Int?) throws -> [Subtitle] {
         if buffer.count == 0 {
             print("Found empty VobSub buffer, skipping track!")

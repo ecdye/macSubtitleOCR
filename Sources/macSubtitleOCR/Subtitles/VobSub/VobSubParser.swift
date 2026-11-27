@@ -13,7 +13,8 @@ struct VobSubParser {
     // MARK: - Properties
 
     let subtitle: Subtitle
-    private let masterPalette: [UInt8]
+    /// The idx palette's 16 RGB colors, or nil when the idx has no palette.
+    private let masterPalette: [UInt8]?
     private let substream: Int?
     private let delay: TimeInterval
 
@@ -22,13 +23,14 @@ struct VobSubParser {
     /// Read the subpicture whose first packet is at `offset`.
     ///
     /// - Parameters:
+    ///   - idxPalette: The idx palette's 16 RGB colors, or nil when the idx has no palette.
     ///   - substream: The idx stream index the subpicture belongs to, or nil to read every packet.
     ///     A packet belongs to stream `n` when the low 5 bits of its substream ID are `n`, as FFmpeg
     ///     checks it. DVD subpictures use IDs `0x20 + n`, and VobSub tracks extracted from an MKV
     ///     are written with `0x00` for stream 0, which this also accepts.
     ///   - delay: The idx `delay:` in seconds, added to the presentation timestamp of the packet.
     init(index: Int, buffer: UnsafeRawBufferPointer, timestamp: TimeInterval, offset: UInt64,
-         nextOffset: UInt64, idxPalette: [UInt8], substream: Int? = nil, delay: TimeInterval = 0) throws {
+         nextOffset: UInt64, idxPalette: [UInt8]?, substream: Int? = nil, delay: TimeInterval = 0) throws {
         subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
         self.substream = substream
@@ -324,22 +326,60 @@ struct VobSubParser {
         }
     }
 
+    /// Turn the four idx palette indices and alphas the subpicture selects into RGBA colors, as
+    /// FFmpeg's `guess_palette` does.
+    ///
+    /// With an idx palette each color is the entry its index selects; an entry past the end of a
+    /// short palette is black. Without one the colors are FFmpeg's guessed grays.
     private func decodePalette() throws {
-        guard subtitle.imagePalette != nil, subtitle.imageAlpha != nil else {
-            throw macSubtitleOCRError.fileReadError("Failed to read image palette and alpha")
+        guard let colormap = subtitle.imagePalette, let alpha = subtitle.imageAlpha else {
+            throw macSubtitleOCRError.invalidVobSubSubpicture(
+                "VobSub subtitle \(subtitle.index) lacks a palette (0x03) or alpha (0x04) command")
         }
 
+        let grays = masterPalette == nil ? Self.guessedGrays(colormap: colormap, alpha: alpha) : nil
         var palette = [UInt8](repeating: 0, count: 4 * 4)
-
         for i in 0 ..< 4 {
-            let index = subtitle.imagePalette![i]
-            palette[4 * i] = masterPalette[3 * Int(index)]
-            palette[4 * i + 1] = masterPalette[3 * Int(index) + 1]
-            palette[4 * i + 2] = masterPalette[3 * Int(index) + 2]
-            palette[4 * i + 3] = UInt8(subtitle.imageAlpha![i] * 0x11)
+            if let grays {
+                palette[4 * i] = grays[i]
+                palette[4 * i + 1] = grays[i]
+                palette[4 * i + 2] = grays[i]
+            } else if let masterPalette {
+                let entry = 3 * Int(colormap[i])
+                if entry + 2 < masterPalette.count {
+                    palette[4 * i] = masterPalette[entry]
+                    palette[4 * i + 1] = masterPalette[entry + 1]
+                    palette[4 * i + 2] = masterPalette[entry + 2]
+                }
+            }
+            palette[4 * i + 3] = alpha[i] * 0x11
         }
 
         subtitle.imagePalette = palette
+    }
+
+    /// The gray FFmpeg's `guess_palette` gives each of the four colors when the idx has no palette.
+    ///
+    /// Transparent colors are black. The distinct idx indices among the visible ones are spread
+    /// from black to white in the order they first appear, a single one being white, and a visible
+    /// color repeating an index takes the gray of its first appearance.
+    static func guessedGrays(colormap: [UInt8], alpha: [UInt8]) -> [UInt8] {
+        // FFmpeg's levels for one to four distinct colors, scaled by its default white, 0xFFFFFF.
+        let levels: [[Int]] = [[0xFF], [0x00, 0xFF], [0x00, 0x80, 0xFF], [0x00, 0x55, 0xAA, 0xFF]]
+        let visible = (0 ..< 4).filter { alpha[$0] != 0 }
+        let distinct = Set(visible.map { colormap[$0] }).count
+        var grays = [UInt8](repeating: 0, count: 4)
+        guard distinct > 0 else { return grays }
+        var first = [UInt8: Int]()
+        for i in visible {
+            if let earlier = first[colormap[i]] {
+                grays[i] = grays[earlier]
+            } else {
+                grays[i] = UInt8((0xFF * levels[distinct - 1][first.count]) >> 8)
+                first[colormap[i]] = i
+            }
+        }
+        return grays
     }
 
     private func decodeImage() throws {
