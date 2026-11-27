@@ -397,9 +397,9 @@ func mkvAbsolutePTSConversion() {
     // A 90 kHz tick is 11,111.1 ns, so slightly shorter ticks round down and slightly longer ones don't.
     #expect(calculateAbsolutePTS(12345, 0, timestampScale: 11111) == 12344)
     #expect(calculateAbsolutePTS(12345, 0, timestampScale: 11112) == 12345)
-    #expect(calculateAbsolutePTS(Int64.max, 1) == .max)
-    #expect(calculateAbsolutePTS(Int64.min, -1) == 0)
-    #expect(calculateAbsolutePTS(Int64.max / 2, 0) == .max)
+    #expect(calculateAbsolutePTS(.max, 1) == .max)
+    #expect(calculateAbsolutePTS(0, -1) == 0)
+    #expect(calculateAbsolutePTS(.max / 2, 0) == .max)
     #expect(calculateAbsolutePTS(1, 0, timestampScale: .max) == .max)
 }
 

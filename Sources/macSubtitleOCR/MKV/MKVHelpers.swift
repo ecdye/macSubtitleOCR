@@ -8,14 +8,19 @@
 
 import Foundation
 
-/// Function to read a fixed length number of bytes and convert in into a (Un)signed integer
-func readFixedLengthNumber(fileHandle: FileHandle, length: Int) -> Int64 {
+/// Reads a big-endian unsigned integer `length` bytes wide, or returns `nil` if it is wider than 8 bytes or the
+/// file ends first. An empty number is zero.
+func readFixedLengthNumber(fileHandle: FileHandle, length: Int) -> UInt64? {
+    guard (0 ... 8).contains(length) else { return nil }
     let data = fileHandle.readData(ofLength: length)
-    var result: Int64 = 0
-    for byte in data {
-        result = result << 8 | Int64(byte)
-    }
-    return result
+    guard data.count == length else { return nil }
+    return unsignedNumber(fromBigEndian: data)
+}
+
+/// The big-endian unsigned integer `bytes` spell, or `nil` if there are more than 8 of them.
+func unsignedNumber(fromBigEndian bytes: some Collection<UInt8>) -> UInt64? {
+    guard bytes.count <= 8 else { return nil }
+    return bytes.reduce(0) { $0 << 8 | UInt64($1) }
 }
 
 /// Encode the absolute timestamp as 4 bytes in big-endian format for PGS.
@@ -56,23 +61,32 @@ func formatTime(_ time: UInt64) -> String {
 /// The Matroska TimestampScale used when Segment Info gives none: one tick per millisecond.
 let defaultTimestampScale: UInt64 = 1000000
 
-/// Converts a block's time, its cluster timestamp plus its signed relative timestamp, from ticks of
-/// `timestampScale` nanoseconds to 90 kHz ticks, rounding down. A time before zero becomes zero, and
-/// one too large to represent becomes `UInt64.max`.
-func calculateAbsolutePTS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64,
+/// Converts a block's time, its unsigned cluster timestamp plus its signed relative timestamp, from ticks of
+/// `timestampScale` nanoseconds to 90 kHz ticks, rounding down. A time before zero becomes zero, and one too
+/// large to represent becomes `UInt64.max`.
+func calculateAbsolutePTS(_ clusterTimestamp: UInt64, _ blockTimestamp: Int16,
                           timestampScale: UInt64 = defaultTimestampScale) -> UInt64 {
-    let (sum, sumOverflow) = clusterTimestamp.addingReportingOverflow(blockTimestamp)
-    if sumOverflow {
-        return blockTimestamp < 0 ? 0 : .max
+    let ticks: UInt64
+    if blockTimestamp < 0 {
+        let (difference, beforeZero) = clusterTimestamp.subtractingReportingOverflow(UInt64(blockTimestamp.magnitude))
+        if beforeZero {
+            return 0
+        }
+        ticks = difference
+    } else {
+        let (sum, sumOverflow) = clusterTimestamp.addingReportingOverflow(UInt64(blockTimestamp))
+        if sumOverflow {
+            return .max
+        }
+        ticks = sum
     }
-    guard sum > 0 else { return 0 }
 
     // ticks * scale ns * 90 kHz / 10^9 = ticks * scale * 9 / 100,000, exactly 90 per tick at the default scale.
     let (factor, factorOverflow) = timestampScale.multipliedReportingOverflow(by: 9)
     if factorOverflow {
         return .max
     }
-    let product = UInt64(sum).multipliedFullWidth(by: factor)
+    let product = ticks.multipliedFullWidth(by: factor)
     guard product.high < 100000 else { return .max }
     return UInt64(100000).dividingFullWidth(product).quotient
 }
