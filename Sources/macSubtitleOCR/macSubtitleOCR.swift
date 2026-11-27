@@ -35,7 +35,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     // MARK: - Entrypoint
 
-    mutating func run() async {
+    mutating func run() async throws {
         // swiftformat:disable all
         do {
             let fileHandler = try macSubtitleOCRFileHandler(outputDirectory: outputDirectory)
@@ -45,8 +45,10 @@ struct macSubtitleOCR: AsyncParsableCommand {
                 let macSubtitleOCRError.ffmpegError(string), let macSubtitleOCRError.invalidRLE(string),
                 let macSubtitleOCRError.invalidODSDimensions(string) {
             print("Error: \(string), exiting...", to: &stderr)
+            throw ExitCode.failure
         } catch {
             print("Error: \(error.localizedDescription), exiting...", to: &stderr)
+            throw ExitCode.failure
         }
         // swiftformat:enable all
     }
@@ -189,10 +191,10 @@ struct macSubtitleOCR: AsyncParsableCommand {
 
     private func saveResults(fileHandler: macSubtitleOCRFileHandler, results: [macSubtitleOCRResult]) async throws {
         for result in results {
-            autoreleasepool {
-                try? fileHandler.saveSRTFile(for: result)
+            try autoreleasepool {
+                try fileHandler.saveSRTFile(for: result)
                 if options.json {
-                    try? fileHandler.saveJSONFile(for: result)
+                    try fileHandler.saveJSONFile(for: result)
                 }
             }
         }

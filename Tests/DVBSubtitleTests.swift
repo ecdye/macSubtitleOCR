@@ -7,6 +7,7 @@
 //
 
 #if FFMPEG
+import ArgumentParser
 import CFFmpeg
 import Foundation
 @testable import macSubtitleOCR
@@ -38,7 +39,7 @@ private let pageTimeout: UInt32 = 10000
     try writeDVBSubtitleStream(captions, to: input)
 
     var runner = try macSubtitleOCR.parse([input, directory, "--ffmpeg-decoder", "--max-threads", "1"])
-    await runner.run()
+    try await runner.run()
 
     let srt = try String(contentsOfFile: "\(directory)/track_0.srt", encoding: .utf8)
     let cues = srt.components(separatedBy: "\n\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -80,7 +81,7 @@ private let pageTimeout: UInt32 = 10000
     #expect(parser.skippedSubtitleCodecs == ["S_DVBSUB"])
 
     var runner = try macSubtitleOCR.parse([mkv, directory])
-    await runner.run()
+    await #expect(throws: ExitCode.failure) { try await runner.run() }
     let written = try FileManager.default.contentsOfDirectory(atPath: directory).filter { $0.hasSuffix(".srt") }
     #expect(written.isEmpty)
 }

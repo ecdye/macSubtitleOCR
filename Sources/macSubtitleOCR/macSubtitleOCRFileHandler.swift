@@ -25,7 +25,7 @@ struct macSubtitleOCRFileHandler {
         }
         let srtFilePath = outputDirectory.appendingPathComponent("track_\(result.trackNumber).srt")
         let srt = SRT(subtitles: result.srt.sorted { $0.index < $1.index })
-        srt.write(toFileAt: srtFilePath)
+        try srt.write(toFileAt: srtFilePath)
     }
 
     func saveJSONFile(for result: macSubtitleOCRResult) throws {
