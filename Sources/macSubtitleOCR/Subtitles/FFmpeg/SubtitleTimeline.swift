@@ -27,7 +27,8 @@ struct DecodedSubtitleFrame {
     /// Presentation time of the frame, in seconds.
     var presentationTime: TimeInterval
     /// Offsets from `presentationTime`, in milliseconds, as `AVSubtitle` counts them whatever the
-    /// stream's time base. `UInt32.max` means the frame stays until something replaces it.
+    /// stream's time base. `UInt32.max` means the frame stays until something replaces it, and
+    /// `unknownEnd` that the stream gives no real end time.
     var startDisplayTime: UInt32 = 0
     var endDisplayTime: UInt32 = .max
     /// Every bitmap on screen at once. Empty clears the screen.
@@ -44,8 +45,9 @@ struct DecodedSubtitleFrame {
 enum SubtitleTimeline {
     static func subtitles(from frames: [DecodedSubtitleFrame]) -> [Subtitle] {
         var subtitles: [Subtitle] = []
-        // The cue on screen, and when it times out if nothing replaces it first.
-        var showing: (subtitle: Subtitle, timeout: TimeInterval?)?
+        // The cue on screen, when it times out if nothing replaces it first, and whether its end is
+        // unknown, which leaves it to the SRT writer unless an empty frame clears the screen.
+        var showing: (subtitle: Subtitle, timeout: TimeInterval?, unknownEnd: Bool)?
 
         let ordered = frames.enumerated()
             .sorted { ($0.element.start, $0.offset) < ($1.element.start, $1.offset) }
@@ -58,11 +60,16 @@ enum SubtitleTimeline {
             if let current = showing {
                 if let image, current.subtitle.hasSameImage(as: image), current.timeout.map({ start < $0 }) ?? true {
                     // The same page sent again: the caption is still up, only its timeout moves.
-                    showing = (current.subtitle, frame.timeout ?? current.timeout)
+                    if let timeout = frame.timeout {
+                        showing = (current.subtitle, timeout, false)
+                    }
                     continue
                 }
-                // Anything else on screen, or nothing at all, takes the current caption down.
-                current.subtitle.endTimestamp = min(current.timeout ?? start, start)
+                // Anything else on screen, or nothing at all, takes the current caption down. With no
+                // known end, only an empty frame says when it went; the SRT writer times the rest.
+                if !current.unknownEnd || image == nil {
+                    current.subtitle.endTimestamp = min(current.timeout ?? start, start)
+                }
                 showing = nil
             }
 
@@ -70,7 +77,7 @@ enum SubtitleTimeline {
             image.index = subtitles.count + 1
             image.startTimestamp = start
             subtitles.append(image)
-            showing = (image, frame.timeout)
+            showing = (image, frame.timeout, frame.endDisplayTime == DecodedSubtitleFrame.unknownEnd)
         }
 
         // The last caption has nothing after it to end it, so only its own timeout can.
@@ -117,14 +124,25 @@ enum SubtitleTimeline {
     }
 }
 
+extension DecodedSubtitleFrame {
+    /// The end time FFmpeg's DVD subtitle decoder reports for a stop command with the largest
+    /// delay, 0xFFFF units of 1024/90000 s: `(0xFFFF << 10) / 90` = 745642 ms. VobSub streams use
+    /// that delay for a subpicture with no set end, left up until the next one replaces it. Like the
+    /// internal VobSub decoder, the timeline leaves its end unknown, so the SRT writer gives it the
+    /// default duration, cut short by the next cue. No other decoder reports this value: DVB page
+    /// timeouts are whole seconds up to 255, and PGS frames have no end time.
+    static let unknownEnd = UInt32((0xFFFF << 10) / 90)
+}
+
 private extension DecodedSubtitleFrame {
     var start: TimeInterval {
         presentationTime + TimeInterval(startDisplayTime) / 1000
     }
 
-    /// When the frame comes down on its own, or nil when it stays until replaced.
+    /// When the frame comes down on its own, or nil when it stays until replaced or its end is unknown.
     var timeout: TimeInterval? {
-        guard endDisplayTime != .max, endDisplayTime > startDisplayTime else { return nil }
+        guard endDisplayTime != .max, endDisplayTime != Self.unknownEnd,
+              endDisplayTime > startDisplayTime else { return nil }
         return presentationTime + TimeInterval(endDisplayTime) / 1000
     }
 }
