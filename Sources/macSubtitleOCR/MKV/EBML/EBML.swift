@@ -18,8 +18,10 @@ enum EBML {
     static let language: UInt32 = 0x22B59C
     static let languageBCP47: UInt32 = 0x22B59D
     static let segmentID: UInt32 = 0x1853_8067
+    static let segmentInfo: UInt32 = 0x1549_A966
     static let simpleBlock: UInt32 = 0xA3
     static let timestamp: UInt32 = 0xE7
+    static let timestampScale: UInt32 = 0x2AD7B1
     static let tracksID: UInt32 = 0x1654_AE6B
     static let trackEntryID: UInt32 = 0xAE
     static let trackTypeID: UInt32 = 0x83

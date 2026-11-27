@@ -18,11 +18,15 @@ func readFixedLengthNumber(fileHandle: FileHandle, length: Int) -> Int64 {
     return result
 }
 
-/// Encode the absolute timestamp as 4 bytes in big-endian format for PGS
+/// Encode the absolute timestamp as 4 bytes in big-endian format for PGS.
+///
+/// A PGS PTS is 32 bits wide, so like any PGS stream it wraps to zero after about 13.25 hours.
 func encodePTSForPGS(_ timestamp: UInt64) -> [UInt8] {
-    withUnsafeBytes(of: UInt32(timestamp).bigEndian) { Array($0) }
+    withUnsafeBytes(of: UInt32(truncatingIfNeeded: timestamp).bigEndian) { Array($0) }
 }
 
+/// Encode the absolute timestamp as the 5 PTS bytes of an MPEG PES header. The PTS is 33 bits wide;
+/// higher bits are dropped.
 func encodePTSForVobSub(from timestamp: UInt64) -> [UInt8] {
     var buffer = [UInt8](repeating: 0, count: 5) // 5-byte buffer
 
@@ -37,7 +41,8 @@ func encodePTSForVobSub(from timestamp: UInt64) -> [UInt8] {
 /// Write a 90 kHz timestamp the way a VobSub `.idx` spells one, `HH:MM:SS:mmm`,
 /// rounded to the nearest millisecond.
 func formatTime(_ time: UInt64) -> String {
-    let total = (time + 45) / 90
+    // Written so that it cannot overflow, unlike (time + 45) / 90.
+    let total = time / 90 + (time % 90 >= 45 ? 1 : 0)
     let hours = total / 3600000
     let minutes = total / 60000 % 60
     let seconds = total / 1000 % 60
@@ -46,8 +51,26 @@ func formatTime(_ time: UInt64) -> String {
     return String(format: "%02llu:%02llu:%02llu:%03llu", hours, minutes, seconds, milliseconds)
 }
 
-/// Calculate the absolute timestamp with 90 kHz accuracy
-func calculateAbsolutePTS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64) -> UInt64 {
-    // The block timestamp is relative, so we add it to the cluster timestamp
-    UInt64(clusterTimestamp + blockTimestamp) * 90
+/// The Matroska TimestampScale used when Segment Info gives none: one tick per millisecond.
+let defaultTimestampScale: UInt64 = 1000000
+
+/// Converts a block's time, its cluster timestamp plus its signed relative timestamp, from ticks of
+/// `timestampScale` nanoseconds to 90 kHz ticks, rounding down. A time before zero becomes zero, and
+/// one too large to represent becomes `UInt64.max`.
+func calculateAbsolutePTS(_ clusterTimestamp: Int64, _ blockTimestamp: Int64,
+                          timestampScale: UInt64 = defaultTimestampScale) -> UInt64 {
+    let (sum, sumOverflow) = clusterTimestamp.addingReportingOverflow(blockTimestamp)
+    if sumOverflow {
+        return blockTimestamp < 0 ? 0 : .max
+    }
+    guard sum > 0 else { return 0 }
+
+    // ticks * scale ns * 90 kHz / 10^9 = ticks * scale * 9 / 100,000, exactly 90 per tick at the default scale.
+    let (factor, factorOverflow) = timestampScale.multipliedReportingOverflow(by: 9)
+    if factorOverflow {
+        return .max
+    }
+    let product = UInt64(sum).multipliedFullWidth(by: factor)
+    guard product.high < 100000 else { return .max }
+    return UInt64(100000).dividingFullWidth(product).quotient
 }

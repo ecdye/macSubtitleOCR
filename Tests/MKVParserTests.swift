@@ -98,19 +98,30 @@ private let languageID: [UInt8] = [0x22, 0xB5, 0x9C]
 private let languageBCP47ID: [UInt8] = [0x22, 0xB5, 0x9D]
 private let subtitleTrackType = element(trackTypeID, [0x11])
 
-/// A SimpleBlock for `trackNumber` at time zero holding a PGS end segment.
-private func pgsBlock(trackNumber: UInt16) -> [UInt8] {
+/// A SimpleBlock for `trackNumber` at `timestamp` ticks from its cluster holding a PGS end segment.
+private func pgsBlock(trackNumber: UInt16, timestamp: Int16 = 0) -> [UInt8] {
     let track: [UInt8] = trackNumber < 0x7F ? [0x80 | UInt8(trackNumber)] :
         [0x40 | UInt8(trackNumber >> 8), UInt8(trackNumber & 0xFF)]
-    return element([0xA3], track, [0x00, 0x00, 0x80], [0x80, 0x00, 0x00])
+    let relative = withUnsafeBytes(of: timestamp.bigEndian) { Array($0) }
+    return element([0xA3], track, relative, [0x80], [0x80, 0x00, 0x00])
 }
 
-/// Writes an MKV with the given TrackEntry children and one Cluster holding `blocks` to a temporary file.
-private func syntheticMKV(entries: [[UInt8]], blocks: [[UInt8]]) throws -> String {
+/// A Segment Info element with the given TimestampScale.
+private func segmentInfo(timestampScale: UInt32) -> [UInt8] {
+    element([0x15, 0x49, 0xA9, 0x66], element([0x2A, 0xD7, 0xB1], withUnsafeBytes(of: timestampScale.bigEndian) {
+        Array($0)
+    }))
+}
+
+/// Writes an MKV with the given TrackEntry children and one Cluster at `clusterTimestamp` holding `blocks` to
+/// a temporary file. `info`, if given, is placed before the Tracks, or after them if `infoAfterTracks`.
+private func syntheticMKV(entries: [[UInt8]], blocks: [[UInt8]], clusterTimestamp: UInt16 = 0,
+                          info: [UInt8] = [], infoAfterTracks: Bool = false) throws -> String {
     let header = element([0x1A, 0x45, 0xDF, 0xA3], string([0x42, 0x82], "matroska"))
     let tracks = element([0x16, 0x54, 0xAE, 0x6B], entries.flatMap { element([0xAE], $0) })
-    let cluster = element([0x1F, 0x43, 0xB6, 0x75], element([0xE7], [0x00]), blocks.flatMap(\.self))
-    let segment = element([0x18, 0x53, 0x80, 0x67], tracks, cluster)
+    let timestamp = withUnsafeBytes(of: clusterTimestamp.bigEndian) { Array($0) }
+    let cluster = element([0x1F, 0x43, 0xB6, 0x75], element([0xE7], timestamp), blocks.flatMap(\.self))
+    let segment = element([0x18, 0x53, 0x80, 0x67], infoAfterTracks ? tracks + info : info + tracks, cluster)
     let url = URL.temporaryDirectory.appendingPathComponent("macSubtitleOCRTests-\(UUID().uuidString).mks")
     try Data(header + segment).write(to: url)
     return url.path
@@ -220,4 +231,90 @@ func mkvSaveSubtitleTrackDataWritesEachTrack() throws {
             #expect(idx == track.idxData)
         }
     }
+}
+
+// MARK: - Timestamps
+
+private let pgsTrackEntry = element(trackNumberID, [0x01]) + subtitleTrackType + string(codecIDID, "S_HDMV/PGS")
+
+/// The 90 kHz PTS in the header of each PGS segment of `track`.
+private func pgsPresentationTimestamps(_ track: MKVTrack) -> [UInt32] {
+    stride(from: 0, to: track.trackData.count, by: 13).map { offset in
+        track.trackData[(offset + 2) ..< (offset + 6)].reduce(0) { $0 << 8 | UInt32($1) }
+    }
+}
+
+@Test(.timeLimit(.minutes(1)))
+func mkvNegativeBlockTimestamp() throws {
+    let path = try syntheticMKV(
+        entries: [pgsTrackEntry],
+        blocks: [pgsBlock(trackNumber: 1, timestamp: -200), pgsBlock(trackNumber: 1, timestamp: 300)],
+        clusterTimestamp: 1000)
+    defer { try? FileManager.default.removeItem(atPath: path) }
+
+    let track = try #require(try parsedTracks(atPath: path).first)
+    #expect(pgsPresentationTimestamps(track) == [800 * 90, 1300 * 90])
+}
+
+@Test(.timeLimit(.minutes(1)))
+func mkvBlockBeforeZeroClampsToZero() throws {
+    let path = try syntheticMKV(
+        entries: [pgsTrackEntry],
+        blocks: [pgsBlock(trackNumber: 1, timestamp: -200)],
+        clusterTimestamp: 100)
+    defer { try? FileManager.default.removeItem(atPath: path) }
+
+    let track = try #require(try parsedTracks(atPath: path).first)
+    #expect(pgsPresentationTimestamps(track) == [0])
+}
+
+@Test(.timeLimit(.minutes(1)), arguments: [false, true])
+func mkvTimestampScale(infoAfterTracks: Bool) throws {
+    // 0.1 ms ticks: 1000 + 5 ticks is 100.5 ms.
+    let path = try syntheticMKV(
+        entries: [pgsTrackEntry],
+        blocks: [pgsBlock(trackNumber: 1, timestamp: 5)],
+        clusterTimestamp: 1000,
+        info: segmentInfo(timestampScale: 100000),
+        infoAfterTracks: infoAfterTracks)
+    defer { try? FileManager.default.removeItem(atPath: path) }
+
+    let parser = try MKVSubtitleExtractor(filePath: path)
+    try parser.parseTracks(for: codecs)
+    #expect(parser.timestampScale == 100000)
+    let track = try #require(parser.tracks.first)
+    #expect(pgsPresentationTimestamps(track) == [9045])
+}
+
+@Test
+func mkvSintelUsesDefaultTimestampScale() throws {
+    let parser = try MKVSubtitleExtractor(filePath: TestFilePaths.mkv.path)
+    try parser.parseTracks(for: codecs)
+    #expect(parser.timestampScale == 1000000)
+}
+
+@Test
+func mkvAbsolutePTSConversion() {
+    #expect(calculateAbsolutePTS(1000, -200) == 72000)
+    #expect(calculateAbsolutePTS(100, -200) == 0)
+    #expect(calculateAbsolutePTS(1000, 5, timestampScale: 100000) == 9045)
+    // A 90 kHz tick is 11,111.1 ns, so slightly shorter ticks round down and slightly longer ones don't.
+    #expect(calculateAbsolutePTS(12345, 0, timestampScale: 11111) == 12344)
+    #expect(calculateAbsolutePTS(12345, 0, timestampScale: 11112) == 12345)
+    #expect(calculateAbsolutePTS(Int64.max, 1) == .max)
+    #expect(calculateAbsolutePTS(Int64.min, -1) == 0)
+    #expect(calculateAbsolutePTS(Int64.max / 2, 0) == .max)
+    #expect(calculateAbsolutePTS(1, 0, timestampScale: .max) == .max)
+}
+
+@Test
+func mkvPTSEncodingWrapsPastItsWidth() {
+    // 2^32 + 5 ticks, about 13.25 hours, wraps in the 32-bit PGS PTS.
+    #expect(encodePTSForPGS((1 << 32) + 5) == [0x00, 0x00, 0x00, 0x05])
+    #expect(encodePTSForPGS(.max) == [0xFF, 0xFF, 0xFF, 0xFF])
+    // The VobSub PTS is 33 bits.
+    #expect(encodePTSForVobSub(from: (1 << 33) + 5) == encodePTSForVobSub(from: 5))
+    #expect(encodePTSForVobSub(from: .max) == encodePTSForVobSub(from: (1 << 33) - 1))
+    // The largest time calculateAbsolutePTS saturates to still formats.
+    #expect(formatTime(.max) == "56934395289:13:37:240")
 }
