@@ -154,7 +154,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
             throw macSubtitleOCRError.invalidInputFile("No bitmap subtitles found in \(input)")
         }
 
-        for result in ffmpeg.subtitleTracks {
+        for result in ffmpeg.subtitleTracks.sorted(by: { $0.key < $1.key }) {
             logger.debug("Processing subtitle track: \(result.key)")
             let result = try await processSubtitle(result.value, trackNumber: result.key,
                                                    languages: options.languages)

@@ -28,8 +28,7 @@ private func offset(of bytes: [UInt8], in data: Data) throws -> Int {
 private func parsedTracks(atPath path: String) throws -> [MKVTrack] {
     let parser = try MKVSubtitleExtractor(filePath: path)
     try parser.parseTracks(for: codecs)
-    // Tracks come out of a dictionary, so put them in a fixed order.
-    return parser.tracks.sorted { $0.trackNumber < $1.trackNumber }
+    return parser.tracks
 }
 
 @Test(.timeLimit(.minutes(1)))
@@ -194,6 +193,26 @@ func mkvMultiByteTrackNumber() throws {
 
     let tracks = try parsedTracks(atPath: path)
     #expect(tracks.map(\.trackNumber) == [3, 300])
+}
+
+@Test(.timeLimit(.minutes(1)))
+func mkvTracksComeOutInTrackNumberOrder() throws {
+    let numbers: [UInt8] = [9, 3, 7, 5, 12, 1, 15, 4, 11, 2, 14, 8, 6, 13, 10]
+    let path = try syntheticMKV(
+        entries: numbers.map { element(trackNumberID, [$0]) + subtitleTrackType + string(codecIDID, "S_HDMV/PGS") },
+        blocks: numbers.map { pgsBlock(trackNumber: UInt16($0)) })
+    defer { try? FileManager.default.removeItem(atPath: path) }
+
+    for _ in 0 ..< 20 {
+        let tracks = try parsedTracks(atPath: path)
+        #expect(tracks.map(\.trackNumber) == Array(1 ... 15))
+    }
+}
+
+@Test
+func mkvSintelTracksInOrder() throws {
+    let tracks = try parsedTracks(atPath: TestFilePaths.mkv.path)
+    #expect(tracks.map(\.trackNumber) == [1, 2])
 }
 
 @Test(.timeLimit(.minutes(1)))
