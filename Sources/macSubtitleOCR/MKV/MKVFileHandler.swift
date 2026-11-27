@@ -76,7 +76,15 @@ class MKVFileHandler {
         return (nil, nil)
     }
 
+    /// Reads the next element header, or returns `nil` at the end of the file.
+    ///
+    /// An unknown size, or one that runs past the end of a truncated file, is taken to end at the end of
+    /// the file.
     func tryParseElement() -> (elementID: UInt32, elementSize: UInt64)? {
-        ebmlParser.readEBMLElement()
+        guard fileHandle.offsetInFile < endOfFile,
+              let (elementID, elementSize) = ebmlParser.readEBMLElement()
+        else { return nil }
+        let remaining = endOfFile - min(fileHandle.offsetInFile, endOfFile)
+        return (elementID, min(elementSize ?? remaining, remaining))
     }
 }

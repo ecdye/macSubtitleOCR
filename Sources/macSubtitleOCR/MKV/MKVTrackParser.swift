@@ -32,18 +32,18 @@ class MKVTrackParser: MKVFileHandler {
         let endOfTracksOffset = fileHandle.offsetInFile + tracksSize
 
         var subtitleTracks = [Int: String]()
-        while fileHandle.offsetInFile < endOfTracksOffset {
-            if let (elementID, elementSize) = tryParseElement() {
-                if elementID == EBML.trackEntryID {
-                    logger.debug("Found TrackEntry element")
-                    if let track = parseTrackEntry(for: codecs) {
-                        subtitleTracks[track.0] = track.1
-                    }
-                } else if elementID == EBML.chapters {
-                    break
-                } else {
-                    fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
+        while fileHandle.offsetInFile < endOfTracksOffset, let (elementID, elementSize) = tryParseElement() {
+            if elementID == EBML.trackEntryID {
+                logger.debug("Found TrackEntry element")
+                let endOfEntryOffset = fileHandle.offsetInFile + elementSize
+                if let track = parseTrackEntry(for: codecs, until: endOfEntryOffset) {
+                    subtitleTracks[track.0] = track.1
                 }
+                fileHandle.seek(toFileOffset: endOfEntryOffset)
+            } else if elementID == EBML.chapters {
+                break
+            } else {
+                fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
             }
         }
 
@@ -74,7 +74,15 @@ class MKVTrackParser: MKVFileHandler {
 
         // Step 2: Parse Clusters within the Segment
         while fileHandle.offsetInFile < segmentEndOffset {
-            guard let clusterSize = locateCluster() else { continue }
+            let startOffset = fileHandle.offsetInFile
+            defer {
+                // Stop rather than spin if an iteration read nothing.
+                if fileHandle.offsetInFile <= startOffset {
+                    fileHandle.seek(toFileOffset: segmentEndOffset)
+                }
+            }
+
+            guard let clusterSize = locateCluster() else { break }
             let clusterEndOffset = fileHandle.offsetInFile + clusterSize
 
             // Step 3: Extract the cluster timestamp
@@ -92,13 +100,13 @@ class MKVTrackParser: MKVFileHandler {
 
     // MARK: - Methods
 
-    private func parseTrackEntry(for codecs: [String]) -> (Int, String)? {
+    private func parseTrackEntry(for codecs: [String], until endOfEntryOffset: UInt64) -> (Int, String)? {
         var trackNumber: Int?
         var trackType: UInt8?
         var codecID: String?
         var language: String?
 
-        while let (elementID, elementSize) = tryParseElement() {
+        while fileHandle.offsetInFile < endOfEntryOffset, let (elementID, elementSize) = tryParseElement() {
             switch elementID {
             case EBML.trackNumberID:
                 trackNumber = Int((fileHandle.readData(ofLength: Int(elementSize)).first)!)
@@ -127,7 +135,7 @@ class MKVTrackParser: MKVFileHandler {
 
         if let trackNumber, let codecID {
             if codecID == "S_VOBSUB" {
-                while let (elementID, elementSize) = tryParseElement() {
+                while fileHandle.offsetInFile < endOfEntryOffset, let (elementID, elementSize) = tryParseElement() {
                     switch elementID {
                     case EBML.codecPrivate:
                         var data = fileHandle.readData(ofLength: Int(elementSize))
