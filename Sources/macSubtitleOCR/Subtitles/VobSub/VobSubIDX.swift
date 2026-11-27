@@ -7,8 +7,11 @@
 //
 
 import Foundation
+import os
 
 struct VobSubIDX {
+    private static let logger = Logger(subsystem: "com.ecdye.macSubtitleOCR", category: "VobSubIDX")
+
     // MARK: - Properties
 
     /// One subtitle stream of the idx: an `id:` block and the `timestamp:` lines under it.
@@ -87,7 +90,11 @@ struct VobSubIDX {
                 }
                 current = position
             } else if trimmedLine.starts(with: "delay:") {
-                delay = extractDelay(from: trimmedLine)
+                if let parsed = extractDelay(from: trimmedLine) {
+                    delay = parsed
+                } else {
+                    Self.logger.debug("Ignoring out-of-range VobSub delay: \(trimmedLine)")
+                }
             } else if trimmedLine.starts(with: "timestamp:") {
                 guard let timestamp = extractTimestamp(from: trimmedLine),
                       let offset = extractOffset(from: trimmedLine)
@@ -133,7 +140,11 @@ struct VobSubIDX {
     /// colon-separated fields of hours, minutes, seconds and milliseconds, any missing ones 0.
     /// Each `delay:` line replaces the one before it, rather than adding to it, and applies to
     /// every timestamp after it, in whatever stream, until the next.
-    private func extractDelay(from line: String) -> Int {
+    ///
+    /// FFmpeg reads each field into a C `int`, so a field too large for 32 bits has no defined
+    /// value there. Such a line gives nil here, and the caller keeps the delay already in effect.
+    /// With every field within 32 bits, the total stays far inside 64 bits.
+    private func extractDelay(from line: String) -> Int? {
         var value = line.dropFirst("delay:".count).drop { $0 == " " || $0 == "\t" }
         var sign = 1
         if let first = value.first, first == "-" || first == "+" {
@@ -143,10 +154,22 @@ struct VobSubIDX {
         var fields = [0, 0, 0, 0]
         for (position, field) in value.split(separator: ":", omittingEmptySubsequences: false).prefix(4)
             .enumerated() {
-            guard let number = Int(field.trimmingCharacters(in: .whitespaces)) else { break }
-            fields[position] = number
+            let text = field.trimmingCharacters(in: .whitespaces)
+            guard let number = Int32(text) else {
+                if isInteger(text) {
+                    return nil
+                }
+                break
+            }
+            fields[position] = Int(number)
         }
         return ((fields[0] * 3600 + fields[1] * 60 + fields[2]) * 1000 + fields[3]) * sign
+    }
+
+    /// Whether `text` is a whole number, with an optional sign, however many digits it has.
+    private func isInteger(_ text: String) -> Bool {
+        let digits = text.first == "-" || text.first == "+" ? text.dropFirst() : Substring(text)
+        return !digits.isEmpty && digits.allSatisfy { ("0" ... "9").contains($0) }
     }
 
     /// Extract the language from a line like "id: en, index: 0"
@@ -180,6 +203,9 @@ struct VobSubIDX {
     }
 
     /// Convert "hh:mm:ss:ms" timestamp string to TimeInterval (seconds)
+    ///
+    /// A field such as `inf`, `nan` or `1e999`, or one so large that the total is not finite,
+    /// gives nil, and the line is skipped like any other unreadable one.
     private func convertTimestampToTimeInterval(_ timestamp: String) -> TimeInterval? {
         let components = timestamp.split(separator: ":")
 
@@ -192,7 +218,8 @@ struct VobSubIDX {
             return nil
         }
 
-        return (hours * 3600) + (minutes * 60) + seconds + (milliseconds / 1000)
+        let total = (hours * 3600) + (minutes * 60) + seconds + (milliseconds / 1000)
+        return total.isFinite ? total : nil
     }
 
     /// Read the colors of a `palette:` line as FFmpeg's `ff_dvdsub_parse_palette` does.
