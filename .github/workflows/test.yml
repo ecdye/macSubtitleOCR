@@ -6,11 +6,13 @@ on:
       - main
     paths:
       - '**/*.swift'
+      - 'Tests/Resources/decoder-baseline.json'
   pull_request:
     branches:
       - main
     paths:
       - '**/*.swift'
+      - 'Tests/Resources/decoder-baseline.json'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -45,11 +47,17 @@ jobs:
         timeout-minutes: 5
         run: xcrun swift test --skip-build --filter internalDecoder
 
+      # Runs both decoders over every input and fails if the internal one falls below
+      # Tests/Resources/decoder-baseline.json or does worse than FFmpeg. The tables go to the job summary.
+      - name: Compare Decoders
+        timeout-minutes: 10
+        run: xcrun swift test --skip-build --filter decoderComparison
+
       # recognizesAntiAliasedFrames and frameTooSmallToRecognizeIsEnlarged hold Vision to exact readings
       # that the virtualized macOS 26 runner does not reproduce, so they are left to run locally.
       - name: Test Everything Else
         timeout-minutes: 5
         run: >-
           xcrun swift test --skip-build
-          --skip ffmpegDecoder --skip internalDecoder
+          --skip ffmpegDecoder --skip internalDecoder --skip decoderComparison
           --skip recognizesAntiAliasedFrames --skip frameTooSmallToRecognizeIsEnlarged
