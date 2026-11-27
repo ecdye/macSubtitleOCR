@@ -48,7 +48,9 @@ struct VobSubIDX {
                 palette = parsePalette(line: trimmedLine)
                 continue
             } else if trimmedLine.starts(with: "id:") {
-                language = String(trimmedLine.split(separator: " ")[1].dropLast())
+                if let id = extractLanguage(from: trimmedLine) {
+                    language = id
+                }
                 continue
             } else if !trimmedLine.starts(with: "timestamp:") {
                 continue
@@ -65,6 +67,13 @@ struct VobSubIDX {
         }
     }
 
+    /// Extract the language from a line like "id: en, index: 0"
+    private func extractLanguage(from line: String) -> String? {
+        let value = line.dropFirst("id:".count)
+        let id = value.prefix { $0 != "," }.trimmingCharacters(in: .whitespaces)
+        return id.isEmpty ? nil : id
+    }
+
     /// Extract timestamp from a line starting with "timestamp:"
     private func extractTimestamp(from line: String) -> TimeInterval? {
         guard line.starts(with: "timestamp:") else { return nil }
@@ -73,8 +82,11 @@ struct VobSubIDX {
         let components = line.split(separator: " ")
         guard components.count > 1 else { return nil }
 
-        let timestampString = String(components[1].dropLast())
-        return convertTimestampToTimeInterval(timestampString)
+        var timestampString = components[1]
+        if timestampString.hasSuffix(",") {
+            timestampString = timestampString.dropLast()
+        }
+        return convertTimestampToTimeInterval(String(timestampString))
     }
 
     /// Extract file offset from a line starting with "filepos:"
