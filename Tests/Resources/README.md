@@ -56,6 +56,10 @@ subpicture the largest stop delay, meaning it stays until replaced, so neither d
 for it. The SRT writer gives such a cue its default five seconds, cut short by the next cue, which is
 why that track's end time errors run to a few seconds where the others stay within a frame.
 
+`internalDecoderMatchesBaseline` holds the internal decoder to the same entries in every build,
+FFmpeg or not. It runs the CLI over each bundled input, as a user would, and scores the SRTs it
+writes the same way, so CI's `--filter internalDecoder` step checks them as well.
+
 After a change that improves the scores, or one whose change is understood, regenerate the file and
 commit it with the change:
 
