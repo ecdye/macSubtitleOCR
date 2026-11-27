@@ -48,10 +48,13 @@ struct PGS {
             print("Found empty PGS buffer, skipping track!")
             return
         }
+        // The subtitle on screen, until a display set takes it down or replaces it.
+        var showing: Subtitle?
         while offset + pgsHeaderLength < buffer.count {
             logger.debug("Parsing subtitle at offset: \(offset)")
             guard let subtitle = try parseNextSubtitle(buffer, &offset)
             else {
+                showing = nil
                 if offset + pgsHeaderLength > buffer.count {
                     break
                 }
@@ -59,9 +62,18 @@ struct PGS {
             }
 
             // Find the next timestamp to use as our end timestamp
-            subtitle.endTimestamp = getSegmentTimestamp(from: buffer, offset: offset)
+            let endTimestamp = getSegmentTimestamp(from: buffer, offset: offset)
 
+            // Streams send the caption on screen again, typically as an acquisition point, so that a
+            // player starting there can show it. The screen does not change, so the caption goes on.
+            if let showing, showing.showsSameImage(as: subtitle) {
+                showing.endTimestamp = endTimestamp
+                continue
+            }
+
+            subtitle.endTimestamp = endTimestamp
             subtitles.append(subtitle)
+            showing = subtitle
         }
     }
 
@@ -210,9 +222,12 @@ struct PGS {
         }
 
         let ods = objects[0].ods
+        let position = compositionObjects.first { $0.objectID == objects[0].id }
         return try Subtitle(
             index: subtitles.count + 1,
             startTimestamp: startTimestamp,
+            imageXOffset: position?.x,
+            imageYOffset: position?.y,
             imageWidth: ods.objectWidth,
             imageHeight: ods.objectHeight,
             imageData: ods.decodeRLEData(),
@@ -254,5 +269,14 @@ struct PGS {
 
     private func getSegmentLength(from pointer: UnsafeRawBufferPointer, offset: Int) -> Int {
         Int(pointer.loadUnaligned(fromByteOffset: offset + 11, as: UInt16.self).bigEndian)
+    }
+}
+
+private extension Subtitle {
+    /// Whether `other` draws the same pixels in the same place, so that showing it changes nothing.
+    func showsSameImage(as other: Subtitle) -> Bool {
+        imageXOffset == other.imageXOffset && imageYOffset == other.imageYOffset
+            && imageWidth == other.imageWidth && imageHeight == other.imageHeight
+            && imagePalette == other.imagePalette && imageData == other.imageData
     }
 }
