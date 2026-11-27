@@ -45,6 +45,39 @@ func encodePTSForVobSub(from timestamp: UInt64) -> [UInt8] {
     ]
 }
 
+/// The private stream 1 substream ID of the subpictures in a generated VobSub: 0x20 plus the stream
+/// index, which is always 0 in the idx written for an MKV track.
+let vobSubSubstreamID: UInt8 = 0x20
+
+/// The program_mux_rate written in VobSub pack headers, in units of 50 bytes/s: 10.08 Mbit/s, the
+/// DVD rate.
+let vobSubProgramMuxRate: UInt32 = 25200
+
+/// Build the 14 byte MPEG-2 program stream pack header that starts each VobSub packet, with the
+/// given 33-bit system clock reference base (higher bits are dropped) and an extension of zero.
+///
+/// The bits are laid out as ISO/IEC 13818-1 2.5.3.3 requires: the pack start code, then '01',
+/// SCR[32..30], a marker bit, SCR[29..15], a marker bit, SCR[14..0], a marker bit, the 9-bit SCR
+/// extension and a marker bit; then the 22-bit program_mux_rate and two marker bits; then five
+/// reserved '1' bits and a pack_stuffing_length of zero.
+func vobSubPackHeader(systemClockReference scr: UInt64) -> [UInt8] {
+    let extensionValue: UInt64 = 0
+    let muxRate = vobSubProgramMuxRate
+    return [
+        0x00, 0x00, 0x01, 0xBA,
+        UInt8(0x44 | ((scr >> 27) & 0x38) | ((scr >> 28) & 0x03)),
+        UInt8((scr >> 20) & 0xFF),
+        UInt8(((scr >> 12) & 0xF8) | 0x04 | ((scr >> 13) & 0x03)),
+        UInt8((scr >> 5) & 0xFF),
+        UInt8(((scr << 3) & 0xF8) | 0x04 | ((extensionValue >> 7) & 0x03)),
+        UInt8(((extensionValue << 1) & 0xFE) | 0x01),
+        UInt8((muxRate >> 14) & 0xFF),
+        UInt8((muxRate >> 6) & 0xFF),
+        UInt8(((muxRate << 2) & 0xFC) | 0x03),
+        0xF8
+    ]
+}
+
 /// Write a 90 kHz timestamp the way a VobSub `.idx` spells one, `HH:MM:SS:mmm`,
 /// rounded to the nearest millisecond.
 func formatTime(_ time: UInt64) -> String {

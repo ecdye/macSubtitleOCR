@@ -355,12 +355,13 @@ class MKVTrackParser: MKVFileHandler {
         let vobSubPTS = encodePTSForVobSub(from: absolutePTS)
 
         var segmentSize = Int(blockSize - (fileHandle.offsetInFile - blockStartOffset))
-        var buffer = buildVobSubHeader(pts: vobSubPTS, segmentSize: segmentSize)
+        let packHeader = vobSubPackHeader(systemClockReference: absolutePTS)
+        var buffer = buildVobSubHeader(packHeader: packHeader, pts: vobSubPTS, segmentSize: segmentSize)
 
         buffer.append(fileHandle.readData(ofLength: min(segmentSize, 2019)))
         segmentSize -= min(segmentSize, 2019)
 
-        appendVobSubSegments(segmentSize: segmentSize, buffer: &buffer)
+        appendVobSubSegments(packHeader: packHeader, segmentSize: segmentSize, buffer: &buffer)
 
         let trackNumber = Int(blockTrackNumber)
         if trackData[trackNumber] == nil {
@@ -373,41 +374,35 @@ class MKVTrackParser: MKVFileHandler {
     }
 
     // swiftformat:disable all
-    private func buildVobSubHeader(pts: [UInt8], segmentSize: Int) -> Data {
+    private func buildVobSubHeader(packHeader: [UInt8], pts: [UInt8], segmentSize: Int) -> Data {
         // PES length includes the flags, header length, PTS and stream ID after it.
         let pesLength = withUnsafeBytes(of: UInt16(min(segmentSize, 2019) + 9).bigEndian) { Array($0) }
         var vobSubHeader = Data()
         vobSubHeader.reserveCapacity(segmentSize + 512)
-        vobSubHeader = Data([0x00, 0x00, 0x01, 0xBA,                  // PS packet start code
-                             0x00, 0x00, 0x00, 0x00, 0x00, 0x0,       // Null system clock reference
-                             0x00, 0x00, 0x00,                        // Null multiplexer rate
-                             0x00,                                    // Stuffing length
-                             0x00, 0x00, 0x01, 0xBD])                 // PES packet start code
+        vobSubHeader = Data(packHeader)                               // PS pack header
+        vobSubHeader.append(contentsOf: [0x00, 0x00, 0x01, 0xBD])     // PES packet start code
         vobSubHeader.append(contentsOf: pesLength)                    // PES packet length
         vobSubHeader.append(contentsOf: [0x81,                        // MPEG-2 PES flags, original
                                          0x80,                        // PTS DTS flag
                                          UInt8(pts.count)])           // PTS data length
         vobSubHeader.append(contentsOf: pts)                          // PTS data
-        vobSubHeader.append(contentsOf: [0x00])                       // Null stream ID
+        vobSubHeader.append(contentsOf: [vobSubSubstreamID])          // Subpicture stream ID
         return vobSubHeader
     }
 
-    private func appendVobSubSegments(segmentSize: Int, buffer: inout Data) {
+    private func appendVobSubSegments(packHeader: [UInt8], segmentSize: Int, buffer: inout Data) {
         var remainingSize = segmentSize
         while remainingSize > 0 {
             // Continuation packets have three header bytes and a stream ID.
             let nextSegmentSize = min(remainingSize, 2024) + 4
             let pesLength = withUnsafeBytes(of: UInt16(nextSegmentSize).bigEndian) { Array($0) }
-            buffer.append(contentsOf: [0x00, 0x00, 0x01, 0xBA,              // PS packet start code
-                                       0x00, 0x00, 0x00, 0x00, 0x00, 0x0,   // Null system clock reference
-                                       0x00, 0x00, 0x00,                    // Null multiplexer rate
-                                       0x00,                                // Stuffing length
-                                       0x00, 0x00, 0x01, 0xBD])             // PES packet start code
+            buffer.append(contentsOf: packHeader)                           // PS pack header
+            buffer.append(contentsOf: [0x00, 0x00, 0x01, 0xBD])             // PES packet start code
             buffer.append(contentsOf: pesLength)                            // PES packet length
             buffer.append(contentsOf: [0x81,                                // MPEG-2 PES flags, original
                                        0x00,                                // PTS DTS flag
                                        0x00])                               // PTS data length
-            buffer.append(contentsOf: [0x00])                               // Null stream ID
+            buffer.append(contentsOf: [vobSubSubstreamID])                  // Subpicture stream ID
             buffer.append(fileHandle.readData(ofLength: min(remainingSize, 2024)))
             remainingSize -= min(remainingSize, 2024)
         }
