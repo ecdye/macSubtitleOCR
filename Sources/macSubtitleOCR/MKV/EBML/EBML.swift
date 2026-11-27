@@ -17,6 +17,10 @@ enum EBML {
     static let codecPrivate: UInt32 = 0x63A2
     static let language: UInt32 = 0x22B59C
     static let languageBCP47: UInt32 = 0x22B59D
+    static let seek: UInt32 = 0x4DBB
+    static let seekHead: UInt32 = 0x114D_9B74
+    static let seekID: UInt32 = 0x53AB
+    static let seekPosition: UInt32 = 0x53AC
     static let segmentID: UInt32 = 0x1853_8067
     static let segmentInfo: UInt32 = 0x1549_A966
     static let simpleBlock: UInt32 = 0xA3

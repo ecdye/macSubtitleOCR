@@ -113,15 +113,52 @@ private func segmentInfo(timestampScale: UInt32) -> [UInt8] {
     }))
 }
 
+/// Where a SeekHead before the Tracks says the Segment Info is.
+private enum InfoSeek {
+    /// The Info element's actual position.
+    case actual
+    /// The given position, wherever Info really is.
+    case position(UInt64)
+}
+
 /// Writes an MKV with the given TrackEntry children and one Cluster at `clusterTimestamp` holding `blocks` to
-/// a temporary file. `info`, if given, is placed before the Tracks, or after them if `infoAfterTracks`.
+/// a temporary file. `info`, if given, is placed before the Tracks, after them if `infoAfterTracks`, or after
+/// the Cluster if `infoAfterCluster`. `infoSeek`, if given, adds a SeekHead before the Tracks with an entry
+/// for Info. The Cluster's size is written as unknown if `unknownSizeCluster`.
 private func syntheticMKV(entries: [[UInt8]], blocks: [[UInt8]], clusterTimestamp: UInt16 = 0,
-                          info: [UInt8] = [], infoAfterTracks: Bool = false) throws -> String {
+                          info: [UInt8] = [], infoAfterTracks: Bool = false, infoAfterCluster: Bool = false,
+                          infoSeek: InfoSeek? = nil, unknownSizeCluster: Bool = false) throws -> String {
     let header = element([0x1A, 0x45, 0xDF, 0xA3], string([0x42, 0x82], "matroska"))
     let tracks = element([0x16, 0x54, 0xAE, 0x6B], entries.flatMap { element([0xAE], $0) })
     let timestamp = withUnsafeBytes(of: clusterTimestamp.bigEndian) { Array($0) }
-    let cluster = element([0x1F, 0x43, 0xB6, 0x75], element([0xE7], timestamp), blocks.flatMap(\.self))
-    let segment = element([0x18, 0x53, 0x80, 0x67], infoAfterTracks ? tracks + info : info + tracks, cluster)
+    var cluster = element([0x1F, 0x43, 0xB6, 0x75], element([0xE7], timestamp), blocks.flatMap(\.self))
+    if unknownSizeCluster {
+        cluster.replaceSubrange(4 ..< 12, with: [0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
+    }
+
+    // A SeekHead whose one entry puts Info at `position`, written eight bytes wide so its size is fixed.
+    func seekHead(_ position: UInt64) -> [UInt8] {
+        let seekID = element([0x53, 0xAB], [0x15, 0x49, 0xA9, 0x66])
+        let seekPosition = element([0x53, 0xAC], withUnsafeBytes(of: position.bigEndian) { Array($0) })
+        return element([0x11, 0x4D, 0x9B, 0x74], element([0x4D, 0xBB], seekID, seekPosition))
+    }
+
+    func segmentData(seekHead: [UInt8]) -> (data: [UInt8], infoPosition: Int) {
+        let beforeInfo = infoAfterCluster ? seekHead + tracks + cluster :
+            infoAfterTracks ? seekHead + tracks : seekHead
+        let afterInfo = infoAfterCluster ? [] : infoAfterTracks ? cluster : tracks + cluster
+        return (beforeInfo + info + afterInfo, beforeInfo.count)
+    }
+
+    var data = segmentData(seekHead: []).data
+    if let infoSeek {
+        let infoPosition = segmentData(seekHead: seekHead(0)).infoPosition
+        switch infoSeek {
+        case .actual: data = segmentData(seekHead: seekHead(UInt64(infoPosition))).data
+        case let .position(position): data = segmentData(seekHead: seekHead(position)).data
+        }
+    }
+    let segment = element([0x18, 0x53, 0x80, 0x67], data)
     let url = URL.temporaryDirectory.appendingPathComponent("macSubtitleOCRTests-\(UUID().uuidString).mks")
     try Data(header + segment).write(to: url)
     return url.path
@@ -284,6 +321,65 @@ func mkvTimestampScale(infoAfterTracks: Bool) throws {
     #expect(parser.timestampScale == 100000)
     let track = try #require(parser.tracks.first)
     #expect(pgsPresentationTimestamps(track) == [9045])
+}
+
+/// Parses a file with one PGS block 5 ticks into a Cluster at 1000 and returns the timestamp scale and the
+/// block's PTS.
+private func timestampScaleAndPTS(info: [UInt8], infoAfterCluster: Bool = false, infoSeek: InfoSeek? = nil,
+                                  unknownSizeCluster: Bool = false) throws -> (UInt64, [UInt32]) {
+    let path = try syntheticMKV(
+        entries: [pgsTrackEntry],
+        blocks: [pgsBlock(trackNumber: 1, timestamp: 5)],
+        clusterTimestamp: 1000,
+        info: info,
+        infoAfterCluster: infoAfterCluster,
+        infoSeek: infoSeek,
+        unknownSizeCluster: unknownSizeCluster)
+    defer { try? FileManager.default.removeItem(atPath: path) }
+
+    let parser = try MKVSubtitleExtractor(filePath: path)
+    try parser.parseTracks(for: codecs)
+    let track = try #require(parser.tracks.first)
+    return (parser.timestampScale, pgsPresentationTimestamps(track))
+}
+
+@Test(.timeLimit(.minutes(1)))
+func mkvTimestampScaleAfterCluster() throws {
+    let (scale, pts) = try timestampScaleAndPTS(info: segmentInfo(timestampScale: 100000), infoAfterCluster: true)
+    #expect(scale == 100000)
+    #expect(pts == [9045])
+}
+
+@Test(.timeLimit(.minutes(1)), arguments: [false, true])
+func mkvTimestampScaleThroughSeekHead(unknownSizeCluster: Bool) throws {
+    // The SeekHead leads to Info even past a Cluster of unknown size, which cannot be skipped.
+    let (scale, pts) = try timestampScaleAndPTS(
+        info: segmentInfo(timestampScale: 100000), infoAfterCluster: true, infoSeek: .actual,
+        unknownSizeCluster: unknownSizeCluster)
+    #expect(scale == 100000)
+    #expect(pts == [9045])
+}
+
+@Test(.timeLimit(.minutes(1)), arguments: [UInt64(1) << 40, .max, 0])
+func mkvSeekHeadWithBadInfoPosition(position: UInt64) throws {
+    // With no Info anywhere, a SeekHead pointing past the end or at another element leaves the default.
+    let (scale, pts) = try timestampScaleAndPTS(info: [], infoSeek: .position(position))
+    #expect(scale == 1000000)
+    #expect(pts == [1005 * 90])
+
+    // With Info after the Cluster, it is still found by skipping past the Cluster.
+    let (foundScale, _) = try timestampScaleAndPTS(
+        info: segmentInfo(timestampScale: 100000), infoAfterCluster: true, infoSeek: .position(position))
+    #expect(foundScale == 100000)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func mkvUnknownSizeClusterBeforeInfo() throws {
+    // An unknown-size Cluster cannot be skipped, so Info after it is not found.
+    let (scale, pts) = try timestampScaleAndPTS(
+        info: segmentInfo(timestampScale: 100000), infoAfterCluster: true, unknownSizeCluster: true)
+    #expect(scale == 1000000)
+    #expect(pts == [1005 * 90])
 }
 
 @Test

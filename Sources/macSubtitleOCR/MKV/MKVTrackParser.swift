@@ -73,7 +73,8 @@ class MKVTrackParser: MKVFileHandler {
         let segmentEndOffset = segmentDataOffset + segmentSize
         logger.debug("Found Segment, Size: \(segmentSize), End Offset: \(segmentEndOffset)")
 
-        timestampScale = readTimestampScale() ?? defaultTimestampScale
+        timestampScale = readTimestampScale(segmentDataOffset: segmentDataOffset, segmentEndOffset: segmentEndOffset)
+            ?? defaultTimestampScale
         // swiftformat:disable:next redundantSelf
         logger.debug("Timestamp scale: \(self.timestampScale) ns")
         fileHandle.seek(toFileOffset: segmentDataOffset)
@@ -167,17 +168,102 @@ class MKVTrackParser: MKVFileHandler {
         return nil
     }
 
-    /// Reads TimestampScale from the Segment Info that comes before the first Cluster, or returns `nil` if
-    /// there is none or it is zero. Leaves the file offset wherever the search stopped.
-    private func readTimestampScale() -> UInt64? {
-        guard let (infoSize, _) = findElement(withID: EBML.segmentInfo) as? (UInt64, UInt32) else { return nil }
-        let endOfInfoOffset = fileHandle.offsetInFile + infoSize
+    /// Reads TimestampScale from the Segment Info, or returns `nil` if there is none or it is zero. Leaves
+    /// the file offset at the start of the Segment data.
+    ///
+    /// Info usually comes before the first Cluster, but may be anywhere in the Segment. Past the first
+    /// Cluster, the Info entry of a SeekHead found before it is followed if there is one; otherwise, or if it
+    /// does not lead to Info, the top-level elements are skipped one by one by their sizes until Info is
+    /// found. A Cluster of unknown size cannot be skipped, so the search stops there.
+    private func readTimestampScale(segmentDataOffset: UInt64, segmentEndOffset: UInt64) -> UInt64? {
+        defer { fileHandle.seek(toFileOffset: segmentDataOffset) }
+        let endOffset = min(segmentEndOffset, endOfFile)
+        var infoSeekPosition: UInt64?
+        var passedCluster = false
+
+        fileHandle.seek(toFileOffset: segmentDataOffset)
+        while fileHandle.offsetInFile < endOffset, let (elementID, elementSize) = ebmlParser.readEBMLElement() {
+            let dataOffset = fileHandle.offsetInFile
+            switch elementID {
+            case EBML.segmentInfo:
+                let endOfInfoOffset = min(dataOffset + (elementSize ?? endOffset), endOffset)
+                return readTimestampScale(until: endOfInfoOffset)
+            case EBML.seekHead where !passedCluster && infoSeekPosition == nil:
+                if let elementSize {
+                    infoSeekPosition = readInfoSeekPosition(until: min(dataOffset + elementSize, endOffset))
+                }
+            case EBML.cluster where !passedCluster:
+                passedCluster = true
+                if let infoSeekPosition,
+                   let scale = readTimestampScale(atSeekPosition: infoSeekPosition,
+                                                  segmentDataOffset: segmentDataOffset, endOffset: endOffset) {
+                    return scale
+                }
+            default:
+                break
+            }
+            guard let elementSize else {
+                logger.debug("Element \(elementID.hex()) of unknown size before Segment Info, using default scale")
+                return nil
+            }
+            fileHandle.seek(toFileOffset: dataOffset + elementSize)
+        }
+        return nil
+    }
+
+    /// Reads TimestampScale from the Info element that a SeekHead places at `seekPosition` bytes into the
+    /// Segment data, or returns `nil` if there is no Info element there.
+    private func readTimestampScale(atSeekPosition seekPosition: UInt64, segmentDataOffset: UInt64,
+                                    endOffset: UInt64) -> UInt64? {
+        let (infoOffset, overflow) = segmentDataOffset.addingReportingOverflow(seekPosition)
+        guard !overflow, infoOffset < endOffset else {
+            logger.debug("SeekHead Info position \(seekPosition) is past the end of the Segment")
+            return nil
+        }
+        fileHandle.seek(toFileOffset: infoOffset)
+        guard let (elementID, elementSize) = ebmlParser.readEBMLElement(), elementID == EBML.segmentInfo else {
+            logger.debug("SeekHead Info position \(seekPosition) does not hold Segment Info")
+            return nil
+        }
+        let dataOffset = fileHandle.offsetInFile
+        return readTimestampScale(until: min(dataOffset + (elementSize ?? endOffset), endOffset))
+    }
+
+    /// Reads the children of a Segment Info element up to `endOfInfoOffset` and returns its TimestampScale,
+    /// or `nil` if there is none or it is zero.
+    private func readTimestampScale(until endOfInfoOffset: UInt64) -> UInt64? {
         while fileHandle.offsetInFile < endOfInfoOffset, let (elementID, elementSize) = tryParseElement() {
             let endOfElementOffset = fileHandle.offsetInFile + elementSize
             if elementID == EBML.timestampScale {
                 return readUnsignedInteger(ofSize: elementSize).flatMap { $0 > 0 ? $0 : nil }
             }
             fileHandle.seek(toFileOffset: endOfElementOffset)
+        }
+        return nil
+    }
+
+    /// Reads the Seek entries of a SeekHead up to `endOfSeekHeadOffset` and returns the SeekPosition of the
+    /// one for the Segment Info, or `nil` if there is none.
+    private func readInfoSeekPosition(until endOfSeekHeadOffset: UInt64) -> UInt64? {
+        while fileHandle.offsetInFile < endOfSeekHeadOffset, let (elementID, elementSize) = tryParseElement() {
+            let endOfSeekOffset = min(fileHandle.offsetInFile + elementSize, endOfSeekHeadOffset)
+            if elementID == EBML.seek {
+                var seekID: UInt64?
+                var seekPosition: UInt64?
+                while fileHandle.offsetInFile < endOfSeekOffset, let (childID, childSize) = tryParseElement() {
+                    let endOfChildOffset = fileHandle.offsetInFile + childSize
+                    if childID == EBML.seekID {
+                        seekID = readUnsignedInteger(ofSize: childSize)
+                    } else if childID == EBML.seekPosition {
+                        seekPosition = readUnsignedInteger(ofSize: childSize)
+                    }
+                    fileHandle.seek(toFileOffset: endOfChildOffset)
+                }
+                if seekID == UInt64(EBML.segmentInfo), let seekPosition {
+                    return seekPosition
+                }
+            }
+            fileHandle.seek(toFileOffset: endOfSeekOffset)
         }
         return nil
     }
