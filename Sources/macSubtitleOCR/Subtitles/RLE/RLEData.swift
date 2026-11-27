@@ -123,57 +123,67 @@ struct RLEData {
         guard !overflow else {
             throw macSubtitleOCRError.invalidRLE("VobSub image dimensions overflow.")
         }
-        let bytes = Array(data)
-        var image = [UInt8](repeating: 0, count: pixelCount)
+        let width = width
+        let height = height
+        let evenOffset = evenOffset
+        let oddOffset = oddOffset
+        var image = Data(count: pixelCount)
 
-        // DVD subpictures encode alternating rows in two independently byte-aligned
-        // fields. Their offsets are authoritative: padding between fields is not
-        // pixel data, and an odd-height image has one extra row in its first field.
-        for field in 0 ..< min(2, height) {
-            guard let offset = field == 0 ? evenOffset : oddOffset,
-                  offset >= 0, offset < bytes.count
-            else {
-                throw macSubtitleOCRError.invalidRLE("Invalid VobSub field offset.")
-            }
-            var position = offset * 2
-            func readNibble() throws -> Int {
-                guard position / 2 < bytes.count else {
-                    throw macSubtitleOCRError.invalidRLE("Insufficient VobSub RLE data.")
-                }
-                let byte = bytes[position / 2]
-                let value = position % 2 == 0 ? byte >> 4 : byte & 0x0F
-                position += 1
-                return Int(value)
-            }
-
-            for y in stride(from: field, to: height, by: 2) {
-                var x = 0
-                while x < width {
-                    var code = try readNibble()
-                    if code < 0x04 {
-                        code = try (code << 4) | readNibble()
-                        if code < 0x10 {
-                            code = try (code << 4) | readNibble()
-                            if code < 0x40 {
-                                code = try (code << 4) | readNibble()
-                            }
+        try image.withUnsafeMutableBytes { (output: UnsafeMutableRawBufferPointer) in
+            guard let pixels = output.baseAddress else { return }
+            try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+                // DVD subpictures encode alternating rows in two independently byte-aligned
+                // fields. Their offsets are authoritative: padding between fields is not
+                // pixel data, and an odd-height image has one extra row in its first field.
+                for field in 0 ..< min(2, height) {
+                    guard let offset = field == 0 ? evenOffset : oddOffset,
+                          offset >= 0, offset < bytes.count
+                    else {
+                        throw macSubtitleOCRError.invalidRLE("Invalid VobSub field offset.")
+                    }
+                    var position = offset * 2
+                    func readNibble() throws -> Int {
+                        guard position / 2 < bytes.count else {
+                            throw macSubtitleOCRError.invalidRLE("Insufficient VobSub RLE data.")
                         }
+                        let byte = bytes[position / 2]
+                        let value = position % 2 == 0 ? byte >> 4 : byte & 0x0F
+                        position += 1
+                        return Int(value)
                     }
-                    let color = UInt8(code & 0x03)
-                    let run = code < 4 ? width - x : code >> 2
-                    guard run <= width - x else {
-                        throw macSubtitleOCRError.invalidRLE("VobSub run exceeds the row width.")
+
+                    for y in stride(from: field, to: height, by: 2) {
+                        var x = 0
+                        while x < width {
+                            var code = try readNibble()
+                            if code < 0x04 {
+                                code = try (code << 4) | readNibble()
+                                if code < 0x10 {
+                                    code = try (code << 4) | readNibble()
+                                    if code < 0x40 {
+                                        code = try (code << 4) | readNibble()
+                                    }
+                                }
+                            }
+                            let color = code & 0x03
+                            let run = code < 4 ? width - x : code >> 2
+                            guard run <= width - x else {
+                                throw macSubtitleOCRError.invalidRLE("VobSub run exceeds the row width.")
+                            }
+                            // The image starts zeroed, so runs of index 0, most of any subpicture, need
+                            // no write, and the others are filled whole rather than pixel by pixel.
+                            if color != 0 {
+                                memset(pixels + y * width + x, Int32(color), run)
+                            }
+                            x += run
+                        }
+                        // A row always starts on a byte boundary, even when its last run
+                        // used only the high nibble of a byte.
+                        position = (position + 1) & ~1
                     }
-                    for column in x ..< x + run {
-                        image[y * width + column] = color
-                    }
-                    x += run
                 }
-                // A row always starts on a byte boundary, even when its last run
-                // used only the high nibble of a byte.
-                position = (position + 1) & ~1
             }
         }
-        return Data(image)
+        return image
     }
 }
