@@ -49,14 +49,20 @@ struct VobSub {
             } else {
                 UInt64(buffer.count)
             }
-            let subtitle = try VobSubParser(
-                index: index + 1,
-                buffer: buffer,
-                timestamp: timestamp,
-                offset: offset,
-                nextOffset: nextOffset,
-                idxPalette: idx.palette).subtitle
-            subtitles.append(subtitle)
+            do {
+                let subtitle = try VobSubParser(
+                    index: index + 1,
+                    buffer: buffer,
+                    timestamp: timestamp,
+                    offset: offset,
+                    nextOffset: nextOffset,
+                    idxPalette: idx.palette).subtitle
+                subtitles.append(subtitle)
+            } catch let macSubtitleOCRError.invalidVobSubSubpicture(reason) {
+                // Keep an empty subtitle in its place so the numbering and timing of the rest stay intact.
+                print("Skipping VobSub subtitle \(index + 1): \(reason)", to: &stderr)
+                subtitles.append(Subtitle(index: index + 1, startTimestamp: timestamp))
+            }
         }
     }
 }
