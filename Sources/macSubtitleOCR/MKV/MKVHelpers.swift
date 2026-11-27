@@ -34,14 +34,16 @@ func encodePTSForVobSub(from timestamp: UInt64) -> [UInt8] {
     return buffer
 }
 
+/// Write a 90 kHz timestamp the way a VobSub `.idx` spells one, `HH:MM:SS:mmm`,
+/// rounded to the nearest millisecond.
 func formatTime(_ time: UInt64) -> String {
-    let time = TimeInterval(time) / 90000
-    let hours = Int(time) / 3600
-    let minutes = (Int(time) % 3600) / 60
-    let seconds = Int(time) % 60
-    let milliseconds = Int((time - TimeInterval(Int(time))) * 1000)
+    let total = (time + 45) / 90
+    let hours = total / 3600000
+    let minutes = total / 60000 % 60
+    let seconds = total / 1000 % 60
+    let milliseconds = total % 1000
 
-    return String(format: "%02d:%02d:%02d:%03d", hours, minutes, seconds, milliseconds)
+    return String(format: "%02llu:%02llu:%02llu:%03llu", hours, minutes, seconds, milliseconds)
 }
 
 /// Calculate the absolute timestamp with 90 kHz accuracy
