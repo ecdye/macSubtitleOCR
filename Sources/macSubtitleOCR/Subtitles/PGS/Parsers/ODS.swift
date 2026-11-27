@@ -28,9 +28,12 @@ struct ODS {
     }
 
     /// A segment must carry a full header and lie entirely inside the buffer, otherwise `parseODS`
-    /// reads past the end of the stream.
+    /// reads past the end of the stream. The first fragment of an object has an 11 byte header, any
+    /// other fragment a 4 byte one.
     private static func validate(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
-        guard segmentLength > 11, offset >= 0, offset + segmentLength <= buffer.count else {
+        guard segmentLength >= 4, offset >= 0, offset + segmentLength <= buffer.count,
+              buffer[offset + 3] & 0x80 == 0 || segmentLength >= 11
+        else {
             throw macSubtitleOCRError.invalidODSDataLength(length: segmentLength)
         }
     }
@@ -49,22 +52,24 @@ struct ODS {
     //   2 bytes: Object ID (unused by us)
     //   1 byte: Version number (unused by us)
     //   1 byte: Sequence flag (0x80: First in sequence, 0x40: Last in sequence,
-    //                          0xC0: First and last in sequence (0x40 | 0x80))
-    //   3 bytes: Object data length (unused by us)
-    //   2 bytes: Object width
-    //   2 bytes: Object height
+    //                          0xC0: First and last in sequence (0x40 | 0x80),
+    //                          0x00: Neither, a middle fragment)
+    //   Only in a fragment with the first in sequence bit (0x80) set:
+    //     3 bytes: Object data length (unused by us)
+    //     2 bytes: Object width
+    //     2 bytes: Object height
     //   Rest: Image data (run-length encoded, RLE)
     private mutating func parseODS(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {
-        let sequenceFlag = buffer[offset + 3]
+        let isFirstInSequence = buffer[offset + 3] & 0x80 != 0
 
-        // Only update object dimensions if this is the first part of the sequence
-        if sequenceFlag != 0x40 {
+        // Only the first fragment of an object carries its dimensions
+        if isFirstInSequence {
             objectWidth = Int(buffer.loadUnaligned(fromByteOffset: offset + 7, as: UInt16.self).bigEndian)
             objectHeight = Int(buffer.loadUnaligned(fromByteOffset: offset + 9, as: UInt16.self).bigEndian)
         }
 
         // Append image data to the encoded image data buffer
-        let dataOffset = sequenceFlag == 0x40 ? offset + 4 : offset + 11
+        let dataOffset = isFirstInSequence ? offset + 11 : offset + 4
         encodedImageData.append(contentsOf: buffer[dataOffset ..< (offset + segmentLength)])
     }
 }

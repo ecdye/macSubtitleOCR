@@ -123,3 +123,74 @@ private let stream: [UInt8] =
     #expect(subtitle.imageData == Data([1, 1, 1, 1]))
     #expect(subtitle.imagePalette?[7] == 255)
 }
+
+// Issue #77: a middle fragment of an object (sequence flag 0x00) was read like a first fragment. Its
+// first RLE bytes were taken as the object's width and height, and 7 bytes of RLE were dropped.
+
+/// The run-length encoded rows of a `width` by `height` object striped in colors 1 and 2, so that
+/// any byte lost or misplaced changes the decoded image.
+private func stripedRLE(width: Int, height: Int) -> [UInt8] {
+    var rle: [UInt8] = []
+    for y in 0 ..< height {
+        rle += (0 ..< width).map { UInt8(($0 + y) % 2 + 1) } + [0x00, 0x00]
+    }
+    return rle
+}
+
+/// A striped object split into fragments, cutting its RLE data at each of `cuts`. With no cuts it
+/// is a single segment.
+private func fragmentedObject(at seconds: Int, id: Int, width: Int, height: Int, cuts: [Int]) -> [UInt8] {
+    let rle = stripedRLE(width: width, height: height)
+    let bounds = [0] + cuts + [rle.count]
+    var segments: [UInt8] = []
+    for index in 0 ..< bounds.count - 1 {
+        let isFirst = index == 0
+        let isLast = index == bounds.count - 2
+        let flag: UInt8 = (isFirst ? 0x80 : 0x00) | (isLast ? 0x40 : 0x00)
+        var payload = bigEndian(id) + [0x00, flag]
+        if isFirst {
+            payload += bigEndian(rle.count + 4, bytes: 3) + bigEndian(width) + bigEndian(height)
+        }
+        payload += rle[bounds[index] ..< bounds[index + 1]]
+        segments += segment(0x15, at: seconds, payload)
+    }
+    return segments
+}
+
+/// One striped object, split at `cuts`, followed by a single caption and a clear.
+private func fragmentedStream(cuts: [Int]) -> [UInt8] {
+    presentation(at: 1, objects: [(id: 0, x: 100, y: 50)]) + window(at: 1) + palette(at: 1)
+        + fragmentedObject(at: 1, id: 0, width: 16, height: 4, cuts: cuts) + end(at: 1)
+        + presentation(at: 2, objects: [(id: 0, x: 10, y: 20)]) + window(at: 2) + palette(at: 2)
+        + object(at: 2, id: 0, width: 4, height: 1, color: 1) + end(at: 2)
+        + presentation(at: 3, objects: []) + window(at: 3) + end(at: 3)
+}
+
+@Test(arguments: [[20, 45], [15, 30, 50]])
+func displaySetWithFragmentedObjectMatchesWholeObject(cuts: [Int]) throws {
+    let whole = try Data(fragmentedStream(cuts: [])).withUnsafeBytes { try PGS($0) }
+    let split = try Data(fragmentedStream(cuts: cuts)).withUnsafeBytes { try PGS($0) }
+    let expected = try #require(whole.subtitles.first)
+    #expect(expected.imageWidth == 16)
+    #expect(expected.imageHeight == 4)
+    let expectedData = try #require(expected.imageData)
+    #expect(expectedData.count == 64)
+    #expect(expectedData.prefix(4) == Data([1, 2, 1, 2]))
+
+    #expect(split.subtitles.count == 2)
+    let subtitle = try #require(split.subtitles.first)
+    #expect(subtitle.startTimestamp == 1)
+    #expect(subtitle.endTimestamp == 2)
+    #expect(subtitle.imageWidth == 16)
+    #expect(subtitle.imageHeight == 4)
+    #expect(subtitle.imageData == expectedData)
+    #expect(subtitle.imagePalette == expected.imagePalette)
+
+    let following = try #require(split.subtitles.dropFirst().first)
+    #expect(following.index == 2)
+    #expect(following.startTimestamp == 2)
+    #expect(following.endTimestamp == 3)
+    #expect(following.imageWidth == 4)
+    #expect(following.imageHeight == 1)
+    #expect(following.imageData == Data([1, 1, 1, 1]))
+}
