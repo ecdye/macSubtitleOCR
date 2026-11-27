@@ -7,5 +7,6 @@
 Tests/Resources/*
 !Tests/Resources/sintel*.*
 !Tests/Resources/ocr-samples.json
+!Tests/Resources/decoder-baseline.json
 !Tests/Resources/README.md
 Session.vim
