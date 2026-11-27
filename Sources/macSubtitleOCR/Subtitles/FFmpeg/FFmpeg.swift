@@ -33,19 +33,28 @@ struct FFmpeg {
             throw macSubtitleOCRError.ffmpegError("FFmpeg failed to find stream info")
         }
 
-        // Iterate over all streams and find subtitle tracks
+        // Open a decoder for each bitmap subtitle stream and have the demuxer drop every other stream's
+        // packets, so it does not read video and audio data, or decode text subtitles, for nothing.
         var streamsToProcess = [Int: FFStream]()
         for i in 0 ..< Int(fmtCtx!.pointee.nb_streams) {
-            let stream = fmtCtx!.pointee.streams[i]!.pointee
-            if stream.codecpar.pointee.codec_type == AVMEDIA_TYPE_SUBTITLE {
-                let codecParameters = stream.codecpar
-                let timeBase = stream.time_base
-                let ffStream = FFStream(codecParameters: codecParameters, timeBase: timeBase)
-                streamsToProcess[i] = ffStream
+            let stream = fmtCtx!.pointee.streams[i]!
+            let codecParameters = stream.pointee.codecpar!
+            guard FFStream.isBitmapSubtitle(codecParameters) else {
+                stream.pointee.discard = AVDISCARD_ALL
+                continue
+            }
+            do {
+                streamsToProcess[i] = try FFStream(codecParameters: codecParameters,
+                                                   timeBase: stream.pointee.time_base)
+            } catch {
+                print("Warning: skipping subtitle stream \(i): \(error)", to: &stderr)
+                stream.pointee.discard = AVDISCARD_ALL
             }
         }
 
-        processSubtitleTracks(fmtCtx: fmtCtx, streams: streamsToProcess)
+        if !streamsToProcess.isEmpty {
+            processSubtitleTracks(fmtCtx: fmtCtx, streams: streamsToProcess)
+        }
     }
 
     // MARK: - Methods
@@ -55,7 +64,6 @@ struct FFmpeg {
         // Allocate packet
         var packet = av_packet_alloc()
         defer { av_packet_free(&packet) }
-        var subtitle = AVSubtitle()
         var frames = [Int: [DecodedSubtitleFrame]]()
 
         // Read frames for the specific subtitle stream
@@ -66,34 +74,19 @@ struct FFmpeg {
                 continue // Skip if stream is not a subtitle stream
             }
             logger.debug("Got packet for stream \(streamNumber)")
-
-            // Decode subtitle packet
-            var gotSubtitle: Int32 = 0
-            guard avcodec_decode_subtitle2(stream.codecContext, &subtitle, &gotSubtitle, packet) >= 0 else {
-                logger.warning("Failed to decode subtitle for stream \(streamNumber), skipping...")
-                continue
+            if let frame = decode(packet!, stream: stream, streamNumber: streamNumber) {
+                frames[streamNumber, default: []].append(frame)
             }
-            guard gotSubtitle != 0 else { continue }
-            defer { avsubtitle_free(&subtitle) }
+            stream.lastPacketPTS = packet!.pointee.pts
+        }
 
-            // The decoder rescales the packet's timestamp to AV_TIME_BASE; the packet's own is the fallback.
-            let presentationTime = subtitle.pts != Int64.min
-                ? convertToTimeInterval(subtitle.pts, timeBase: AVRational(num: 1, den: AV_TIME_BASE))
-                : convertToTimeInterval(packet!.pointee.pts, timeBase: stream.timeBase)
-
-            // A frame with no rects is kept: it is what takes the caption before it off the screen.
-            var rects: [DecodedSubtitleFrame.Rect] = []
-            for i in 0 ..< Int(subtitle.num_rects) {
-                if let rect = extractRect(subtitle.rects[i]!) {
-                    rects.append(rect)
-                }
+        // Drain decoders that hold subtitles back. FFmpeg only passes the empty packet on to decoders
+        // with AV_CODEC_CAP_DELAY, so for the others this returns nothing.
+        av_packet_unref(packet)
+        for (streamNumber, stream) in streams {
+            while let frame = decode(packet!, stream: stream, streamNumber: streamNumber) {
+                frames[streamNumber, default: []].append(frame)
             }
-            let frame = DecodedSubtitleFrame(presentationTime: presentationTime,
-                                             startDisplayTime: subtitle.start_display_time,
-                                             endDisplayTime: subtitle.end_display_time,
-                                             rects: rects)
-            logger.debug("Track \(streamNumber) - \(presentationTime): \(rects.count) rects")
-            frames[streamNumber, default: []].append(frame)
         }
 
         for (streamNumber, streamFrames) in frames {
@@ -102,6 +95,40 @@ struct FFmpeg {
                 subtitleTracks[streamNumber] = subtitles
             }
         }
+    }
+
+    /// Decodes one packet of `stream`, or flushes the decoder if the packet is empty, returning the
+    /// subtitle it puts out, if any.
+    private func decode(_ packet: UnsafeMutablePointer<AVPacket>, stream: FFStream,
+                        streamNumber: Int) -> DecodedSubtitleFrame? {
+        var subtitle = AVSubtitle()
+        var gotSubtitle: Int32 = 0
+        guard avcodec_decode_subtitle2(stream.codecContext, &subtitle, &gotSubtitle, packet) >= 0 else {
+            logger.warning("Failed to decode subtitle for stream \(streamNumber), skipping...")
+            return nil
+        }
+        guard gotSubtitle != 0 else { return nil }
+        defer { avsubtitle_free(&subtitle) }
+
+        // The decoder rescales the packet's timestamp to AV_TIME_BASE; the packet's own is the fallback,
+        // or the last packet's for the empty one that flushes the decoder.
+        let packetPTS = packet.pointee.data == nil ? stream.lastPacketPTS : packet.pointee.pts
+        let presentationTime = subtitle.pts != Int64.min
+            ? convertToTimeInterval(subtitle.pts, timeBase: AVRational(num: 1, den: AV_TIME_BASE))
+            : convertToTimeInterval(packetPTS, timeBase: stream.timeBase)
+
+        // A frame with no rects is kept: it is what takes the caption before it off the screen.
+        var rects: [DecodedSubtitleFrame.Rect] = []
+        for i in 0 ..< Int(subtitle.num_rects) {
+            if let rect = extractRect(subtitle.rects[i]!) {
+                rects.append(rect)
+            }
+        }
+        logger.debug("Track \(streamNumber) - \(presentationTime): \(rects.count) rects")
+        return DecodedSubtitleFrame(presentationTime: presentationTime,
+                                    startDisplayTime: subtitle.start_display_time,
+                                    endDisplayTime: subtitle.end_display_time,
+                                    rects: rects)
     }
 
     private func extractRect(_ rect: UnsafeMutablePointer<AVSubtitleRect>) -> DecodedSubtitleFrame.Rect? {
