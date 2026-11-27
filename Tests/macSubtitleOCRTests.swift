@@ -128,7 +128,7 @@ private func pgsSegment(type: UInt8, payload: [UInt8]) -> [UInt8] {
     return segment + payload
 }
 
-/// An object claiming to be larger than the video it is composited onto must be rejected, because
+/// An object claiming to be larger than the video it is composited onto must be left out, because
 /// decoding it would reserve a buffer of `objectWidth * objectHeight`.
 @Test func oversizedObjectIsRejected() throws {
     // Presentation composition segment declaring a 1920x1080 video.
@@ -142,12 +142,9 @@ private func pgsSegment(type: UInt8, payload: [UInt8]) -> [UInt8] {
 
     let stream = Data(presentation + palette + object + pgsSegment(type: 0x80, payload: []))
 
-    do {
-        _ = try stream.withUnsafeBytes { try PGS($0) }
-        Issue.record("Expected the oversized object to be rejected")
-    } catch macSubtitleOCRError.invalidODSDimensions {
-        // Expected: rejected on its dimensions, before anything is decoded for it.
-    }
+    // Left out on its dimensions, before anything is decoded for it, without aborting the stream.
+    let pgs = try stream.withUnsafeBytes { try PGS($0) }
+    #expect(pgs.subtitles.isEmpty)
 }
 
 /// A decoded subtitle frame paired with the text it should OCR to.

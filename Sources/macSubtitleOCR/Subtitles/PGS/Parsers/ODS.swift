@@ -15,6 +15,11 @@ struct ODS {
     private(set) var objectHeight: Int = 0
     private var encodedImageData: Data = .init()
 
+    /// The number of bytes of run-length encoded image data read so far.
+    var encodedDataLength: Int {
+        encodedImageData.count
+    }
+
     // MARK: - Lifecycle
 
     init(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int) throws {

@@ -173,24 +173,41 @@ struct PGS {
         }
 
         guard let pds, !objects.isEmpty else { return nil }
-        for object in objects {
-            try checkObjectDimensions(of: object.ods)
-        }
-        return try makeSubtitle(objects, compositionObjects, pds, startTimestamp)
+        let validObjects = objects.filter { checkObjectDimensions(of: $0.ods) }
+        guard !validObjects.isEmpty else { return nil }
+        return try makeSubtitle(validObjects, compositionObjects, pds, startTimestamp)
     }
 
-    /// Rejects an object that is too large to belong to the video it is composited onto.
+    /// The largest video, and so the largest object, accepted in either dimension. Blu-ray PGS is at
+    /// most 1920x1080 and UHD Blu-ray 3840x2160, so this leaves room without letting the 16 bit fields
+    /// ask for a bitmap of gigabytes.
+    static let maximumVideoDimension = 4096
+
+    /// Whether an object can be decoded: it must fit both the video it is composited onto and the PGS
+    /// size limit, and its RLE data must be long enough to describe its lines.
     ///
-    /// Decoding fills a buffer of `objectWidth * objectHeight`, both of which are 16 bit fields, so an
-    /// object claiming dimensions the video cannot hold would reserve far more memory than the stream
-    /// could ever describe. Empty objects are left to the placeholder path that already handles them.
-    private func checkObjectDimensions(of ods: ODS) throws {
-        guard videoWidth > 0, videoHeight > 0 else { return }
-        guard ods.objectWidth <= videoWidth, ods.objectHeight <= videoHeight else {
-            throw macSubtitleOCRError.invalidODSDimensions(
-                "Object of \(ods.objectWidth)x\(ods.objectHeight) does not fit the " +
-                    "\(videoWidth)x\(videoHeight) video")
+    /// Decoding fills a buffer of `objectWidth * objectHeight`, both of which are 16 bit fields, and the
+    /// same stream declares the video size, so neither alone bounds the memory a stream can ask for.
+    /// Every line of a PGS bitmap ends with a 2 byte end-of-line code, so data shorter than twice the
+    /// height cannot describe the object. An object that fails is left out of its display set with a
+    /// warning, and a display set left with no objects shows nothing. Empty objects are left to the
+    /// placeholder path that already handles them.
+    private func checkObjectDimensions(of ods: ODS) -> Bool {
+        let limit = PGS.maximumVideoDimension
+        var problem: String?
+        if videoWidth > limit || videoHeight > limit {
+            problem = "the \(videoWidth)x\(videoHeight) video exceeds the \(limit)x\(limit) limit"
+        } else if ods.objectWidth > limit || ods.objectHeight > limit {
+            problem = "it exceeds the \(limit)x\(limit) limit"
+        } else if videoWidth > 0, videoHeight > 0,
+                  ods.objectWidth > videoWidth || ods.objectHeight > videoHeight {
+            problem = "it does not fit the \(videoWidth)x\(videoHeight) video"
+        } else if ods.objectWidth > 0, ods.objectHeight > 0, ods.encodedDataLength < 2 * ods.objectHeight {
+            problem = "its \(ods.encodedDataLength) bytes of RLE data cannot describe \(ods.objectHeight) lines"
         }
+        guard let problem else { return true }
+        print("Skipping \(ods.objectWidth)x\(ods.objectHeight) PGS object: \(problem)", to: &stderr)
+        return false
     }
 
     /// Builds the subtitle for a display set from its complete objects.
