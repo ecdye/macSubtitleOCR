@@ -300,41 +300,54 @@ class MKVTrackParser: MKVFileHandler {
 
     private func parseBlocks(until clusterEndOffset: UInt64, for tracks: [Int: String], with clusterTimestamp: UInt64,
                              into trackData: inout [Int: Data]) {
+        // A Block must end within its Cluster, which may itself be cut short by the end of the file.
+        let endOffset = min(clusterEndOffset, endOfFile)
         while fileHandle.offsetInFile < clusterEndOffset {
             // swiftformat:disable:next redundantSelf
             logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")
 
             guard let (blockSize, blockStartOffset) = findBlockTypeAndSize() else { break }
 
-            guard let (blockTrackNumber, blockTimestamp) = readTrackNumber(from: fileHandle) as? (UInt64, Int16)
-            else { continue }
-
-            if tracks[Int(blockTrackNumber)] == "S_HDMV/PGS" {
-                handlePGSBlock(for: blockTrackNumber,
-                               with: blockTimestamp, blockSize, clusterTimestamp, blockStartOffset, &trackData)
-            } else if tracks[Int(blockTrackNumber)] == "S_VOBSUB" {
-                handleVobSubBlock(for: blockTrackNumber,
-                                  with: blockTimestamp, blockSize, clusterTimestamp, blockStartOffset, &trackData)
-            } else {
-                // Skip this block because it's for a different track
-                fileHandle.seek(toFileOffset: blockStartOffset + blockSize)
+            let (blockEndOffset, overflow) = blockStartOffset.addingReportingOverflow(blockSize)
+            guard !overflow, blockEndOffset <= endOffset else {
+                logger.debug("Block at \(blockStartOffset) of size \(blockSize) runs past its Cluster, skipping")
+                fileHandle.seek(toFileOffset: max(endOffset, blockStartOffset))
+                continue
             }
+
+            // The header of track number, timestamp and flags must fit in the block, or the block is skipped.
+            guard let (blockTrackNumber, blockTimestamp) = readTrackNumber(from: fileHandle),
+                  fileHandle.offsetInFile <= blockEndOffset,
+                  let payloadSize = Int(exactly: blockEndOffset - fileHandle.offsetInFile)
+            else {
+                logger.debug("Block at \(blockStartOffset) of size \(blockSize) is too short for its header, skipping")
+                fileHandle.seek(toFileOffset: blockEndOffset)
+                continue
+            }
+
+            if tracks[blockTrackNumber] == "S_HDMV/PGS" {
+                handlePGSBlock(for: blockTrackNumber, with: blockTimestamp, payloadSize, clusterTimestamp, &trackData)
+            } else if tracks[blockTrackNumber] == "S_VOBSUB" {
+                handleVobSubBlock(for: blockTrackNumber, with: blockTimestamp, payloadSize, clusterTimestamp, &trackData)
+            }
+            // Skip the rest of the block, all of it if it is for a different track.
+            fileHandle.seek(toFileOffset: blockEndOffset)
         }
     }
 
-    private func handlePGSBlock(for blockTrackNumber: UInt64, with blockTimestamp: Int16, _ blockSize: UInt64,
-                                _ clusterTimestamp: UInt64, _ blockStartOffset: UInt64, _ trackData: inout [Int: Data]) {
+    private func handlePGSBlock(for trackNumber: Int, with blockTimestamp: Int16, _ payloadSize: Int,
+                                _ clusterTimestamp: UInt64, _ trackData: inout [Int: Data]) {
         let absPTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp, timestampScale: timestampScale)
         let pgsPTS = encodePTSForPGS(absPTS)
         let pgsHeader = Data([0x50, 0x47] + pgsPTS + [0x00, 0x00, 0x00, 0x00])
 
+        let raw = fileHandle.readData(ofLength: payloadSize)
         var blockData = Data()
-        blockData.reserveCapacity(Int(blockSize))
-        let raw = fileHandle.readData(ofLength: Int(blockSize - (fileHandle.offsetInFile - blockStartOffset)))
+        blockData.reserveCapacity(raw.count)
 
         var offset = 0
-        while (offset + 3) <= raw.count {
-            let segmentSize = min(Int(raw.getUInt16BE(at: offset + 1)! + 3), raw.count - offset)
+        while (offset + 3) <= raw.count, let declaredSize = raw.getUInt16BE(at: offset + 1) {
+            let segmentSize = min(Int(declaredSize) + 3, raw.count - offset)
             logger.debug("Segment size \(segmentSize) at \(offset) type \(raw[offset].hex())")
 
             blockData.append(pgsHeader)
@@ -342,19 +355,15 @@ class MKVTrackParser: MKVFileHandler {
             offset += segmentSize
         }
 
-        let trackNumber = Int(blockTrackNumber)
-        if trackData[trackNumber] == nil {
-            trackData[trackNumber] = Data()
-        }
-        trackData[trackNumber]?.append(blockData)
+        trackData[trackNumber, default: Data()].append(blockData)
     }
 
-    private func handleVobSubBlock(for blockTrackNumber: UInt64, with blockTimestamp: Int16, _ blockSize: UInt64,
-                                   _ clusterTimestamp: UInt64, _ blockStartOffset: UInt64, _ trackData: inout [Int: Data]) {
+    private func handleVobSubBlock(for trackNumber: Int, with blockTimestamp: Int16, _ payloadSize: Int,
+                                   _ clusterTimestamp: UInt64, _ trackData: inout [Int: Data]) {
         let absolutePTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp, timestampScale: timestampScale)
         let vobSubPTS = encodePTSForVobSub(from: absolutePTS)
 
-        var segmentSize = Int(blockSize - (fileHandle.offsetInFile - blockStartOffset))
+        var segmentSize = payloadSize
         let packHeader = vobSubPackHeader(systemClockReference: absolutePTS)
         var buffer = buildVobSubHeader(packHeader: packHeader, pts: vobSubPTS, segmentSize: segmentSize)
 
@@ -363,13 +372,9 @@ class MKVTrackParser: MKVFileHandler {
 
         appendVobSubSegments(packHeader: packHeader, segmentSize: segmentSize, buffer: &buffer)
 
-        let trackNumber = Int(blockTrackNumber)
-        if trackData[trackNumber] == nil {
-            trackData[trackNumber] = Data()
-        }
-        trackData[trackNumber]!.append(buffer)
+        trackData[trackNumber, default: Data()].append(buffer)
 
-        let offset = String(format: "%09X", trackData[trackNumber]!.count - buffer.count)
+        let offset = String(format: "%09X", trackData[trackNumber, default: Data()].count - buffer.count)
         codecPrivate[trackNumber]?.append("\ntimestamp: \(formatTime(absolutePTS)), filepos: \(offset)")
     }
 
@@ -423,14 +428,20 @@ class MKVTrackParser: MKVFileHandler {
         return (blockSize, blockStartOffset)
     }
 
-    /// Function to read the track number, timestamp, and lacing type (if any) from a Block or SimpleBlock header
-    private func readTrackNumber(from fileHandle: FileHandle) -> (UInt64?, Int16) {
+    /// Reads the track number and timestamp from a Block or SimpleBlock header, leaving the file at the end of
+    /// the header, or returns `nil` if the file ends first or the track number is too large.
+    ///
+    /// The lacing bits of the flags are logged but not acted on: a laced block, which holds several frames, is
+    /// read as one frame. Subtitle tracks are not laced in practice.
+    private func readTrackNumber(from fileHandle: FileHandle) -> (trackNumber: Int, timestamp: Int16)? {
         let trackNumber = ebmlParser.readVINT(elementSize: true)
         // The timestamp is a signed 16-bit offset from the cluster timestamp.
-        let timestamp = Int16(truncatingIfNeeded: readFixedLengthNumber(fileHandle: fileHandle, length: 2) ?? 0)
-        let suffix = fileHandle.readData(ofLength: 1).first ?? 0
+        guard let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2).map(Int16.init(truncatingIfNeeded:)),
+              let flags = fileHandle.readData(ofLength: 1).first,
+              let trackNumber = Int(exactly: trackNumber)
+        else { return nil }
 
-        let lacingFlag = (suffix >> 1) & 0x03 // Bits 1 and 2 are the lacing type (unused by us, kept for debugging)
+        let lacingFlag = (flags >> 1) & 0x03 // Bits 1 and 2 are the lacing type
         logger.debug("Track number: \(trackNumber), Timestamp: \(timestamp), Lacing type: \(lacingFlag)")
         return (trackNumber, timestamp)
     }
