@@ -20,6 +20,13 @@ struct PGS {
     private var videoWidth = 0
     private var videoHeight = 0
 
+    /// Where a presentation composition segment places one object on screen.
+    private struct CompositionObject {
+        let objectID: UInt16
+        let x: Int
+        let y: Int
+    }
+
     // MARK: - Lifecycle
 
     init(_ url: URL) throws {
@@ -58,30 +65,39 @@ struct PGS {
         }
     }
 
+    /// Reads one display set, up to and including its end segment, and returns the subtitle it shows.
+    ///
+    /// A display set may define several objects, such as a caption at the top of the screen and another
+    /// at the bottom. They are drawn onto one image at the positions the presentation composition gives
+    /// them, so OCR reads them top to bottom. Display sets that show nothing, such as the one clearing
+    /// the screen, return nil.
     private mutating func parseNextSubtitle(_ buffer: UnsafeRawBufferPointer,
                                             _ offset: inout Int) throws -> Subtitle? {
-        var hasMultipleODS = false
-        var ods: ODS?
+        var compositionObjects: [CompositionObject] = []
+        var objects: [(id: UInt16, ods: ODS)] = []
+        var pendingObject: (id: UInt16, ods: ODS)?
         var pds: PDS?
+        var startTimestamp: TimeInterval?
 
         while true {
             guard offset + pgsHeaderLength < buffer.count else {
-                return nil // End of data
+                break // End of data
             }
 
             let segmentType = buffer[offset + 10]
             let segmentLength = getSegmentLength(from: buffer, offset: offset)
-            let startTimestamp = getSegmentTimestamp(from: buffer, offset: offset)
+            let segmentTimestamp = getSegmentTimestamp(from: buffer, offset: offset)
             offset += pgsHeaderLength
 
-            // End of stream check
-            guard segmentType != 0x80, segmentLength != 0 else { return nil }
+            // End of display set
+            guard segmentType != 0x80 else { break }
+            guard segmentLength != 0 else { return nil }
 
             guard offset + segmentLength <= buffer.count else {
                 print("Segment of length \(segmentLength) extends past the end of the stream, " +
                     "abandoning remaining segments!", to: &stderr)
                 offset = buffer.count
-                return nil
+                break
             }
 
             // Parse the segment based on the type (0x14 for PDS, 0x15 for ODS, 0x16 for PCS, 0x17 for WDS)
@@ -100,20 +116,22 @@ struct PGS {
                     guard segmentLength > 11 else {
                         throw macSubtitleOCRError.invalidODSDataLength(length: segmentLength)
                     }
-                    if buffer[offset + 3] == 0x80 {
-                        ods = try ODS(buffer, offset, segmentLength)
-                        offset += segmentLength
-                        hasMultipleODS = true
-                        continue
-                    } else if hasMultipleODS {
-                        try ods!.appendSegment(buffer, offset, segmentLength)
-                        offset += segmentLength
-                        if buffer[offset - 10] != 0x40 {
-                            break
-                        }
+                    let objectID = buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian
+                    let sequenceFlag = buffer[offset + 3]
+                    var isComplete = sequenceFlag & 0x40 != 0
+                    if sequenceFlag & 0x80 == 0, var object = pendingObject, object.id == objectID {
+                        // A later fragment of the object being read.
+                        try object.ods.appendSegment(buffer, offset, segmentLength)
+                        pendingObject = object
                     } else {
-                        ods = try ODS(buffer, offset, segmentLength)
-                        offset += segmentLength
+                        pendingObject = try (objectID, ODS(buffer, offset, segmentLength))
+                        // A segment that continues nothing is taken as a whole object, as it always was.
+                        isComplete = isComplete || sequenceFlag & 0x80 == 0
+                    }
+                    offset += segmentLength
+                    if isComplete, let object = pendingObject {
+                        objects.append(object)
+                        pendingObject = nil
                     }
                 } catch let macSubtitleOCRError.invalidODSDataLength(length) {
                     print("Invalid ODS length: \(length), abandoning remaining segments!", to: &stderr)
@@ -121,12 +139,13 @@ struct PGS {
                     continue
                 }
             case 0x16:
-                // Presentation Composition Segment: only the leading video descriptor is of use, and it
-                // bounds the size of every object in the display set.
+                // Presentation Composition Segment: the video descriptor bounds the size of every object in
+                // the display set, and the composition objects place them on screen.
                 if segmentLength >= 4 {
                     videoWidth = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
                     videoHeight = Int(buffer.loadUnaligned(fromByteOffset: offset + 2, as: UInt16.self).bigEndian)
                 }
+                compositionObjects = parseCompositionObjects(buffer, offset, segmentLength)
                 offset += segmentLength
             case 0x17:
                 offset += segmentLength
@@ -136,18 +155,16 @@ struct PGS {
                 continue
             }
 
-            guard let pds, let ods else { continue }
-            try checkObjectDimensions(of: ods)
-            offset += pgsHeaderLength // Skip the end segment
-            return try Subtitle(
-                index: subtitles.count + 1,
-                startTimestamp: startTimestamp,
-                imageWidth: ods.objectWidth,
-                imageHeight: ods.objectHeight,
-                imageData: ods.decodeRLEData(),
-                imagePalette: pds.palette,
-                numberOfColors: 256)
+            if startTimestamp == nil, pds != nil, !objects.isEmpty {
+                startTimestamp = segmentTimestamp
+            }
         }
+
+        guard let pds, !objects.isEmpty else { return nil }
+        for object in objects {
+            try checkObjectDimensions(of: object.ods)
+        }
+        return try makeSubtitle(objects, compositionObjects, pds, startTimestamp)
     }
 
     /// Rejects an object that is too large to belong to the video it is composited onto.
@@ -162,6 +179,69 @@ struct PGS {
                 "Object of \(ods.objectWidth)x\(ods.objectHeight) does not fit the " +
                     "\(videoWidth)x\(videoHeight) video")
         }
+    }
+
+    /// Builds the subtitle for a display set from its complete objects.
+    ///
+    /// Several objects are drawn onto one image at their composition positions. A single object, or
+    /// objects the composition does not place within the video, keep the image of the first object alone.
+    private func makeSubtitle(_ objects: [(id: UInt16, ods: ODS)], _ compositionObjects: [CompositionObject],
+                              _ pds: PDS, _ startTimestamp: TimeInterval?) throws -> Subtitle {
+        if objects.count > 1 {
+            var rects: [DecodedSubtitleFrame.Rect] = []
+            for composition in compositionObjects {
+                guard let object = objects.last(where: { $0.id == composition.objectID })?.ods,
+                      object.objectWidth > 0, object.objectHeight > 0,
+                      composition.x + object.objectWidth <= videoWidth,
+                      composition.y + object.objectHeight <= videoHeight
+                else { continue }
+                let indices = try object.decodeRLEData()
+                guard indices.count >= object.objectWidth * object.objectHeight else { continue }
+                rects.append(DecodedSubtitleFrame.Rect(x: composition.x, y: composition.y,
+                                                       width: object.objectWidth, height: object.objectHeight,
+                                                       indices: indices, palette: pds.palette))
+            }
+            if !rects.isEmpty {
+                let subtitle = SubtitleTimeline.composite(rects)
+                subtitle.index = subtitles.count + 1
+                subtitle.startTimestamp = startTimestamp
+                return subtitle
+            }
+        }
+
+        let ods = objects[0].ods
+        return try Subtitle(
+            index: subtitles.count + 1,
+            startTimestamp: startTimestamp,
+            imageWidth: ods.objectWidth,
+            imageHeight: ods.objectHeight,
+            imageData: ods.decodeRLEData(),
+            imagePalette: pds.palette,
+            numberOfColors: 256)
+    }
+
+    /// Reads where the presentation composition segment at `offset` places each object.
+    ///
+    /// The payload is the video width (2 bytes), height (2), frame rate (1), composition number (2),
+    /// composition state (1), palette update flag (1), palette ID (1) and number of composition objects
+    /// (1), followed by each composition object: object ID (2), window ID (1), cropped flag (1), x (2)
+    /// and y (2), plus 8 bytes of cropping rectangle when the cropped flag has 0x40 set.
+    private func parseCompositionObjects(_ buffer: UnsafeRawBufferPointer, _ offset: Int,
+                                         _ segmentLength: Int) -> [CompositionObject] {
+        guard segmentLength >= 11 else { return [] }
+        let count = Int(buffer[offset + 10])
+        var position = offset + 11
+        let end = offset + segmentLength
+        var compositionObjects: [CompositionObject] = []
+        for _ in 0 ..< count {
+            guard position + 8 <= end else { break }
+            compositionObjects.append(CompositionObject(
+                objectID: buffer.loadUnaligned(fromByteOffset: position, as: UInt16.self).bigEndian,
+                x: Int(buffer.loadUnaligned(fromByteOffset: position + 4, as: UInt16.self).bigEndian),
+                y: Int(buffer.loadUnaligned(fromByteOffset: position + 6, as: UInt16.self).bigEndian)))
+            position += buffer[position + 3] & 0x40 != 0 ? 16 : 8
+        }
+        return compositionObjects
     }
 
     /// Reads the presentation timestamp from the segment header at `offset`, or nil if the header is
