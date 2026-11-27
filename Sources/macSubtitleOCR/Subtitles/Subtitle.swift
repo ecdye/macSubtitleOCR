@@ -93,11 +93,11 @@ struct SubtitleImageSource {
             let colorIndex = Int(imageData[index])
             let paletteOffset = colorIndex * bytesPerPixel
             guard
-                colorIndex >= 0,
                 colorIndex < numberOfColors,
                 paletteOffset + 3 < imagePalette.count
             else {
-                rgbaData.append(contentsOf: [255, 255, 255, 255])
+                // An index with no palette entry has no color to draw, so leave it transparent.
+                rgbaData.append(contentsOf: [0, 0, 0, 0])
                 continue
             }
 
