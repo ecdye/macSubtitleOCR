@@ -63,6 +63,33 @@ private func solidRect(x: Int = 0, y: Int, width: Int = 4, height: Int = 2,
     #expect(subtitles.map(\.endTimestamp) == [3, 4, nil])
 }
 
+/// FFmpeg's DVD subtitle decoder reports a stop command with the largest delay, 0xFFFF units of
+/// 1024/90000 s, as 745642 ms. VobSub uses it for a subpicture with no set end, so the end is left
+/// for the SRT writer, as the internal decoder leaves it, unless an empty frame clears the screen.
+@Test func dvdStopAtTheLargestDelayLeavesTheEndUnknown() {
+    #expect(DecodedSubtitleFrame.unknownEnd == 745642)
+    let frames = [
+        DecodedSubtitleFrame(presentationTime: 1, endDisplayTime: 745642, rects: [solidRect(y: 0)]),
+        DecodedSubtitleFrame(presentationTime: 30, endDisplayTime: 745642, rects: [solidRect(y: 8)]),
+        DecodedSubtitleFrame(presentationTime: 32, rects: []),
+        DecodedSubtitleFrame(presentationTime: 40, endDisplayTime: 745642, rects: [solidRect(y: 0)])
+    ]
+    let subtitles = SubtitleTimeline.subtitles(from: frames)
+    #expect(subtitles.map(\.startTimestamp) == [1, 30, 40])
+    #expect(subtitles.map(\.endTimestamp) == [nil, 32, nil])
+}
+
+/// A long timeout that is not the 0xFFFF sentinel is still a real end time, as is a DVB page timeout.
+@Test func otherLongTimeoutsAreRealEndTimes() {
+    let frames = [
+        DecodedSubtitleFrame(presentationTime: 1, endDisplayTime: 745631, rects: [solidRect(y: 0)]),
+        DecodedSubtitleFrame(presentationTime: 1000, endDisplayTime: 255000, rects: [solidRect(y: 8)])
+    ]
+    let subtitles = SubtitleTimeline.subtitles(from: frames)
+    let ends: [TimeInterval?] = [1 + 745.631, 1255]
+    #expect(subtitles.map(\.endTimestamp) == ends)
+}
+
 /// No caption may end before it starts, whatever order the frames come in.
 @Test func captionsNeverEndBeforeTheyStart() throws {
     let frames = [

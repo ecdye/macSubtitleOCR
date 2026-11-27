@@ -246,7 +246,7 @@ struct VobSubParser {
             // A delay counts in units of 1024/90000 s from the presentation timestamp. ffmpeg
             // rounds it down to whole milliseconds; the shift needs more than the 16 bits it is read in.
             let delay = TimeInterval((Int(date) << 10) / 90) / 1000
-            parseCommands(header, from: local + 4, at: presented + delay)
+            parseCommands(header, from: local + 4, at: presented + delay, openEnded: date == 0xFFFF)
             let nextSequence = Int(next)
             if nextSequence == sequence {
                 return
@@ -263,7 +263,12 @@ struct VobSubParser {
     ///
     /// The image is taken from the first sequence that describes it, since a later one
     /// only repeats it or changes its contrast to fade it.
-    private func parseCommands(_ header: Data, from start: Int, at time: TimeInterval) {
+    ///
+    /// `openEnded` marks a sequence with the largest delay, 0xFFFF, about 745.6 s. Authoring
+    /// tools give the stop command that delay to mean the subpicture stays until the next one
+    /// replaces it, so its stop sets no end time and the SRT writer times it. Only that exact value
+    /// is taken this way; any smaller delay is a real, if long, display time.
+    private func parseCommands(_ header: Data, from start: Int, at time: TimeInterval, openEnded: Bool) {
         var index = start
         while index < header.count {
             let command = header[index]
@@ -279,7 +284,7 @@ struct VobSubParser {
             case 0x01:
                 subtitle.startTimestamp = time
             case 0x02:
-                subtitle.endTimestamp = time
+                subtitle.endTimestamp = openEnded ? nil : time
             case 0x03:
                 if subtitle.imagePalette == nil {
                     subtitle.imagePalette = [

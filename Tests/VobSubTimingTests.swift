@@ -107,6 +107,31 @@ private let pts: UInt64 = 107834400
     #expect(subtitle.endTimestamp == nil)
 }
 
+@Test func vobSubStopAtTheLargestDelayHasNoEndTime() throws {
+    // 0xFFFF units, about 745.6 s, means the subpicture stays until the next one replaces it.
+    let bytes = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 0xFFFF))
+    let subtitle = try parse(bytes, idxTimestamp: 1198.16)
+    #expect(subtitle.startTimestamp == 1198.16)
+    #expect(subtitle.endTimestamp == nil)
+}
+
+@Test func vobSubStopJustBelowTheLargestDelayKeepsItsEndTime() throws {
+    // 0xFFFE units is (0xFFFE << 10) / 90 = 745631 ms, a long but real display time.
+    let bytes = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 0xFFFE))
+    let subtitle = try parse(bytes, idxTimestamp: 1198.16)
+    #expect(subtitle.endTimestamp == 1198.16 + 745.631)
+}
+
+@Test func vobSubStopAtTheLargestDelayGetsTheDefaultDurationInSRT() throws {
+    let bytes = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(stopDelay: 0xFFFF))
+    let subtitles = try vobSub(bytes, idx: idx([("00:19:58:160", 0)]))
+    subtitles[0].text = "Hello"
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("VobSubTimingTests-\(UUID().uuidString).srt")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try SRT(subtitles: subtitles).write(toFileAt: url)
+    #expect(try String(contentsOf: url, encoding: .utf8) == "1\n00:19:58,160 --> 00:20:03,160\nHello\n\n")
+}
+
 @Test func vobSubStartDelayIsCountedFromThePresentationTimestamp() throws {
     // 9 units is 102 ms; the stop is counted from the timestamp, not from the delayed start.
     let bytes = pack(flags: 0x80, headerData: ptsBytes(pts), payload: subpicture(startDelay: 9, stopDelay: 263))
