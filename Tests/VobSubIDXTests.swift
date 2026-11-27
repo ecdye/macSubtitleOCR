@@ -60,7 +60,7 @@ import Testing
     #expect(idx.streams.map(\.language) == ["en", "fr"])
     #expect(idx.streams.map(\.timestamps) == [[1, 5], [2, 6]])
     #expect(idx.streams.map(\.offsets) == [[0, 0x1000], [0x800, 0x1800]])
-    #expect(idx.palette == [0, 0, 0, 0xFF, 0xFF, 0xFF])
+    #expect(idx.palette == [0, 0, 0, 0xFF, 0xFF, 0xFF] + [UInt8](repeating: 0, count: 42))
     // The single-stream accessors describe the first stream only.
     #expect(idx.timestamps == [1, 5])
     #expect(idx.offsets == [0, 0x1000])
