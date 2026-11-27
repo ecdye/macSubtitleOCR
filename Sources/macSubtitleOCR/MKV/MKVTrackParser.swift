@@ -100,68 +100,78 @@ class MKVTrackParser: MKVFileHandler {
 
     // MARK: - Methods
 
+    /// Reads every child of a TrackEntry, which may come in any order, and records the track's language and
+    /// VobSub index once the whole entry is read.
     private func parseTrackEntry(for codecs: [String], until endOfEntryOffset: UInt64) -> (Int, String)? {
         var trackNumber: Int?
-        var trackType: UInt8?
         var codecID: String?
         var language: String?
+        var languageBCP47: String?
+        var privateData: String?
 
         while fileHandle.offsetInFile < endOfEntryOffset, let (elementID, elementSize) = tryParseElement() {
+            let endOfElementOffset = fileHandle.offsetInFile + elementSize
             switch elementID {
             case EBML.trackNumberID:
-                trackNumber = Int((fileHandle.readData(ofLength: Int(elementSize)).first)!)
-                logger.debug("Found track number: \(trackNumber!)")
+                trackNumber = readUnsignedInteger(ofSize: elementSize).flatMap { $0 > 0 ? Int(exactly: $0) : nil }
+                logger.debug("Found track number: \(String(describing: trackNumber))")
             case EBML.trackTypeID: // Unused by us, left for debugging
-                trackType = fileHandle.readData(ofLength: Int(elementSize)).first
-                logger.debug("Found track type: \(trackType!)")
+                let trackType = readUnsignedInteger(ofSize: elementSize)
+                logger.debug("Found track type: \(String(describing: trackType))")
             case EBML.codecID:
-                var data = fileHandle.readData(ofLength: Int(elementSize))
-                data.removeNullBytes()
-                codecID = String(data: data, encoding: .ascii)
-                logger.debug("Found codec ID: \(codecID!)")
-            case EBML.language, EBML.languageBCP47:
-                var data = fileHandle.readData(ofLength: Int(elementSize))
-                data.removeNullBytes()
-                language = String(data: data, encoding: .ascii)
-                logger.debug("Found language: \(language!)")
-                languages[trackNumber!] = language
+                codecID = readString(ofSize: elementSize)
+                logger.debug("Found codec ID: \(String(describing: codecID))")
+            case EBML.language:
+                language = readString(ofSize: elementSize)
+                logger.debug("Found language: \(String(describing: language))")
+            case EBML.languageBCP47:
+                languageBCP47 = readString(ofSize: elementSize)
+                logger.debug("Found BCP 47 language: \(String(describing: languageBCP47))")
+            case EBML.codecPrivate:
+                privateData = readString(ofSize: elementSize)
             default:
-                fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
-            }
-            if trackNumber != nil, trackType != nil, codecID != nil {
                 break
             }
+            fileHandle.seek(toFileOffset: endOfElementOffset)
         }
 
-        if let trackNumber, let codecID {
-            if codecID == "S_VOBSUB" {
-                while fileHandle.offsetInFile < endOfEntryOffset, let (elementID, elementSize) = tryParseElement() {
-                    switch elementID {
-                    case EBML.codecPrivate:
-                        var data = fileHandle.readData(ofLength: Int(elementSize))
-                        data.removeNullBytes()
-                        codecPrivate[trackNumber] = "# VobSub index file, v7 (do not modify this line!)\n" +
-                            (String(data: data, encoding: .ascii) ?? "")
-                        if let language {
-                            codecPrivate[trackNumber]!.append("langidx: 0\n")
-                            codecPrivate[trackNumber]!.append("\nid: \(language), index: 0")
-                        }
-                    default:
-                        fileHandle.seek(toFileOffset: fileHandle.offsetInFile + elementSize)
-                    }
-                    if codecPrivate[trackNumber] != nil {
-                        break
-                    }
-                }
+        guard let trackNumber, let codecID else { return nil }
+
+        // LanguageBCP47 takes precedence over Language when both are present.
+        let trackLanguage = languageBCP47 ?? language
+        languages[trackNumber] = trackLanguage
+
+        if codecID == "S_VOBSUB", let privateData {
+            var idx = "# VobSub index file, v7 (do not modify this line!)\n" + privateData
+            if let trackLanguage {
+                idx.append("langidx: 0\n")
+                idx.append("\nid: \(trackLanguage), index: 0")
             }
-            if codecs.contains(codecID) {
-                return (trackNumber, codecID)
-            }
-            if codecID.hasPrefix("S_") {
-                skippedSubtitleCodecs.append(codecID)
-            }
+            codecPrivate[trackNumber] = idx
+        }
+
+        if codecs.contains(codecID) {
+            return (trackNumber, codecID)
+        }
+        if codecID.hasPrefix("S_") {
+            skippedSubtitleCodecs.append(codecID)
         }
         return nil
+    }
+
+    /// Reads an EBML unsigned integer element of `size` bytes, or returns `nil` if it is empty or too wide.
+    private func readUnsignedInteger(ofSize size: UInt64) -> UInt64? {
+        guard (1 ... 8).contains(size) else { return nil }
+        let data = fileHandle.readData(ofLength: Int(size))
+        guard data.count == Int(size) else { return nil }
+        return data.reduce(0) { $0 << 8 | UInt64($1) }
+    }
+
+    /// Reads an ASCII string element of `size` bytes, dropping any null padding.
+    private func readString(ofSize size: UInt64) -> String? {
+        var data = fileHandle.readData(ofLength: Int(size))
+        data.removeNullBytes()
+        return String(data: data, encoding: .ascii)
     }
 
     private func extractClusterTimestamp() -> Int64? {
