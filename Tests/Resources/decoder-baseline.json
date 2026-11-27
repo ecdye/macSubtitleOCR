@@ -25,9 +25,9 @@
         "cues" : 26,
         "exact" : 25,
         "matched" : 26,
-        "maxEndErrorMs" : 742050,
+        "maxEndErrorMs" : 3417,
         "maxStartErrorMs" : 17,
-        "meanEndErrorMs" : 45716.7,
+        "meanEndErrorMs" : 1472.5,
         "meanStartErrorMs" : 6.8
       }
     },

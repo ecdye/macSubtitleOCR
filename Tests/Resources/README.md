@@ -52,9 +52,9 @@ cues no fewer, timing errors no more than 1 ms larger, and exact cues at most on
 the same image slightly differently from one macOS release to the next, so a runner can lose a cue's
 exact reading without anything in the decoder having changed. The reference holds authored times, which
 the decoded ones miss by up to a frame, so timing errors never reach zero. `sintel.sub` gives each
-subpicture the largest stop delay, meaning it stays until replaced, which both decoders currently turn
-into a cue lasting until the next one and a last cue that runs for over twelve minutes. Its large end
-time errors are recorded as they are until #135 fixes that and regenerates this file.
+subpicture the largest stop delay, meaning it stays until replaced, so neither decoder has an end time
+for it. The SRT writer gives such a cue its default five seconds, cut short by the next cue, which is
+why that track's end time errors run to a few seconds where the others stay within a frame.
 
 After a change that improves the scores, or one whose change is understood, regenerate the file and
 commit it with the change:
