@@ -376,7 +376,7 @@ class MKVTrackParser: MKVFileHandler {
                              0x00,                                    // Stuffing length
                              0x00, 0x00, 0x01, 0xBD])                 // PES packet start code
         vobSubHeader.append(contentsOf: pesLength)                    // PES packet length
-        vobSubHeader.append(contentsOf: [0x00,                        // PES miscellaneous data
+        vobSubHeader.append(contentsOf: [0x81,                        // MPEG-2 PES flags, original
                                          0x80,                        // PTS DTS flag
                                          UInt8(pts.count)])           // PTS data length
         vobSubHeader.append(contentsOf: pts)                          // PTS data
@@ -396,7 +396,7 @@ class MKVTrackParser: MKVFileHandler {
                                        0x00,                                // Stuffing length
                                        0x00, 0x00, 0x01, 0xBD])             // PES packet start code
             buffer.append(contentsOf: pesLength)                            // PES packet length
-            buffer.append(contentsOf: [0x00,                                // PES miscellaneous data
+            buffer.append(contentsOf: [0x81,                                // MPEG-2 PES flags, original
                                        0x00,                                // PTS DTS flag
                                        0x00])                               // PTS data length
             buffer.append(contentsOf: [0x00])                               // Null stream ID

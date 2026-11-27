@@ -25,17 +25,19 @@ func encodePTSForPGS(_ timestamp: UInt64) -> [UInt8] {
     withUnsafeBytes(of: UInt32(truncatingIfNeeded: timestamp).bigEndian) { Array($0) }
 }
 
-/// Encode the absolute timestamp as the 5 PTS bytes of an MPEG PES header. The PTS is 33 bits wide;
-/// higher bits are dropped.
+/// Encode the absolute timestamp as the 5 PTS bytes of an MPEG-2 PES header with only a PTS
+/// (PTS_DTS_flags '10'). The PTS is 33 bits wide; higher bits are dropped.
+///
+/// The bits are laid out as ISO/IEC 13818-1 requires: the '0010' prefix, PTS[32..30] and a marker
+/// bit, then PTS[29..15] and a marker bit, then PTS[14..0] and a marker bit.
 func encodePTSForVobSub(from timestamp: UInt64) -> [UInt8] {
-    var buffer = [UInt8](repeating: 0, count: 5) // 5-byte buffer
-
-    buffer[0] = (buffer[0] & 0xF1) | UInt8((timestamp >> 29) & 0x0E)
-    buffer[1] = UInt8((timestamp >> 22) & 0xFF)
-    buffer[2] = UInt8(((timestamp >> 14) & 0xFE) | 1)
-    buffer[3] = UInt8((timestamp >> 7) & 0xFF)
-    buffer[4] = UInt8((timestamp << 1) & 0xFF)
-    return buffer
+    [
+        UInt8(0x21 | ((timestamp >> 29) & 0x0E)),
+        UInt8((timestamp >> 22) & 0xFF),
+        UInt8(((timestamp >> 14) & 0xFE) | 1),
+        UInt8((timestamp >> 7) & 0xFF),
+        UInt8(((timestamp << 1) & 0xFE) | 1)
+    ]
 }
 
 /// Write a 90 kHz timestamp the way a VobSub `.idx` spells one, `HH:MM:SS:mmm`,
