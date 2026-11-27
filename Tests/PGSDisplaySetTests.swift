@@ -25,9 +25,10 @@ private func segment(_ type: UInt8, at seconds: Int, _ payload: [UInt8] = []) ->
         + bigEndian(payload.count) + payload
 }
 
-/// A presentation composition for a 1920x1080 video placing each object at its position.
-private func presentation(at seconds: Int, objects: [(id: Int, x: Int, y: Int)]) -> [UInt8] {
-    var payload = bigEndian(1920) + bigEndian(1080) + [0x10] + bigEndian(seconds) + [0x80, 0x00, 0x00]
+/// A presentation composition for a 1920x1080 video placing each object at its position. The state is
+/// an epoch start (0x80) unless given, such as an acquisition point (0x40) or a normal case (0x00).
+private func presentation(at seconds: Int, state: UInt8 = 0x80, objects: [(id: Int, x: Int, y: Int)]) -> [UInt8] {
+    var payload = bigEndian(1920) + bigEndian(1080) + [0x10] + bigEndian(seconds) + [state, 0x00, 0x00]
     payload.append(UInt8(objects.count))
     for object in objects {
         payload += bigEndian(object.id) + [0x00, 0x00] + bigEndian(object.x) + bigEndian(object.y)
@@ -193,4 +194,70 @@ func displaySetWithFragmentedObjectMatchesWholeObject(cuts: [Int]) throws {
     #expect(following.imageWidth == 4)
     #expect(following.imageHeight == 1)
     #expect(following.imageData == Data([1, 1, 1, 1]))
+}
+
+// Issue #138: streams send the caption on screen again, as an acquisition point, so that a player
+// starting there can show it. Each was read as a new subtitle, splitting one caption into two cues
+// with the same text where FFmpeg kept one.
+
+/// A caption shown at 1 and cleared at 3, with `resend` presented at 2 in between.
+private func resentStream(_ resend: [UInt8]) -> [UInt8] {
+    presentation(at: 1, objects: [(id: 0, x: 100, y: 900)]) + window(at: 1) + palette(at: 1)
+        + object(at: 1, id: 0, width: 4, height: 2, color: 1) + end(at: 1)
+        + resend
+        + presentation(at: 3, state: 0x00, objects: []) + window(at: 3) + end(at: 3)
+}
+
+@Test func displaySetResendingCaptionContinuesIt() throws {
+    let resend = presentation(at: 2, state: 0x40, objects: [(id: 0, x: 100, y: 900)]) + window(at: 2)
+        + palette(at: 2) + object(at: 2, id: 0, width: 4, height: 2, color: 1) + end(at: 2)
+    let pgs = try Data(resentStream(resend)).withUnsafeBytes { try PGS($0) }
+
+    #expect(pgs.subtitles.count == 1)
+    let subtitle = try #require(pgs.subtitles.first)
+    #expect(subtitle.index == 1)
+    #expect(subtitle.startTimestamp == 1)
+    #expect(subtitle.endTimestamp == 3)
+    #expect(subtitle.imageXOffset == 100)
+    #expect(subtitle.imageYOffset == 900)
+    #expect(subtitle.imageData == Data(repeating: 1, count: 8))
+}
+
+@Test(arguments: [
+    // Different pixels.
+    (x: 100, y: 900, color: UInt8(2)),
+    // The same pixels somewhere else on screen.
+    (x: 300, y: 900, color: UInt8(1))
+])
+func displaySetChangingCaptionStartsNewSubtitle(x: Int, y: Int, color: UInt8) throws {
+    let resend = presentation(at: 2, state: 0x40, objects: [(id: 0, x: x, y: y)]) + window(at: 2)
+        + palette(at: 2) + object(at: 2, id: 0, width: 4, height: 2, color: color) + end(at: 2)
+    let pgs = try Data(resentStream(resend)).withUnsafeBytes { try PGS($0) }
+
+    #expect(pgs.subtitles.count == 2)
+    let first = try #require(pgs.subtitles.first)
+    #expect(first.startTimestamp == 1)
+    #expect(first.endTimestamp == 2)
+    let second = try #require(pgs.subtitles.dropFirst().first)
+    #expect(second.index == 2)
+    #expect(second.startTimestamp == 2)
+    #expect(second.endTimestamp == 3)
+    #expect(second.imageXOffset == x)
+}
+
+@Test func displaySetShowingCaptionAgainAfterClearIsNewSubtitle() throws {
+    // The screen is cleared at 2 and the same caption shown again at 3, so it is shown twice.
+    let caption = { (seconds: Int) in
+        presentation(at: seconds, objects: [(id: 0, x: 100, y: 900)]) + window(at: seconds) + palette(at: seconds)
+            + object(at: seconds, id: 0, width: 4, height: 2, color: 1) + end(at: seconds)
+    }
+    let clear = { (seconds: Int) in
+        presentation(at: seconds, state: 0x00, objects: []) + window(at: seconds) + end(at: seconds)
+    }
+    let pgs = try Data(caption(1) + clear(2) + caption(3) + clear(4)).withUnsafeBytes { try PGS($0) }
+
+    #expect(pgs.subtitles.count == 2)
+    #expect(pgs.subtitles.map(\.startTimestamp) == [1, 3])
+    #expect(pgs.subtitles.map(\.endTimestamp) == [2, 4])
+    #expect(pgs.subtitles.map(\.index) == [1, 2])
 }
