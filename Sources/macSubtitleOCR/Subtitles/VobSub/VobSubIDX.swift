@@ -57,23 +57,19 @@ struct VobSubIDX {
     init(_ url: URL) throws {
         do {
             let idxData = try String(contentsOf: url, encoding: .utf8)
-            try parseIdxFile(idxData: idxData)
+            parseIdxFile(idxData: idxData)
         } catch {
             throw macSubtitleOCRError.fileReadError("Failed to parse IDX file: \(error)")
         }
     }
 
     init(_ idxData: String) throws {
-        do {
-            try parseIdxFile(idxData: idxData)
-        } catch {
-            throw macSubtitleOCRError.fileReadError("Failed to parse IDX file: \(error)")
-        }
+        parseIdxFile(idxData: idxData)
     }
 
     // MARK: - Methods
 
-    private mutating func parseIdxFile(idxData: String) throws {
+    private mutating func parseIdxFile(idxData: String) {
         let lines = idxData.split(separator: "\n")
         var current: Int?
         var delay = 0
@@ -84,7 +80,7 @@ struct VobSubIDX {
             if trimmedLine.starts(with: "palette:") {
                 palette = parsePalette(trimmedLine.dropFirst("palette:".count))
             } else if trimmedLine.starts(with: "id:") {
-                let position = try stream(at: extractStreamIndex(from: trimmedLine))
+                let position = stream(at: extractStreamIndex(from: trimmedLine))
                 if streams[position].language == nil {
                     streams[position].language = extractLanguage(from: trimmedLine)
                 }
@@ -123,15 +119,12 @@ struct VobSubIDX {
     /// Extract the stream index from a line like "id: en, index: 0".
     ///
     /// A line without one is taken as index 0, as FFmpeg does. Substream IDs leave room for 32
-    /// streams, so, as in FFmpeg, a larger index is an error.
-    private func extractStreamIndex(from line: String) throws -> Int {
+    /// streams; a larger index is kept here, and `VobSub` reports that stream alone as unreadable
+    /// rather than rejecting the whole idx.
+    private func extractStreamIndex(from line: String) -> Int {
         guard let range = line.range(of: "index:") else { return 0 }
         let value = line[range.upperBound...].trimmingCharacters(in: .whitespaces)
-        guard let index = Int(value.prefix { $0.isNumber }) else { return 0 }
-        guard index < 32 else {
-            throw macSubtitleOCRError.fileReadError("VobSub stream index \(index) is not between 0 and 31")
-        }
-        return index
+        return Int(value.prefix { $0.isNumber }) ?? 0
     }
 
     /// Extract the delay in milliseconds from a line like "delay: -00:00:01:500".

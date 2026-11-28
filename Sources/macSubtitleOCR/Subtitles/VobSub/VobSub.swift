@@ -16,6 +16,9 @@ struct VobSub {
         let index: Int
         let language: String?
         var subtitles: [Subtitle]
+        /// Why the stream could not be read, when it could not. Its subtitles are then empty, and the
+        /// other streams are read all the same.
+        var failure: String?
     }
 
     // MARK: - Properties
@@ -45,9 +48,16 @@ struct VobSub {
         if streams.isEmpty {
             streams = [idx.streams.first ?? VobSubIDX.Stream(index: 0)]
         }
-        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+        data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
             for stream in streams {
-                try tracks.append(Track(
+                // Packets carry the stream in a 5 bit substream ID, so, as in FFmpeg, an index past 31
+                // names no stream of the .sub. Only that stream is lost: the others are read as usual.
+                guard stream.index < 32 else {
+                    tracks.append(Track(index: stream.index, language: stream.language, subtitles: [],
+                                        failure: "VobSub stream index \(stream.index) is not between 0 and 31"))
+                    continue
+                }
+                tracks.append(Track(
                     index: stream.index,
                     language: stream.language,
                     subtitles: extractSubtitleImages(buffer: buffer, stream: stream, palette: idx.palette,
@@ -62,7 +72,7 @@ struct VobSub {
     init(_ buffer: UnsafeRawBufferPointer, _ idxData: String) throws {
         let idx = try VobSubIDX(idxData)
         let stream = idx.streams.first { !$0.offsets.isEmpty } ?? idx.streams.first ?? VobSubIDX.Stream(index: 0)
-        try tracks.append(Track(
+        tracks.append(Track(
             index: stream.index,
             language: stream.language,
             subtitles: extractSubtitleImages(buffer: buffer, stream: stream, palette: idx.palette, substream: nil)))
@@ -71,8 +81,11 @@ struct VobSub {
     // MARK: - Methods
 
     /// Decode the subtitles of `stream`, reading only packets of `substream` (any when nil).
+    ///
+    /// A subtitle that cannot be decoded is replaced by an empty one with its timing, with a warning, so the
+    /// numbering and timing of the rest stay intact and one bad subpicture does not lose the track.
     private func extractSubtitleImages(buffer: UnsafeRawBufferPointer, stream: VobSubIDX.Stream, palette: [UInt8]?,
-                                       substream: Int?) throws -> [Subtitle] {
+                                       substream: Int?) -> [Subtitle] {
         if buffer.count == 0 {
             print("Found empty VobSub buffer, skipping track!")
             return []
@@ -99,9 +112,9 @@ struct VobSub {
                     substream: substream,
                     delay: stream.delays[index]).subtitle
                 subtitles.append(subtitle)
-            } catch let macSubtitleOCRError.invalidVobSubSubpicture(reason) {
+            } catch {
                 // Keep an empty subtitle in its place so the numbering and timing of the rest stay intact.
-                print("Skipping VobSub subtitle \(index + 1): \(reason)", to: &stderr)
+                print("Skipping VobSub subtitle \(index + 1): \(error)", to: &stderr)
                 subtitles.append(Subtitle(index: index + 1, startTimestamp: timestamp))
             }
         }

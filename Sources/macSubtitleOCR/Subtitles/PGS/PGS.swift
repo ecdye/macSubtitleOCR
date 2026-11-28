@@ -31,18 +31,18 @@ struct PGS {
 
     init(_ url: URL) throws {
         let data = try Data(contentsOf: url)
-        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-            try parseData(buffer)
+        data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            parseData(buffer)
         }
     }
 
     init(_ buffer: UnsafeRawBufferPointer) throws {
-        try parseData(buffer)
+        parseData(buffer)
     }
 
     // MARK: - Methods
 
-    private mutating func parseData(_ buffer: UnsafeRawBufferPointer) throws {
+    private mutating func parseData(_ buffer: UnsafeRawBufferPointer) {
         var offset = 0
         guard buffer.count > pgsHeaderLength else {
             print("Found empty PGS buffer, skipping track!")
@@ -52,7 +52,7 @@ struct PGS {
         var showing: Subtitle?
         while offset + pgsHeaderLength < buffer.count {
             logger.debug("Parsing subtitle at offset: \(offset)")
-            guard let subtitle = try parseNextSubtitle(buffer, &offset)
+            guard let subtitle = parseNextSubtitle(buffer, &offset)
             else {
                 showing = nil
                 if offset + pgsHeaderLength > buffer.count {
@@ -84,7 +84,7 @@ struct PGS {
     /// them, so OCR reads them top to bottom. Display sets that show nothing, such as the one clearing
     /// the screen, return nil.
     private mutating func parseNextSubtitle(_ buffer: UnsafeRawBufferPointer,
-                                            _ offset: inout Int) throws -> Subtitle? {
+                                            _ offset: inout Int) -> Subtitle? {
         var compositionObjects: [CompositionObject] = []
         var objects: [(id: UInt16, ods: ODS)] = []
         var pendingObject: (id: UInt16, ods: ODS)?
@@ -113,16 +113,18 @@ struct PGS {
             }
 
             // Parse the segment based on the type (0x14 for PDS, 0x15 for ODS, 0x16 for PCS, 0x17 for WDS)
+            //
+            // The segment lies wholly within the stream, so a palette or object segment that cannot be read is
+            // skipped on its own and parsing goes on at the next segment header. Only this display set can lose
+            // anything by it: one left without a palette or a complete object shows nothing.
             switch segmentType {
             case 0x14:
                 do {
                     pds = try PDS(buffer, offset, segmentLength, videoHeight: videoHeight)
-                    offset += segmentLength
-                } catch let macSubtitleOCRError.invalidPDSDataLength(length) {
-                    print("Invalid PDS length: \(length), abandoning remaining segments!", to: &stderr)
-                    offset = buffer.count
-                    return nil
+                } catch {
+                    print("Skipping PGS palette segment of invalid length \(segmentLength)", to: &stderr)
                 }
+                offset += segmentLength
             case 0x15:
                 do {
                     guard segmentLength >= 4 else {
@@ -145,9 +147,11 @@ struct PGS {
                         objects.append(object)
                         pendingObject = nil
                     }
-                } catch let macSubtitleOCRError.invalidODSDataLength(length) {
-                    print("Invalid ODS length: \(length), abandoning remaining segments!", to: &stderr)
-                    offset = buffer.count
+                } catch {
+                    // The object this segment starts or continues is incomplete, so it is dropped as well.
+                    print("Skipping PGS object segment of invalid length \(segmentLength)", to: &stderr)
+                    pendingObject = nil
+                    offset += segmentLength
                     continue
                 }
             case 0x16:
@@ -175,7 +179,14 @@ struct PGS {
         guard let pds, !objects.isEmpty else { return nil }
         let validObjects = objects.filter { checkObjectDimensions(of: $0.ods) }
         guard !validObjects.isEmpty else { return nil }
-        return try makeSubtitle(validObjects, compositionObjects, pds, startTimestamp)
+        do {
+            return try makeSubtitle(validObjects, compositionObjects, pds, startTimestamp)
+        } catch {
+            // Like an object that fails its size checks, a display set that cannot be decoded shows nothing,
+            // and the rest of the stream is still read.
+            print("Skipping PGS display set at \(startTimestamp ?? 0) s: \(error)", to: &stderr)
+            return nil
+        }
     }
 
     /// The largest video, and so the largest object, accepted in either dimension. Blu-ray PGS is at

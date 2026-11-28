@@ -86,8 +86,10 @@ import Testing
     #expect(idx.streams.map(\.timestamps) == [[], []])
 }
 
-@Test func vobSubIDXRejectsAStreamIndexWithoutASubstreamID() {
-    #expect(throws: macSubtitleOCRError.self) { _ = try VobSubIDX("id: en, index: 32\n") }
+@Test func vobSubIDXKeepsAStreamIndexWithoutASubstreamID() throws {
+    // Index 32 names no substream; VobSub reports that stream alone as failed, not the whole idx.
+    let idx = try VobSubIDX("id: en, index: 0\nid: xx, index: 32\n")
+    #expect(idx.streams.map(\.index) == [0, 32])
 }
 
 // MARK: - Delay
