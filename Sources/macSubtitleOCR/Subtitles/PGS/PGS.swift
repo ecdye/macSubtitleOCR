@@ -20,6 +20,16 @@ struct PGS {
     private var videoWidth = 0
     private var videoHeight = 0
 
+    /// The objects and palettes defined so far in the current epoch, by ID.
+    ///
+    /// They last until a presentation composition that is not a normal case starts over, so a display set
+    /// can show objects defined earlier without sending them again, and one that only sends a palette
+    /// changes the colors of what is on screen. Like FFmpeg, an acquisition point or epoch continue starts
+    /// over too, as those resend everything they show. An object or palette defined again replaces the one
+    /// with its ID, whatever its version.
+    private var epochObjects: [UInt16: ODS] = [:]
+    private var epochPalettes: [UInt8: PDS] = [:]
+
     /// Where a presentation composition segment places one object on screen.
     private struct CompositionObject {
         let objectID: UInt16
@@ -89,16 +99,17 @@ struct PGS {
 
     /// Reads one display set, up to and including its end segment, and returns the subtitle it shows.
     ///
-    /// A display set may define several objects, such as a caption at the top of the screen and another
-    /// at the bottom. They are drawn onto one image at the positions the presentation composition gives
-    /// them, so OCR reads them top to bottom. Display sets that show nothing, such as the one clearing
-    /// the screen, return nil.
+    /// The presentation composition says which objects are shown, where, and with which palette. They may
+    /// have been defined in this display set or earlier in the epoch. Several objects, such as a caption at
+    /// the top of the screen and another at the bottom, are drawn onto one image at their positions, so OCR
+    /// reads them top to bottom. Display sets that show nothing, such as the one clearing the screen,
+    /// return nil.
     private mutating func parseNextSubtitle(_ buffer: UnsafeRawBufferPointer,
                                             _ offset: inout Int) -> Subtitle? {
         var compositionObjects: [CompositionObject] = []
-        var objects: [(id: UInt16, ods: ODS)] = []
+        var paletteID: UInt8 = 0
         var pendingObject: (id: UInt16, ods: ODS)?
-        var pds: PDS?
+        // The display set is presented at its presentation composition, as in FFmpeg.
         var startTimestamp: TimeInterval?
 
         while true {
@@ -125,12 +136,14 @@ struct PGS {
             // Parse the segment based on the type (0x14 for PDS, 0x15 for ODS, 0x16 for PCS, 0x17 for WDS)
             //
             // The segment lies wholly within the stream, so a palette or object segment that cannot be read is
-            // skipped on its own and parsing goes on at the next segment header. Only this display set can lose
-            // anything by it: one left without a palette or a complete object shows nothing.
+            // skipped on its own and parsing goes on at the next segment header. Only the display sets showing
+            // that palette or object can lose anything by it: without them they show nothing.
             switch segmentType {
             case 0x14:
                 do {
-                    pds = try PDS(buffer, offset, segmentLength, videoHeight: videoHeight)
+                    let pds = try PDS(buffer, offset, segmentLength, videoHeight: videoHeight,
+                                      updating: epochPalettes[buffer[offset]])
+                    epochPalettes[pds.id] = pds
                 } catch {
                     print("Skipping PGS palette segment of invalid length \(segmentLength)", to: &stderr)
                 }
@@ -148,13 +161,18 @@ struct PGS {
                         try object.ods.appendSegment(buffer, offset, segmentLength)
                         pendingObject = object
                     } else {
+                        // The object is defined again, so the earlier definition is gone even if this one
+                        // cannot be read.
+                        epochObjects[objectID] = nil
                         pendingObject = try (objectID, ODS(buffer, offset, segmentLength))
                         // A segment that continues nothing is taken as a whole object, as it always was.
                         isComplete = isComplete || sequenceFlag & 0x80 == 0
                     }
                     offset += segmentLength
                     if isComplete, let object = pendingObject {
-                        objects.append(object)
+                        if checkObjectDimensions(of: object.ods) {
+                            epochObjects[object.id] = object.ods
+                        }
                         pendingObject = nil
                     }
                 } catch {
@@ -166,12 +184,19 @@ struct PGS {
                 }
             case 0x16:
                 // Presentation Composition Segment: the video descriptor bounds the size of every object in
-                // the display set, and the composition objects place them on screen.
+                // the display set, the composition state says whether the epoch's objects and palettes are
+                // kept, and the composition objects place them on screen.
                 if segmentLength >= 4 {
                     videoWidth = Int(buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self).bigEndian)
                     videoHeight = Int(buffer.loadUnaligned(fromByteOffset: offset + 2, as: UInt16.self).bigEndian)
                 }
+                if segmentLength >= 8, buffer[offset + 7] & 0xC0 != 0 {
+                    epochObjects.removeAll()
+                    epochPalettes.removeAll()
+                }
+                paletteID = segmentLength >= 10 ? buffer[offset + 9] : 0
                 compositionObjects = parseCompositionObjects(buffer, offset, segmentLength)
+                startTimestamp = segmentTimestamp
                 offset += segmentLength
             case 0x17:
                 offset += segmentLength
@@ -180,17 +205,15 @@ struct PGS {
                 offset += segmentLength
                 continue
             }
-
-            if startTimestamp == nil, pds != nil, !objects.isEmpty {
-                startTimestamp = segmentTimestamp
-            }
         }
 
-        guard let pds, !objects.isEmpty else { return nil }
-        let validObjects = objects.filter { checkObjectDimensions(of: $0.ods) }
-        guard !validObjects.isEmpty else { return nil }
+        guard let pds = epochPalettes[paletteID] else { return nil }
+        let shown = compositionObjects.compactMap { composition in
+            epochObjects[composition.objectID].map { (composition: composition, ods: $0) }
+        }
+        guard !shown.isEmpty else { return nil }
         do {
-            return try makeSubtitle(validObjects, compositionObjects, pds, startTimestamp)
+            return try makeSubtitle(shown, pds, startTimestamp)
         } catch {
             // Like an object that fails its size checks, a display set that cannot be decoded shows nothing,
             // and the rest of the stream is still read.
@@ -210,9 +233,9 @@ struct PGS {
     /// Decoding fills a buffer of `objectWidth * objectHeight`, both of which are 16 bit fields, and the
     /// same stream declares the video size, so neither alone bounds the memory a stream can ask for.
     /// Every line of a PGS bitmap ends with a 2 byte end-of-line code, so data shorter than twice the
-    /// height cannot describe the object. An object that fails is left out of its display set with a
-    /// warning, and a display set left with no objects shows nothing. Empty objects are left to the
-    /// placeholder path that already handles them.
+    /// height cannot describe the object. An object that fails is not kept, with a warning, so it is left
+    /// out of the display sets showing it, and a display set left with no objects shows nothing. Empty
+    /// objects are left to the placeholder path that already handles them.
     private func checkObjectDimensions(of ods: ODS) -> Bool {
         let limit = PGS.maximumVideoDimension
         var problem: String?
@@ -231,20 +254,18 @@ struct PGS {
         return false
     }
 
-    /// Builds the subtitle for a display set from its complete objects, or nil if its composition crops
-    /// the object it shows down to nothing.
+    /// Builds the subtitle for a display set from the objects its composition shows, in composition order,
+    /// or nil if the composition crops the object it shows down to nothing.
     ///
     /// Several objects are drawn onto one image at their composition positions. A single object, or
     /// objects the composition does not place within the video, keep the image of the first object alone.
     /// A composition that crops an object shows only that part of it, at the composition position.
-    private func makeSubtitle(_ objects: [(id: UInt16, ods: ODS)], _ compositionObjects: [CompositionObject],
-                              _ pds: PDS, _ startTimestamp: TimeInterval?) throws -> Subtitle? {
-        if objects.count > 1 {
+    private func makeSubtitle(_ shown: [(composition: CompositionObject, ods: ODS)], _ pds: PDS,
+                              _ startTimestamp: TimeInterval?) throws -> Subtitle? {
+        if shown.count > 1 {
             var rects: [DecodedSubtitleFrame.Rect] = []
-            for composition in compositionObjects {
-                guard let object = objects.last(where: { $0.id == composition.objectID })?.ods,
-                      object.objectWidth > 0, object.objectHeight > 0
-                else { continue }
+            for (composition, object) in shown {
+                guard object.objectWidth > 0, object.objectHeight > 0 else { continue }
                 var area = Area(x: 0, y: 0, width: object.objectWidth, height: object.objectHeight)
                 if let crop = composition.crop {
                     guard let visible = visibleArea(of: object, croppedTo: crop) else { continue }
@@ -267,9 +288,8 @@ struct PGS {
             }
         }
 
-        let ods = objects[0].ods
-        let position = compositionObjects.first { $0.objectID == objects[0].id }
-        if let position, let crop = position.crop {
+        let (position, ods) = shown[0]
+        if let crop = position.crop {
             guard let area = visibleArea(of: ods, croppedTo: crop) else { return nil }
             var indices = try ods.decodeRLEData()
             let size = ods.objectWidth * ods.objectHeight
@@ -290,8 +310,8 @@ struct PGS {
         return try Subtitle(
             index: subtitles.count + 1,
             startTimestamp: startTimestamp,
-            imageXOffset: position?.x,
-            imageYOffset: position?.y,
+            imageXOffset: position.x,
+            imageYOffset: position.y,
             imageWidth: ods.objectWidth,
             imageHeight: ods.objectHeight,
             imageData: ods.decodeRLEData(),
@@ -369,9 +389,31 @@ struct PGS {
 
 private extension Subtitle {
     /// Whether `other` draws the same pixels in the same place, so that showing it changes nothing.
+    ///
+    /// Only the colors the pixels show count, as in the images FFmpeg's frames are composited into, so a
+    /// palette update changing colors no pixel uses leaves the caption as it is, and one changing the
+    /// colors on screen, such as a step of a fade, shows a new image.
     func showsSameImage(as other: Subtitle) -> Bool {
-        imageXOffset == other.imageXOffset && imageYOffset == other.imageYOffset
-            && imageWidth == other.imageWidth && imageHeight == other.imageHeight
-            && imagePalette == other.imagePalette && imageData == other.imageData
+        guard imageXOffset == other.imageXOffset, imageYOffset == other.imageYOffset,
+              imageWidth == other.imageWidth, imageHeight == other.imageHeight
+        else { return false }
+        if imagePalette == other.imagePalette, imageData == other.imageData {
+            return true
+        }
+        guard let data = imageData, let otherData = other.imageData, data.count == otherData.count,
+              let palette = imagePalette, let otherPalette = other.imagePalette
+        else { return false }
+        let colors = Subtitle.shownColors(palette)
+        let otherColors = Subtitle.shownColors(otherPalette)
+        return zip(data, otherData).allSatisfy { colors[Int($0)] == otherColors[Int($1)] }
+    }
+
+    /// The RGBA color each of the 256 palette indices shows, with every fully transparent color, and any
+    /// index past the end of the palette, as transparent black.
+    private static func shownColors(_ palette: [UInt8]) -> [UInt32] {
+        (0 ..< 256).map { index in
+            guard index * 4 + 3 < palette.count, palette[index * 4 + 3] != 0 else { return 0 }
+            return palette[index * 4 ..< index * 4 + 4].reduce(0) { $0 << 8 | UInt32($1) }
+        }
     }
 }
