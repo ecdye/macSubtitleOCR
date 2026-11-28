@@ -25,6 +25,16 @@ struct PGS {
         let objectID: UInt16
         let x: Int
         let y: Int
+        /// The part of the object shown, relative to its top left corner, when the composition crops it.
+        let crop: Area?
+    }
+
+    /// A rectangle within an object.
+    private struct Area {
+        let x: Int
+        let y: Int
+        let width: Int
+        let height: Int
     }
 
     // MARK: - Lifecycle
@@ -221,25 +231,33 @@ struct PGS {
         return false
     }
 
-    /// Builds the subtitle for a display set from its complete objects.
+    /// Builds the subtitle for a display set from its complete objects, or nil if its composition crops
+    /// the object it shows down to nothing.
     ///
     /// Several objects are drawn onto one image at their composition positions. A single object, or
     /// objects the composition does not place within the video, keep the image of the first object alone.
+    /// A composition that crops an object shows only that part of it, at the composition position.
     private func makeSubtitle(_ objects: [(id: UInt16, ods: ODS)], _ compositionObjects: [CompositionObject],
-                              _ pds: PDS, _ startTimestamp: TimeInterval?) throws -> Subtitle {
+                              _ pds: PDS, _ startTimestamp: TimeInterval?) throws -> Subtitle? {
         if objects.count > 1 {
             var rects: [DecodedSubtitleFrame.Rect] = []
             for composition in compositionObjects {
                 guard let object = objects.last(where: { $0.id == composition.objectID })?.ods,
-                      object.objectWidth > 0, object.objectHeight > 0,
-                      composition.x + object.objectWidth <= videoWidth,
-                      composition.y + object.objectHeight <= videoHeight
+                      object.objectWidth > 0, object.objectHeight > 0
+                else { continue }
+                var area = Area(x: 0, y: 0, width: object.objectWidth, height: object.objectHeight)
+                if let crop = composition.crop {
+                    guard let visible = visibleArea(of: object, croppedTo: crop) else { continue }
+                    area = visible
+                }
+                guard composition.x + area.width <= videoWidth, composition.y + area.height <= videoHeight
                 else { continue }
                 let indices = try object.decodeRLEData()
                 guard indices.count >= object.objectWidth * object.objectHeight else { continue }
-                rects.append(DecodedSubtitleFrame.Rect(x: composition.x, y: composition.y,
-                                                       width: object.objectWidth, height: object.objectHeight,
-                                                       indices: indices, palette: pds.palette))
+                rects.append(DecodedSubtitleFrame.Rect(
+                    x: composition.x, y: composition.y, width: area.width, height: area.height,
+                    indices: composition.crop == nil ? indices : PGS.crop(indices, width: object.objectWidth, to: area),
+                    palette: pds.palette))
             }
             if !rects.isEmpty {
                 let subtitle = SubtitleTimeline.composite(rects)
@@ -251,6 +269,24 @@ struct PGS {
 
         let ods = objects[0].ods
         let position = compositionObjects.first { $0.objectID == objects[0].id }
+        if let position, let crop = position.crop {
+            guard let area = visibleArea(of: ods, croppedTo: crop) else { return nil }
+            var indices = try ods.decodeRLEData()
+            let size = ods.objectWidth * ods.objectHeight
+            if indices.count < size {
+                indices.append(Data(count: size - indices.count)) // Index 0 is transparent.
+            }
+            return Subtitle(
+                index: subtitles.count + 1,
+                startTimestamp: startTimestamp,
+                imageXOffset: position.x,
+                imageYOffset: position.y,
+                imageWidth: area.width,
+                imageHeight: area.height,
+                imageData: PGS.crop(indices, width: ods.objectWidth, to: area),
+                imagePalette: pds.palette,
+                numberOfColors: 256)
+        }
         return try Subtitle(
             index: subtitles.count + 1,
             startTimestamp: startTimestamp,
@@ -263,12 +299,39 @@ struct PGS {
             numberOfColors: 256)
     }
 
+    /// The part of an object a composition's crop rectangle shows, clamped to the object, or nil with a
+    /// warning when that leaves nothing to show.
+    private func visibleArea(of ods: ODS, croppedTo crop: Area) -> Area? {
+        let x = min(crop.x, ods.objectWidth)
+        let y = min(crop.y, ods.objectHeight)
+        let width = min(crop.x + crop.width, ods.objectWidth) - x
+        let height = min(crop.y + crop.height, ods.objectHeight) - y
+        guard width > 0, height > 0 else {
+            print("Skipping \(ods.objectWidth)x\(ods.objectHeight) PGS object: its \(crop.width)x\(crop.height) " +
+                "crop at (\(crop.x), \(crop.y)) leaves nothing to show", to: &stderr)
+            return nil
+        }
+        return Area(x: x, y: y, width: width, height: height)
+    }
+
+    /// Copies `area` out of the palette indices of an object `width` pixels wide, which must hold every
+    /// line of the area.
+    private static func crop(_ indices: Data, width: Int, to area: Area) -> Data {
+        var cropped = Data(capacity: area.width * area.height)
+        for line in area.y ..< area.y + area.height {
+            let start = indices.startIndex + line * width + area.x
+            cropped.append(indices[start ..< start + area.width])
+        }
+        return cropped
+    }
+
     /// Reads where the presentation composition segment at `offset` places each object.
     ///
     /// The payload is the video width (2 bytes), height (2), frame rate (1), composition number (2),
     /// composition state (1), palette update flag (1), palette ID (1) and number of composition objects
-    /// (1), followed by each composition object: object ID (2), window ID (1), cropped flag (1), x (2)
-    /// and y (2), plus 8 bytes of cropping rectangle when the cropped flag has 0x40 set.
+    /// (1), followed by each composition object: object ID (2), window ID (1), flags (1), x (2) and y (2).
+    /// When the flags have the object cropped bit (0x80) set, the cropping rectangle follows: x (2), y (2),
+    /// width (2) and height (2), relative to the object. The forced on bit (0x40) adds nothing to read.
     private func parseCompositionObjects(_ buffer: UnsafeRawBufferPointer, _ offset: Int,
                                          _ segmentLength: Int) -> [CompositionObject] {
         guard segmentLength >= 11 else { return [] }
@@ -278,11 +341,15 @@ struct PGS {
         var compositionObjects: [CompositionObject] = []
         for _ in 0 ..< count {
             guard position + 8 <= end else { break }
+            func field(_ index: Int) -> Int {
+                Int(buffer.loadUnaligned(fromByteOffset: position + 2 * index, as: UInt16.self).bigEndian)
+            }
+            let isCropped = buffer[position + 3] & 0x80 != 0
+            guard !isCropped || position + 16 <= end else { break }
             compositionObjects.append(CompositionObject(
-                objectID: buffer.loadUnaligned(fromByteOffset: position, as: UInt16.self).bigEndian,
-                x: Int(buffer.loadUnaligned(fromByteOffset: position + 4, as: UInt16.self).bigEndian),
-                y: Int(buffer.loadUnaligned(fromByteOffset: position + 6, as: UInt16.self).bigEndian)))
-            position += buffer[position + 3] & 0x40 != 0 ? 16 : 8
+                objectID: UInt16(field(0)), x: field(2), y: field(3),
+                crop: isCropped ? Area(x: field(4), y: field(5), width: field(6), height: field(7)) : nil))
+            position += isCropped ? 16 : 8
         }
         return compositionObjects
     }
