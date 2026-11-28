@@ -261,3 +261,159 @@ func displaySetChangingCaptionStartsNewSubtitle(x: Int, y: Int, color: UInt8) th
     #expect(pgs.subtitles.map(\.endTimestamp) == [2, 4])
     #expect(pgs.subtitles.map(\.index) == [1, 2])
 }
+
+// Issue #144: the crop rectangle of a composition object was read past but not applied, so a cropped
+// object was OCR'd in full, including the parts not shown on screen. The cropped flag is also 0x80, as
+// in FFmpeg and libbluray, not 0x40, which marks a forced caption and has no rectangle after it.
+
+/// Where a composition places an object, the forced flag (0x40) and the crop rectangle (0x80) it
+/// gives it, relative to the object.
+private struct Placement {
+    var id: Int
+    var x: Int
+    var y: Int
+    var forced = false
+    var crop: (x: Int, y: Int, width: Int, height: Int)?
+}
+
+/// A presentation composition for a 1920x1080 video, starting an epoch, placing each object.
+private func presentation(at seconds: Int, placing objects: [Placement]) -> [UInt8] {
+    var payload = bigEndian(1920) + bigEndian(1080) + [0x10] + bigEndian(seconds) + [0x80, 0x00, 0x00]
+    payload.append(UInt8(objects.count))
+    for object in objects {
+        let flags: UInt8 = (object.crop == nil ? 0x00 : 0x80) | (object.forced ? 0x40 : 0x00)
+        payload += bigEndian(object.id) + [0x00, flags] + bigEndian(object.x) + bigEndian(object.y)
+        if let crop = object.crop {
+            payload += bigEndian(crop.x) + bigEndian(crop.y) + bigEndian(crop.width) + bigEndian(crop.height)
+        }
+    }
+    return segment(0x16, at: seconds, payload)
+}
+
+/// A striped object, as `stripedRLE` draws it, in one segment.
+private func stripedObject(at seconds: Int, id: Int, width: Int, height: Int) -> [UInt8] {
+    fragmentedObject(at: seconds, id: id, width: width, height: height, cuts: [])
+}
+
+/// The palette indices of the `width` by `height` area at (`x`, `y`) of a striped object.
+private func stripes(x: Int, y: Int, width: Int, height: Int) -> Data {
+    Data((y ..< y + height).flatMap { row in (x ..< x + width).map { UInt8(($0 + row) % 2 + 1) } })
+}
+
+/// A display set at 1 showing `objects` as `placements` place them, a single caption at 2 and a clear at 3.
+private func cropStream(_ placements: [Placement], _ objects: [UInt8]) -> [UInt8] {
+    presentation(at: 1, placing: placements) + window(at: 1) + palette(at: 1) + objects + end(at: 1)
+        + presentation(at: 2, objects: [(id: 0, x: 10, y: 20)]) + window(at: 2) + palette(at: 2)
+        + object(at: 2, id: 0, width: 4, height: 1, color: 1) + end(at: 2)
+        + presentation(at: 3, objects: []) + window(at: 3) + end(at: 3)
+}
+
+@Test func displaySetShowsCroppedPartOfObject() throws {
+    let stream = cropStream([Placement(id: 0, x: 100, y: 900, crop: (x: 2, y: 1, width: 3, height: 2))],
+                            stripedObject(at: 1, id: 0, width: 6, height: 4))
+    let pgs = try Data(stream).withUnsafeBytes { try PGS($0) }
+
+    #expect(pgs.subtitles.count == 2)
+    let subtitle = try #require(pgs.subtitles.first)
+    #expect(subtitle.startTimestamp == 1)
+    #expect(subtitle.endTimestamp == 2)
+    #expect(subtitle.imageXOffset == 100)
+    #expect(subtitle.imageYOffset == 900)
+    #expect(subtitle.imageWidth == 3)
+    #expect(subtitle.imageHeight == 2)
+    #expect(subtitle.imageData == stripes(x: 2, y: 1, width: 3, height: 2))
+}
+
+@Test func displaySetCropsOnlyTheObjectItCrops() throws {
+    let stream = cropStream(
+        [Placement(id: 0, x: 100, y: 50), Placement(id: 1, x: 98, y: 60, crop: (x: 2, y: 1, width: 3, height: 2))],
+        object(at: 1, id: 0, width: 2, height: 1, color: 1) + stripedObject(at: 1, id: 1, width: 6, height: 4))
+    let pgs = try Data(stream).withUnsafeBytes { try PGS($0) }
+
+    #expect(pgs.subtitles.count == 2)
+    let subtitle = try #require(pgs.subtitles.first)
+    // The first object whole from (100, 50) and the cropped part of the second from (98, 60) to (101, 62).
+    #expect(subtitle.imageXOffset == 98)
+    #expect(subtitle.imageYOffset == 50)
+    let width = try #require(subtitle.imageWidth)
+    let height = try #require(subtitle.imageHeight)
+    #expect(width == 4)
+    #expect(height == 12)
+
+    let data = try #require(subtitle.imageData)
+    let colors = try #require(subtitle.imagePalette)
+    func pixel(_ x: Int, _ y: Int) -> [UInt8] {
+        let index = Int(data[data.startIndex + y * width + x])
+        return Array(colors[index * 4 ..< index * 4 + 4])
+    }
+    let white = pixel(2, 0)
+    let black = pixel(0, 10) // Object pixel (2, 1) of the second object, color 2.
+    #expect(white[3] == 255)
+    #expect(black[3] == 255)
+    #expect(white != black)
+    for y in 0 ..< height {
+        for x in 0 ..< width {
+            if y == 0, x >= 2 {
+                #expect(pixel(x, y) == white, "(\(x), \(y)) should be the first object")
+            } else if y >= 10, x < 3 {
+                let stripe = (x + 2 + y - 10 + 1) % 2 + 1
+                #expect(pixel(x, y) == (stripe == 1 ? white : black), "(\(x), \(y)) should be the cropped object")
+            } else {
+                #expect(pixel(x, y)[3] == 0, "(\(x), \(y)) should be transparent")
+            }
+        }
+    }
+}
+
+@Test func displaySetClampsCropToObject() throws {
+    let stream = cropStream([Placement(id: 0, x: 100, y: 900, crop: (x: 2, y: 1, width: 100, height: 100))],
+                            stripedObject(at: 1, id: 0, width: 6, height: 4))
+    let pgs = try Data(stream).withUnsafeBytes { try PGS($0) }
+
+    #expect(pgs.subtitles.count == 2)
+    let subtitle = try #require(pgs.subtitles.first)
+    #expect(subtitle.imageXOffset == 100)
+    #expect(subtitle.imageYOffset == 900)
+    #expect(subtitle.imageWidth == 4)
+    #expect(subtitle.imageHeight == 3)
+    #expect(subtitle.imageData == stripes(x: 2, y: 1, width: 4, height: 3))
+}
+
+@Test(arguments: [
+    // No width.
+    (x: 0, y: 0, width: 0, height: 4),
+    // No height.
+    (x: 0, y: 0, width: 6, height: 0),
+    // Wholly right of the object.
+    (x: 6, y: 0, width: 2, height: 2),
+    // Wholly below the object.
+    (x: 0, y: 10, width: 2, height: 2)
+])
+func displaySetSkipsObjectCroppedToNothing(x: Int, y: Int, width: Int, height: Int) throws {
+    let stream = cropStream([Placement(id: 0, x: 100, y: 900, crop: (x: x, y: y, width: width, height: height))],
+                            stripedObject(at: 1, id: 0, width: 6, height: 4))
+    let pgs = try Data(stream).withUnsafeBytes { try PGS($0) }
+
+    // The display set shows nothing, and the next one is read as before.
+    #expect(pgs.subtitles.count == 1)
+    let subtitle = try #require(pgs.subtitles.first)
+    #expect(subtitle.index == 1)
+    #expect(subtitle.startTimestamp == 2)
+    #expect(subtitle.endTimestamp == 3)
+    #expect(subtitle.imageData == Data([1, 1, 1, 1]))
+}
+
+@Test func displaySetWithForcedObjectPlacesTheNextObject() throws {
+    // A forced caption has no crop rectangle, so the composition object after it starts 8 bytes on.
+    let stream = cropStream(
+        [Placement(id: 0, x: 100, y: 50, forced: true), Placement(id: 1, x: 98, y: 60)],
+        object(at: 1, id: 0, width: 2, height: 1, color: 1) + object(at: 1, id: 1, width: 3, height: 2, color: 2))
+    let pgs = try Data(stream).withUnsafeBytes { try PGS($0) }
+
+    #expect(pgs.subtitles.count == 2)
+    let subtitle = try #require(pgs.subtitles.first)
+    #expect(subtitle.imageXOffset == 98)
+    #expect(subtitle.imageYOffset == 50)
+    #expect(subtitle.imageWidth == 4)
+    #expect(subtitle.imageHeight == 12)
+}
