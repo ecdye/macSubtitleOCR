@@ -12,6 +12,8 @@ struct PDS {
     // MARK: - Properties
 
     private(set) var palette = [UInt8](repeating: 0, count: 1024)
+    /// The palette ID, which presentation compositions select the palette by.
+    let id: UInt8
 
     // MARK: - Lifecycle
 
@@ -19,10 +21,18 @@ struct PDS {
     ///
     /// `videoHeight` comes from the presentation composition segment and picks the color matrix: BT.601
     /// up to 576 lines and BT.709 above, or when the height is not known, as FFmpeg does.
-    init(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int, videoHeight: Int = 0) throws {
+    ///
+    /// A segment updating a palette defined earlier in the epoch, `updating`, sets only the entries it
+    /// lists, and the others keep their colors, as in FFmpeg.
+    init(_ buffer: UnsafeRawBufferPointer, _ offset: Int, _ segmentLength: Int, videoHeight: Int = 0,
+         updating previous: PDS? = nil) throws {
         let count = buffer.count - offset
         guard count >= 7, segmentLength <= count, (segmentLength - 2) % 5 == 0 else {
             throw macSubtitleOCRError.invalidPDSDataLength(length: count)
+        }
+        id = buffer[offset]
+        if let previous {
+            palette = previous.palette
         }
         parsePDS(buffer, offset, segmentLength, bt709: videoHeight <= 0 || videoHeight > 576)
     }
@@ -32,7 +42,7 @@ struct PDS {
     /// Parses the Palette Definition Segment (PDS) to extract the RGBA palette.
     /// PDS structure:
     ///   1 byte: Segment Type (0x14); already checked by the caller
-    ///   1 byte: Palette ID (unused by us)
+    ///   1 byte: Palette ID; read by the initializer
     ///   1 byte: Palette Version (unused by us)
     ///   Followed by a series of palette entries:
     ///       Each entry is 5 bytes: (Index, Y, Cr, Cb, Alpha)
