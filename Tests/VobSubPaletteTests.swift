@@ -136,16 +136,32 @@ func vobSubLayeredGrays(rows: [String], alpha: [UInt8], grays: [UInt8]) {
 /// A pack header with no stuffing, as a VobSub `.sub` file carries before every PES packet.
 private let packHeader: [UInt8] = [0, 0, 1, 0xBA, 0x44, 0, 4, 0, 4, 1, 0x01, 0x89, 0xC3, 0xF8]
 
+/// The commands setting a 4x2 display area at x = 16 * `column` and the line offsets of the image
+/// `pack` writes, whose first line starts `fieldOffset` bytes into the subpicture.
+private func imageCommands(column: UInt8 = 0, fieldOffset: UInt8 = 5) -> [UInt8] {
+    [0x05, column, 0x00, column << 4 | 3, 0x00, 0x00, 0x01, 0x06, 0x00, fieldOffset, 0x00, 0x04]
+}
+
 /// One pack holding a 4x2 subpicture whose only control sequence runs `commands`, the display area
 /// and line offsets.
 ///
 /// The subpicture is presented at `second` and drawn at x = 16 * `column`, so that subpictures
 /// drawn alike still differ. `fieldOffset` is the first line's offset into the RLE data.
 private func pack(commands: [UInt8], second: Int = 0, column: UInt8 = 0, fieldOffset: UInt8 = 5) -> [UInt8] {
+    pack(sequences: [commands + imageCommands(column: column, fieldOffset: fieldOffset) + [0x01]], second: second)
+}
+
+/// One pack holding a subpicture of the 4x2 image `imageCommands` describes, whose control
+/// sequences run `sequences` in turn, each delayed one unit more than the one before it.
+private func pack(sequences: [[UInt8]], second: Int = 0) -> [UInt8] {
     let rle: [UInt8] = [0x12, 0x11]
     let controlOffset = 4 + rle.count
-    let control: [UInt8] = [0, 0, UInt8(controlOffset >> 8), UInt8(controlOffset & 0xFF)] + commands
-        + [0x05, column, 0x00, column << 4 | 3, 0x00, 0x00, 0x01, 0x06, 0x00, fieldOffset, 0x00, 0x04, 0x01, 0xFF]
+    var control = [UInt8]()
+    for (index, commands) in sequences.enumerated() {
+        let start = controlOffset + control.count
+        let next = index == sequences.count - 1 ? start : start + 4 + commands.count + 1
+        control += [0, UInt8(index), UInt8(next >> 8), UInt8(next & 0xFF)] + commands + [0xFF]
+    }
     let size = 4 + rle.count + control.count
     let spu = [UInt8(size >> 8), UInt8(size & 0xFF), UInt8(controlOffset >> 8), UInt8(controlOffset & 0xFF)]
         + rle + control
@@ -242,6 +258,55 @@ func vobSubWithoutPaletteOrAlphaCommandReusesThePreviousOnes(commands: [UInt8]) 
     #expect(subtitles[2].imagePalette == colorPalette)
 }
 
+// MARK: - Repeated palette or alpha commands
+
+/// Color map 3, 2, 1, 0 and alpha 15, 15, 15, 0.
+private let otherColorCommands: [UInt8] = [0x03, 0x01, 0x23, 0x04, 0x0F, 0xFF]
+/// The RGBA palette `otherColorCommands` selects from `idxPalette`.
+private let otherColorPalette: [UInt8] = [
+    0x40, 0x40, 0x40, 0xFF, 0x80, 0x80, 0x80, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0
+]
+/// Alpha 0, 0, 15, 0, which leaves only the line of the image drawn in color 2 showing.
+private let fadeCommands: [UInt8] = [0x04, 0x0F, 0x00]
+/// The RGBA palette `colorCommands` and then `fadeCommands` select from `idxPalette`.
+private let fadedPalette: [UInt8] = [0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0, 0x80, 0x80, 0x80, 0xFF, 0x40, 0x40, 0x40, 0]
+
+/// Issue #177: as in FFmpeg, each set color (0x03) and set contrast (0x04) command takes effect as
+/// it is read, and the image is drawn with the colors in effect at the end of the control sequence
+/// that describes it.
+@Test(arguments: [
+    // Repeated in one sequence, before the image or after it.
+    ([colorCommands + otherColorCommands + imageCommands()], otherColorPalette, otherColorPalette),
+    ([colorCommands + imageCommands() + otherColorCommands], otherColorPalette, otherColorPalette),
+    // A fade in a later sequence leaves the image as it was but sets the stream's colors.
+    ([colorCommands + imageCommands(), fadeCommands], colorPalette, fadedPalette),
+    ([colorCommands + imageCommands(), [0x02] + otherColorCommands], colorPalette, otherColorPalette),
+    // Colors set before the sequence that describes the image take effect.
+    ([colorCommands, fadeCommands + imageCommands()], fadedPalette, fadedPalette),
+    // A later sequence describing the image again draws it anew, with the colors in effect then.
+    ([colorCommands + imageCommands(), fadeCommands, imageCommands()], fadedPalette, fadedPalette)
+] as [([[UInt8]], [UInt8], [UInt8])])
+func vobSubImageUsesTheColorsWhenItsSequenceEnds(sequences: [[UInt8]], image: [UInt8], carried: [UInt8]) throws {
+    let subtitles = try decodePacks([pack(sequences: sequences), pack(commands: [0x01])])
+    #expect(subtitles.count == 2)
+    #expect(subtitles[0].imagePalette == image)
+    #expect(subtitles[1].imagePalette == carried)
+}
+
+@Test func vobSubFadeOfTheColorsCarriedOverIsCarriedOn() throws {
+    // The second subpicture sets no colors before its image, so draws it in the first one's, and
+    // the alpha its fade sets carries over to the third.
+    let subtitles = try decodePacks([
+        pack(commands: colorCommands),
+        pack(sequences: [[0x01] + imageCommands(), fadeCommands]),
+        pack(commands: [0x01])
+    ])
+    #expect(subtitles.count == 3)
+    #expect(subtitles[1].imagePalette == colorPalette)
+    #expect(subtitles[2].imagePalette == fadedPalette)
+    #expect(subtitles[2].imageAlpha == [0, 0, 15, 0])
+}
+
 #if FFMPEG
 
 // MARK: - Agreement with FFmpeg
@@ -329,6 +394,52 @@ func vobSubMissingColorCommandsMatchFFmpegDecoder(commands: [[UInt8]]) throws {
     let ours = try VobSub(sub, idxURL).subtitles
     try #require(ours.count == packs.count)
     let shown = try ours.map(visiblePixels).filter { !$0.isEmpty }
+    let ffmpeg = try #require(FFmpeg(idxURL.path).subtitleTracks.values.first)
+    #expect(try shown == ffmpeg.map(visiblePixels))
+}
+
+/// Issue #177: subpictures that set their colors more than once decode as FFmpeg's do, by position
+/// on the screen.
+@Test(arguments: [
+    [[colorCommands + otherColorCommands + imageCommands()]],
+    [[colorCommands + imageCommands() + otherColorCommands]],
+    [[colorCommands + imageCommands(), fadeCommands], [[0x01] + imageCommands()]],
+    [[colorCommands + imageCommands(), otherColorCommands], [[0x01] + imageCommands()]],
+    [[colorCommands, fadeCommands + imageCommands()]],
+    [[colorCommands + imageCommands(), fadeCommands, imageCommands()]],
+    [[colorCommands + imageCommands()], [[0x01] + imageCommands(), fadeCommands], [[0x01] + imageCommands()]],
+    // The second subpicture lacks one command, so uses the last value the first one set.
+    [
+        [[0x01, 0x04, 0xFF, 0xF0, 0x03, 0x32, 0x10, 0x03, 0x01, 0x23] + imageCommands()],
+        [[0x01, 0x04, 0x0F, 0xFF] + imageCommands()]
+    ],
+    [
+        [[0x01, 0x03, 0x32, 0x10, 0x04, 0xFF, 0xF0, 0x04, 0x0F, 0xFF] + imageCommands()],
+        [[0x01, 0x03, 0x01, 0x23] + imageCommands()]
+    ]
+] as [[[[UInt8]]]])
+func vobSubRepeatedColorCommandsMatchFFmpegDecoder(subpictures: [[[UInt8]]]) throws {
+    let directory = URL.temporaryDirectory.appendingPathComponent("VobSubPaletteTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let sub = directory.appendingPathComponent("colors.sub")
+    let idxURL = directory.appendingPathComponent("colors.idx")
+    // Each subpicture in its own place, so FFmpeg's timeline does not merge two drawn alike.
+    let packs = subpictures.enumerated().map { subpicture in
+        let image = imageCommands()
+        let sequences = subpicture.element.map { commands in
+            commands.suffix(image.count) == image[...]
+                ? commands.dropLast(image.count) + imageCommands(column: UInt8(subpicture.offset)) : commands
+        }
+        return pack(sequences: sequences, second: subpicture.offset + 1)
+    }
+    try Data(packs.flatMap(\.self)).write(to: sub)
+    try idx(for: packs).write(to: idxURL, atomically: true, encoding: .utf8)
+
+    let ours = try VobSub(sub, idxURL).subtitles
+    try #require(ours.count == packs.count)
+    let shown = try ours.map(visiblePixels)
+    #expect(shown.allSatisfy { !$0.isEmpty })
     let ffmpeg = try #require(FFmpeg(idxURL.path).subtitleTracks.values.first)
     #expect(try shown == ffmpeg.map(visiblePixels))
 }
