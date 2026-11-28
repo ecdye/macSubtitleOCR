@@ -326,18 +326,20 @@ struct VobSubParser {
         }
     }
 
-    /// Turn the four idx palette indices and alphas the subpicture selects into RGBA colors, as
-    /// FFmpeg's `guess_palette` does.
+    /// Turn the four idx palette indices and alphas the subpicture selects into RGBA colors.
     ///
-    /// With an idx palette each color is the entry its index selects; an entry past the end of a
-    /// short palette is black. Without one the colors are FFmpeg's guessed grays.
+    /// With an idx palette each color is the entry its index selects, as in FFmpeg; an entry past
+    /// the end of a short palette is black. Without one the colors are the grays `layeredGrays`
+    /// picks for OCR.
     private func decodePalette() throws {
         guard let colormap = subtitle.imagePalette, let alpha = subtitle.imageAlpha else {
             throw macSubtitleOCRError.invalidVobSubSubpicture(
                 "VobSub subtitle \(subtitle.index) lacks a palette (0x03) or alpha (0x04) command")
         }
 
-        let grays = masterPalette == nil ? Self.guessedGrays(colormap: colormap, alpha: alpha) : nil
+        let grays = masterPalette == nil
+            ? Self.layeredGrays(image: subtitle.imageData ?? Data(), width: subtitle.imageWidth ?? 0, alpha: alpha)
+            : nil
         var palette = [UInt8](repeating: 0, count: 4 * 4)
         for i in 0 ..< 4 {
             if let grays {
@@ -358,26 +360,60 @@ struct VobSubParser {
         subtitle.imagePalette = palette
     }
 
-    /// The gray FFmpeg's `guess_palette` gives each of the four colors when the idx has no palette.
+    /// The gray to draw each of the four colors in when the idx has no palette, from how they are
+    /// layered in the image.
     ///
-    /// Transparent colors are black. The distinct idx indices among the visible ones are spread
-    /// from black to white in the order they first appear, a single one being white, and a visible
-    /// color repeating an index takes the gray of its first appearance.
-    static func guessedGrays(colormap: [UInt8], alpha: [UInt8]) -> [UInt8] {
-        // FFmpeg's levels for one to four distinct colors, scaled by its default white, 0xFFFFFF.
-        let levels: [[Int]] = [[0xFF], [0x00, 0xFF], [0x00, 0x80, 0xFF], [0x00, 0x55, 0xAA, 0xFF]]
-        let visible = (0 ..< 4).filter { alpha[$0] != 0 }
-        let distinct = Set(visible.map { colormap[$0] }).count
+    /// DVD subtitles are a light text body inside a dark outline, sometimes with an anti-aliasing
+    /// color or a second outline around it, but which of the four colors plays which part varies
+    /// from disc to disc. The visible colors are ranked by how deep inside the ink their pixels lie
+    /// on average, counting the steps from each pixel to the nearest transparent pixel or the edge
+    /// of the image: the body, enclosed by the outline, lies deepest. The innermost color is white
+    /// and the outermost black, with any between them spread evenly, so the inverted image Vision
+    /// reads is dark text on white, as with a typical palette. Transparent colors, and visible ones
+    /// no pixel uses, are black; ties go to the lower color.
+    ///
+    /// FFmpeg's `guess_palette` instead spreads the colors from black to white in the order they
+    /// are numbered, which usually makes the body the darkest and turns filled glyphs hollow.
+    static func layeredGrays(image: Data, width: Int, alpha: [UInt8]) -> [UInt8] {
         var grays = [UInt8](repeating: 0, count: 4)
-        guard distinct > 0 else { return grays }
-        var first = [UInt8: Int]()
-        for i in visible {
-            if let earlier = first[colormap[i]] {
-                grays[i] = grays[earlier]
-            } else {
-                grays[i] = UInt8((0xFF * levels[distinct - 1][first.count]) >> 8)
-                first[colormap[i]] = i
+        guard width > 0, alpha.count == 4 else { return grays }
+        let height = image.count / width
+        var pixels = [Int](repeating: 0, count: 4)
+        var depths = [Int](repeating: 0, count: 4)
+        image.withUnsafeBytes { (image: UnsafeRawBufferPointer) in
+            // The city block distance of each pixel from the nearest transparent one, in two passes;
+            // the pixels around the image count as transparent.
+            var distance = [Int](repeating: 0, count: width * height)
+            for y in 0 ..< height {
+                for x in 0 ..< width {
+                    let color = Int(image[y * width + x])
+                    guard color < 4, alpha[color] != 0 else { continue }
+                    let left = x > 0 ? distance[y * width + x - 1] : 0
+                    let above = y > 0 ? distance[(y - 1) * width + x] : 0
+                    distance[y * width + x] = min(left, above) + 1
+                }
             }
+            for y in (0 ..< height).reversed() {
+                for x in (0 ..< width).reversed() where distance[y * width + x] > 0 {
+                    let right = x < width - 1 ? distance[y * width + x + 1] : 0
+                    let below = y < height - 1 ? distance[(y + 1) * width + x] : 0
+                    distance[y * width + x] = min(distance[y * width + x], min(right, below) + 1)
+                    let color = Int(image[y * width + x])
+                    pixels[color] += 1
+                    depths[color] += distance[y * width + x]
+                }
+            }
+        }
+
+        // Innermost first: the greatest mean depth, compared without dividing.
+        let layers = (0 ..< 4).filter { pixels[$0] > 0 }.sorted { a, b in
+            let lhs = depths[a] * pixels[b]
+            let rhs = depths[b] * pixels[a]
+            return lhs != rhs ? lhs > rhs : a < b
+        }
+        let outermost = layers.count - 1
+        for (depth, color) in layers.enumerated() {
+            grays[color] = outermost == 0 ? 0xFF : UInt8(0xFF * (outermost - depth) / outermost)
         }
         return grays
     }
