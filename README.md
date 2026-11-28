@@ -24,9 +24,11 @@ However, you should be able to compile for `x86_64` on you own machine by follow
 
 ### Supported Formats
 
-- PGS (`.mkv`, `.sup`)
-- VobSub (`.mkv`, `.sub`, `.idx`)
+- PGS (`.mkv`, `.mks`, `.sup`)
+- VobSub (`.mkv`, `.mks`, `.sub`, `.idx`), with the `.sub` and `.idx` side by side
 - DVB subtitles (`.ts`, `.mkv`) and other bitmap formats FFmpeg can decode, with the FFmpeg decoder (`--ffmpeg-decoder`)
+
+The format is told by the file extension, in any case (`.SUP` reads the same as `.sup`).
 
 ## Building the Project
 
