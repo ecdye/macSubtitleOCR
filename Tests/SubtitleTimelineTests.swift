@@ -90,6 +90,47 @@ private func solidRect(x: Int = 0, y: Int, width: Int = 4, height: Int = 2,
     #expect(subtitles.map(\.endTimestamp) == ends)
 }
 
+/// A container duration, such as a Matroska BlockDuration, ends a frame whose stream end is unknown, as
+/// the internal decoder uses BlockDuration for a subpicture with no end time. The next frame still cuts it
+/// short, and a frame with a real end keeps it.
+@Test func packetDurationEndsAFrameWithAnUnknownEnd() {
+    let frames = [
+        DecodedSubtitleFrame(presentationTime: 1, endDisplayTime: 745642, packetDuration: 2000,
+                             rects: [solidRect(y: 0)]),
+        DecodedSubtitleFrame(presentationTime: 5, endDisplayTime: 745642, packetDuration: 9000,
+                             rects: [solidRect(y: 8)]),
+        DecodedSubtitleFrame(presentationTime: 7, endDisplayTime: 2992, packetDuration: 2000,
+                             rects: [solidRect(y: 0)]),
+        DecodedSubtitleFrame(presentationTime: 20, endDisplayTime: 745642, rects: [solidRect(y: 8)])
+    ]
+    let subtitles = SubtitleTimeline.subtitles(from: frames)
+    let ends: [TimeInterval?] = [3, 7, 7 + 2.992, nil]
+    #expect(subtitles.map(\.endTimestamp) == ends)
+}
+
+/// A frame that stays until replaced ends when the next frame arrives, whatever the container says, as the
+/// internal PGS decoder ends it at the next display set.
+@Test func packetDurationDoesNotEndAFrameThatStaysUntilReplaced() {
+    let frames = [
+        DecodedSubtitleFrame(presentationTime: 1, packetDuration: 500, rects: [solidRect(y: 0)]),
+        DecodedSubtitleFrame(presentationTime: 3, packetDuration: 4000, rects: [solidRect(y: 8)]),
+        DecodedSubtitleFrame(presentationTime: 4, rects: []),
+        DecodedSubtitleFrame(presentationTime: 6, packetDuration: 1500, rects: [solidRect(y: 0)])
+    ]
+    let subtitles = SubtitleTimeline.subtitles(from: frames)
+    #expect(subtitles.map(\.endTimestamp) == [3, 4, nil])
+}
+
+/// A container duration that does not reach past the frame's start display time is not an end.
+@Test func packetDurationBeforeTheStartIsIgnored() {
+    let frames = [
+        DecodedSubtitleFrame(presentationTime: 1, startDisplayTime: 500, endDisplayTime: 745642,
+                             packetDuration: 500, rects: [solidRect(y: 0)])
+    ]
+    let subtitles = SubtitleTimeline.subtitles(from: frames)
+    #expect(subtitles.map(\.endTimestamp) == [nil])
+}
+
 /// No caption may end before it starts, whatever order the frames come in.
 @Test func captionsNeverEndBeforeTheyStart() throws {
     let frames = [

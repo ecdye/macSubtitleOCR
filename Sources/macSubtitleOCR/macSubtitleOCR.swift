@@ -109,13 +109,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
                         try mkvStream.saveSubtitleTrackData(track,
                                                             outputDirectory: URL(fileURLWithPath: outputDirectory))
                     }
-                    return try track.trackData.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-                        if track.codecID == "S_HDMV/PGS" {
-                            try PGS(buffer).subtitles
-                        } else {
-                            try VobSub(buffer, track.idxData ?? "").subtitles
-                        }
-                    }
+                    return try track.subtitles()
                 }
             }
         case let .pgs(url):

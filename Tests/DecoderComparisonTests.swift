@@ -352,17 +352,8 @@ struct DecoderRun {
         case "mkv", "mks":
             let mkv = try MKVSubtitleExtractor(filePath: input.path)
             try mkv.parseTracks(for: ["S_HDMV/PGS", "S_VOBSUB"])
-            return try mkv.tracks.compactMap { track in
-                let subtitles: [Subtitle]
-                switch track.codecID {
-                case "S_HDMV/PGS":
-                    subtitles = try track.trackData.withUnsafeBytes { try PGS($0) }.subtitles
-                case "S_VOBSUB":
-                    subtitles = try track.trackData.withUnsafeBytes { try VobSub($0, track.idxData ?? "") }.subtitles
-                default:
-                    return nil
-                }
-                return DecodedTrack(number: track.trackNumber, language: track.language, subtitles: subtitles)
+            return try mkv.tracks.map { track in
+                try DecodedTrack(number: track.trackNumber, language: track.language, subtitles: track.subtitles())
             }
         default:
             throw macSubtitleOCRError.invalidInputFile("Unsupported input \(input.lastPathComponent)")
