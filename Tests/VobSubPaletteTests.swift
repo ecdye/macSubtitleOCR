@@ -136,42 +136,110 @@ func vobSubLayeredGrays(rows: [String], alpha: [UInt8], grays: [UInt8]) {
 /// A pack header with no stuffing, as a VobSub `.sub` file carries before every PES packet.
 private let packHeader: [UInt8] = [0, 0, 1, 0xBA, 0x44, 0, 4, 0, 4, 1, 0x01, 0x89, 0xC3, 0xF8]
 
-/// One pack holding a 4x2 subpicture at PTS 0 whose only control sequence runs `commands`, the
-/// display area and line offsets.
-private func pack(commands: [UInt8]) -> [UInt8] {
+/// One pack holding a 4x2 subpicture whose only control sequence runs `commands`, the display area
+/// and line offsets.
+///
+/// The subpicture is presented at `second` and drawn at x = 16 * `column`, so that subpictures
+/// drawn alike still differ. `fieldOffset` is the first line's offset into the RLE data.
+private func pack(commands: [UInt8], second: Int = 0, column: UInt8 = 0, fieldOffset: UInt8 = 5) -> [UInt8] {
     let rle: [UInt8] = [0x12, 0x11]
     let controlOffset = 4 + rle.count
     let control: [UInt8] = [0, 0, UInt8(controlOffset >> 8), UInt8(controlOffset & 0xFF)] + commands
-        + [0x05, 0x00, 0x00, 0x03, 0x00, 0x00, 0x01, 0x06, 0x00, 0x05, 0x00, 0x04, 0x01, 0xFF]
+        + [0x05, column, 0x00, column << 4 | 3, 0x00, 0x00, 0x01, 0x06, 0x00, fieldOffset, 0x00, 0x04, 0x01, 0xFF]
     let size = 4 + rle.count + control.count
     let spu = [UInt8(size >> 8), UInt8(size & 0xFF), UInt8(controlOffset >> 8), UInt8(controlOffset & 0xFF)]
         + rle + control
-    let body: [UInt8] = [0x81, 0x80, 5, 0x21, 0x00, 0x01, 0x00, 0x01, 0x20] + spu
+    let pts = UInt64(second) * 90000
+    let ptsBytes: [UInt8] = [
+        0x21 | UInt8(pts >> 29 & 0x0E), UInt8(pts >> 22 & 0xFF), UInt8(pts >> 14 & 0xFE) | 1,
+        UInt8(pts >> 7 & 0xFF), UInt8(pts << 1 & 0xFE) | 1
+    ]
+    let body: [UInt8] = [0x81, 0x80, 5] + ptsBytes + [0x20] + spu
     return packHeader + [0, 0, 1, 0xBD, UInt8(body.count >> 8), UInt8(body.count & 0xFF)] + body
 }
 
+private let idxPalette = "palette: 000000, ffffff, 808080, 404040"
+
+/// The idx for a `.sub` holding `packs` one after another, one subtitle each.
+private func idx(for packs: [[UInt8]], palette: String? = idxPalette) -> String {
+    var offset = 0
+    var lines = palette.map { [$0] } ?? []
+    lines.append("id: en, index: 0")
+    for (index, pack) in packs.enumerated() {
+        lines.append("timestamp: 00:00:\(String(format: "%02d", index + 1)):000, filepos: \(String(offset, radix: 16))")
+        offset += pack.count
+    }
+    return lines.joined(separator: "\n")
+}
+
+private func decodePacks(_ packs: [[UInt8]]) throws -> [Subtitle] {
+    let bytes = packs.flatMap(\.self)
+    return try bytes.withUnsafeBytes { try VobSub($0, idx(for: packs)).subtitles }
+}
+
+/// Color map 0, 1, 2, 3 and alpha 0, 15, 15, 15.
+private let colorCommands: [UInt8] = [0x01, 0x03, 0x32, 0x10, 0x04, 0xFF, 0xF0]
+/// The RGBA palette `colorCommands` selects from `idxPalette`.
+private let colorPalette: [UInt8] = [0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0x80, 0x80, 0x80, 0xFF, 0x40, 0x40, 0x40, 0xFF]
+
+/// Issue #155: as in FFmpeg, a subpicture without a set color (0x03) or set contrast (0x04) command
+/// uses the color map and alpha the subpictures before it in the stream left.
 @Test(arguments: [
     [0x01, 0x04, 0xFF, 0xF0], // No palette command
     [0x01, 0x03, 0x32, 0x10], // No alpha command
     [0x01] // Neither
 ] as [[UInt8]])
-func vobSubWithoutPaletteOrAlphaCommandIsAPlaceholder(commands: [UInt8]) throws {
-    let good = pack(commands: [0x01, 0x03, 0x32, 0x10, 0x04, 0xFF, 0xF0])
-    let bad = pack(commands: commands)
-    let bytes = bad + good
-    let idx = """
-    palette: 000000, ffffff, 808080, 404040
-    id: en, index: 0
-    timestamp: 00:00:01:000, filepos: 000000000
-    timestamp: 00:00:02:000, filepos: \(String(bad.count, radix: 16))
-    """
-    let subtitles = try bytes.withUnsafeBytes { try VobSub($0, idx).subtitles }
+func vobSubWithoutPaletteOrAlphaCommandReusesThePreviousOnes(commands: [UInt8]) throws {
+    let subtitles = try decodePacks([pack(commands: colorCommands), pack(commands: commands)])
     #expect(subtitles.count == 2)
-    #expect(subtitles[0].imageData == nil)
-    #expect(subtitles[0].startTimestamp == 1)
-    // The subtitle after it still decodes, its first color transparent.
-    let colors: [[UInt8]] = [[0, 0, 0, 0], [0xFF, 0xFF, 0xFF, 0xFF], [0x80, 0x80, 0x80, 0xFF], [0x40, 0x40, 0x40, 0xFF]]
-    #expect(subtitles[1].imagePalette == colors.flatMap(\.self))
+    #expect(subtitles[0].imagePalette == colorPalette)
+    #expect(subtitles[1].imagePalette == colorPalette)
+    #expect(subtitles[1].imageAlpha == [0, 15, 15, 15])
+}
+
+@Test func vobSubColorMapAndAlphaCarryOverSeparately() throws {
+    let subtitles = try decodePacks([
+        pack(commands: colorCommands),
+        pack(commands: [0x01, 0x03, 0x01, 0x23]), // Color map 3, 2, 1, 0
+        pack(commands: [0x01, 0x04, 0x0F, 0xFF]), // Alpha 15, 15, 15, 0
+        pack(commands: [0x01])
+    ])
+    #expect(subtitles.count == 4)
+    let black: [UInt8] = [0, 0, 0]
+    let white: [UInt8] = [0xFF, 0xFF, 0xFF]
+    let gray: [UInt8] = [0x80, 0x80, 0x80]
+    let darkGray: [UInt8] = [0x40, 0x40, 0x40]
+    #expect(subtitles[1].imagePalette == darkGray + [0] + gray + [0xFF] + white + [0xFF] + black + [0xFF])
+    #expect(subtitles[2].imagePalette == darkGray + [0xFF] + gray + [0xFF] + white + [0xFF] + black + [0])
+    #expect(subtitles[3].imagePalette == subtitles[2].imagePalette)
+}
+
+@Test func vobSubFirstSubpictureWithoutPaletteOrAlphaUsesFFmpegsInitialColors() throws {
+    // FFmpeg starts with an all zero color map and alpha: every color is the first of the palette,
+    // and fully transparent.
+    let noPalette = try decodePacks([pack(commands: [0x01, 0x04, 0xFF, 0xF0]), pack(commands: colorCommands)])
+    #expect(noPalette[0].imagePalette == [0, 0, 0, 0] + Array(repeating: [0, 0, 0, 0xFF], count: 3).flatMap(\.self))
+    #expect(noPalette[1].imagePalette == colorPalette)
+
+    let palette = idxPalette.replacingOccurrences(of: "000000", with: "102030")
+    let packs = [pack(commands: [0x01, 0x03, 0x32, 0x10]), pack(commands: [0x01])]
+    let noAlpha = try packs.flatMap(\.self).withUnsafeBytes { try VobSub($0, idx(for: packs, palette: palette)) }
+    for subtitle in noAlpha.subtitles {
+        #expect(subtitle.imageAlpha == [0, 0, 0, 0])
+        #expect(subtitle.imagePalette?.enumerated().allSatisfy { $0.offset % 4 != 3 || $0.element == 0 } == true)
+        // Nothing shows, so OCR has nothing to read, as when FFmpeg drops the subpicture.
+        #expect(try #require(subtitle.makeImageSource()).createImage(false) == nil)
+    }
+}
+
+@Test func vobSubPlaceholderLeavesTheColorsAsTheyWere() throws {
+    // The middle subpicture sets a color map and alpha but its first line lies past its RLE data.
+    let broken = pack(commands: [0x01, 0x03, 0x01, 0x23, 0x04, 0x0F, 0xFF], fieldOffset: 0xF0)
+    let subtitles = try decodePacks([pack(commands: colorCommands), broken, pack(commands: [0x01])])
+    #expect(subtitles.count == 3)
+    #expect(subtitles[1].imageData == nil)
+    #expect(subtitles[1].startTimestamp == 2)
+    #expect(subtitles[2].imagePalette == colorPalette)
 }
 
 #if FFMPEG
@@ -233,5 +301,35 @@ func vobSubPaletteMatchesFFmpegDecoder(palette: String?) throws {
             #expect(try pixels == visiblePixels(theirs), "subtitle \(mine.index)")
         }
     }
+}
+
+/// Issue #155: subpictures without set color or set contrast commands decode as FFmpeg's do, by
+/// position on the screen. FFmpeg drops a subpicture nothing of which shows, where this keeps it
+/// with its transparent image, so those are left out of the comparison.
+@Test(arguments: [
+    [colorCommands, [0x01, 0x04, 0xFF, 0xF0]],
+    [colorCommands, [0x01, 0x03, 0x32, 0x10]],
+    [colorCommands, [0x01]],
+    [colorCommands, [0x01, 0x03, 0x01, 0x23], [0x01, 0x04, 0x0F, 0xFF], [0x01]],
+    [[0x01, 0x04, 0xFF, 0xF0], colorCommands, [0x01]],
+    [[0x01, 0x03, 0x32, 0x10], [0x01], colorCommands, [0x01]],
+    [[0x01], [0x01, 0x03, 0x01, 0x23], colorCommands]
+] as [[[UInt8]]])
+func vobSubMissingColorCommandsMatchFFmpegDecoder(commands: [[UInt8]]) throws {
+    let directory = URL.temporaryDirectory.appendingPathComponent("VobSubPaletteTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let sub = directory.appendingPathComponent("colors.sub")
+    let idxURL = directory.appendingPathComponent("colors.idx")
+    // Each subpicture in its own place, so FFmpeg's timeline does not merge two drawn alike.
+    let packs = commands.enumerated().map { pack(commands: $0.element, second: $0.offset + 1, column: UInt8($0.offset)) }
+    try Data(packs.flatMap(\.self)).write(to: sub)
+    try idx(for: packs).write(to: idxURL, atomically: true, encoding: .utf8)
+
+    let ours = try VobSub(sub, idxURL).subtitles
+    try #require(ours.count == packs.count)
+    let shown = try ours.map(visiblePixels).filter { !$0.isEmpty }
+    let ffmpeg = try #require(FFmpeg(idxURL.path).subtitleTracks.values.first)
+    #expect(try shown == ffmpeg.map(visiblePixels))
 }
 #endif

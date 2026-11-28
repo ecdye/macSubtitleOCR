@@ -84,6 +84,9 @@ struct VobSub {
     ///
     /// A subtitle that cannot be decoded is replaced by an empty one with its timing, with a warning, so the
     /// numbering and timing of the rest stay intact and one bad subpicture does not lose the track.
+    ///
+    /// The color map and alpha carry from each subpicture decoded to the next, as in FFmpeg's decoder
+    /// for the stream; one that cannot be decoded leaves them as they were.
     private func extractSubtitleImages(buffer: UnsafeRawBufferPointer, stream: VobSubIDX.Stream, palette: [UInt8]?,
                                        substream: Int?) -> [Subtitle] {
         if buffer.count == 0 {
@@ -91,6 +94,7 @@ struct VobSub {
             return []
         }
         var subtitles = [Subtitle]()
+        var colors = VobSubParser.Colors()
         for index in stream.offsets.indices {
             let offset = stream.offsets[index]
             let timestamp = stream.timestamps[index]
@@ -102,7 +106,7 @@ struct VobSub {
                 UInt64(buffer.count)
             }
             do {
-                let subtitle = try VobSubParser(
+                let parser = try VobSubParser(
                     index: index + 1,
                     buffer: buffer,
                     timestamp: timestamp,
@@ -110,8 +114,10 @@ struct VobSub {
                     nextOffset: nextOffset,
                     idxPalette: palette,
                     substream: substream,
-                    delay: stream.delays[index]).subtitle
-                subtitles.append(subtitle)
+                    delay: stream.delays[index],
+                    colors: colors)
+                colors = parser.colors
+                subtitles.append(parser.subtitle)
             } catch {
                 // Keep an empty subtitle in its place so the numbering and timing of the rest stay intact.
                 print("Skipping VobSub subtitle \(index + 1): \(error)", to: &stderr)
