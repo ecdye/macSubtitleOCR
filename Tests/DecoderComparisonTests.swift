@@ -28,11 +28,16 @@ import Testing
     }
 
     var results: [SampleResult] = []
-    for sample in samples {
+    for (index, sample) in samples.enumerated() {
         // Printed first so that a decoder that traps, taking the test process with it, is named in the log.
         print("decoderComparison: measuring \(sample.name)")
-        let internalRun = await DecoderRun.measure(sample, with: .internal, timeLimit: timeLimit)
-        let ffmpegRun = await DecoderRun.measure(sample, with: .ffmpeg, timeLimit: timeLimit)
+        // Whichever decoder goes first reads the input from a cold cache, so the order alternates.
+        var runs: [Decoder: RunOutcome] = [:]
+        for decoder: Decoder in index.isMultiple(of: 2) ? [.internal, .ffmpeg] : [.ffmpeg, .internal] {
+            runs[decoder] = await DecoderRun.measure(sample, with: decoder, timeLimit: timeLimit)
+        }
+        let internalRun = try #require(runs[.internal])
+        let ffmpegRun = try #require(runs[.ffmpeg])
         results.append(SampleResult(sample: sample, internalRun: internalRun, ffmpegRun: ffmpegRun))
     }
 
@@ -205,7 +210,7 @@ enum Decoder: String {
 }
 
 /// The settings `SubtitleProcessor` is made with, read from the command line the CLI would be given.
-private struct ProcessorSettings {
+private struct ProcessorSettings: Hashable {
     let languages: String
     let invert: Bool
     let customWords: [String]?
@@ -316,6 +321,7 @@ struct DecoderRun {
             let directory = try makeOutputDirectory()
             defer { try? FileManager.default.removeItem(atPath: directory) }
 
+            await VisionWarmUp.shared.warmUp(languages: languages, settings: settings)
             let ocrStart = clock.now
             let processor = SubtitleProcessor(for: track.subtitles, from: track.number, withOptions: settings.invert,
                                               false, languages, settings.customWords, settings.fastMode,
@@ -369,6 +375,35 @@ struct DecoderRun {
         return ffmpeg.subtitleTracks.sorted { $0.key < $1.key }.map {
             DecodedTrack(number: $0.key, language: nil, subtitles: $0.value)
         }
+    }
+}
+
+/// OCRs a small track once for each configuration before any OCR is timed.
+///
+/// The first recognition in a process, and the first in each new set of languages, loads Vision's
+/// models, which takes far longer than recognizing a track: whichever decoder met it first was
+/// charged for it. A configuration is warmed once, on `sintel.sup`, whatever the input.
+private actor VisionWarmUp {
+    static let shared = VisionWarmUp()
+
+    private struct Configuration: Hashable {
+        let languages: String
+        let settings: ProcessorSettings
+    }
+
+    private var warmed: Set<Configuration> = []
+
+    func warmUp(languages: String, settings: ProcessorSettings) async {
+        guard warmed.insert(Configuration(languages: languages, settings: settings)).inserted else { return }
+        // A failure here is left for the measured run to report.
+        guard let subtitles = try? PGS(URL(fileURLWithPath: TestFilePaths.sup.path)).subtitles,
+              let directory = try? makeOutputDirectory() else { return }
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let processor = SubtitleProcessor(for: subtitles, from: 0, withOptions: settings.invert, false, languages,
+                                          settings.customWords, settings.fastMode,
+                                          settings.disableLanguageCorrection, settings.disableICorrection,
+                                          settings.forceOldAPI, directory, settings.maxThreads)
+        _ = try? await processor.process()
     }
 }
 
@@ -520,6 +555,8 @@ enum ComparisonReport {
         lines += [
             "",
             "### Wall time (reported, not asserted)",
+            "",
+            "Vision is warmed up before OCR is timed, and the decoders take turns going first.",
             "",
             "| Input | Decoder | Status | Decode / parse s | OCR s | Total s |",
             "| --- | --- | --- | ---: | ---: | ---: |"
