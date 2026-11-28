@@ -265,7 +265,8 @@ struct VobSubParser {
             // A delay counts in units of 1024/90000 s from the presentation timestamp. ffmpeg
             // rounds it down to whole milliseconds; the shift needs more than the 16 bits it is read in.
             let delay = TimeInterval((Int(date) << 10) / 90) / 1000
-            parseCommands(header, from: local + 4, at: presented + delay, openEnded: date == 0xFFFF)
+            let image = parseCommands(header, from: local + 4, at: presented + delay, openEnded: date == 0xFFFF)
+            setImage(image)
             let nextSequence = Int(next)
             if nextSequence == sequence {
                 return
@@ -278,17 +279,26 @@ struct VobSubParser {
         }
     }
 
-    /// Apply one control sequence's commands, which take effect at `time`.
+    /// The display area and line offsets one control sequence gives, in the subtitle's terms.
+    private struct SequenceImage {
+        var area: (x: Int, y: Int, width: Int, height: Int)?
+        var offsets: (even: Int, odd: Int)?
+    }
+
+    /// Apply one control sequence's commands, which take effect at `time`, and return the parts of
+    /// the image it describes.
     ///
-    /// The image is taken from the first sequence that describes it, since a later one
-    /// only repeats it or changes its contrast to fade it. The stream's colors, though, are left as
-    /// the last command set them, as FFmpeg leaves them for the next subpicture.
+    /// The set color (0x03) and set contrast (0x04) commands change the stream's colors as they are
+    /// read, as in FFmpeg, so a later one overrides an earlier one, and the stream's colors are left
+    /// as the last command set them, for the next subpicture.
     ///
     /// `openEnded` marks a sequence with the largest delay, 0xFFFF, about 745.6 s. Authoring
     /// tools give the stop command that delay to mean the subpicture stays until the next one
     /// replaces it, so its stop sets no end time and the SRT writer times it. Only that exact value
     /// is taken this way; any smaller delay is a real, if long, display time.
-    private mutating func parseCommands(_ header: Data, from start: Int, at time: TimeInterval, openEnded: Bool) {
+    private mutating func parseCommands(_ header: Data, from start: Int, at time: TimeInterval,
+                                        openEnded: Bool) -> SequenceImage {
+        var image = SequenceImage()
         var index = start
         while index < header.count {
             let command = header[index]
@@ -296,7 +306,7 @@ struct VobSubParser {
             let operands = [0x03: 2, 0x04: 2, 0x05: 6, 0x06: 4][command] ?? 0
             guard index + operands <= header.count else {
                 print("Control command \(command) for subtitle \(subtitle.index) is truncated, errors may occur")
-                return
+                return image
             }
             switch command {
             case 0x00:
@@ -309,36 +319,65 @@ struct VobSubParser {
                 let values = [header[index + 1] & 0x0F, header[index + 1] >> 4, header[index] & 0x0F, header[index] >> 4]
                 if command == 0x03 {
                     colors.colormap = values
-                    subtitle.imagePalette = subtitle.imagePalette ?? values
                 } else {
                     colors.alpha = values
-                    subtitle.imageAlpha = subtitle.imageAlpha ?? values
                 }
             case 0x05:
-                if subtitle.imageXOffset == nil, subtitle.imageYOffset == nil {
-                    subtitle.imageXOffset = Int(header[index]) << 4 | Int(header[index + 1] >> 4)
-                    subtitle.imageWidth = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2]))
-                        - subtitle.imageXOffset! + 1
-                    subtitle.imageYOffset = Int(header[index + 3]) << 4 | Int(header[index + 4] >> 4)
-                    subtitle.imageHeight = (Int(header[index + 4] & 0x0F) << 8 | Int(header[index + 5]))
-                        - subtitle.imageYOffset! + 1
-                }
+                let x = Int(header[index]) << 4 | Int(header[index + 1] >> 4)
+                let y = Int(header[index + 3]) << 4 | Int(header[index + 4] >> 4)
+                let width = (Int(header[index + 1] & 0x0F) << 8 | Int(header[index + 2])) - x + 1
+                let height = (Int(header[index + 4] & 0x0F) << 8 | Int(header[index + 5])) - y + 1
+                image.area = (x, y, width, height)
             case 0x06:
-                if subtitle.evenOffset == nil, subtitle.oddOffset == nil {
-                    subtitle.evenOffset = Int(header.getUInt16BE(at: index)!) - 4
-                    subtitle.oddOffset = Int(header.getUInt16BE(at: index + 2)!) - 4
-                }
+                image.offsets = (Int(header.getUInt16BE(at: index)!) - 4, Int(header.getUInt16BE(at: index + 2)!) - 4)
             default:
-                return // 0xFF ends the sequence; like ffmpeg, so does a command it does not know.
+                return image // 0xFF ends the sequence; like ffmpeg, so does a command it does not know.
             }
             index += operands
+        }
+        return image
+    }
+
+    /// Take the image from a control sequence that describes it, as FFmpeg's `decode_dvd_subtitles`
+    /// does at the end of each sequence.
+    ///
+    /// FFmpeg draws the image whenever one sequence gives both a display area, at least one pixel
+    /// wide and two lines high, and line offsets, with the colors in effect at the end of that
+    /// sequence. A later sequence that only changes the colors, to fade the subpicture, does not
+    /// change the image, while one that describes the image again draws it anew, so the last such
+    /// sequence wins.
+    ///
+    /// FFmpeg shows nothing when no single sequence describes the image. This instead takes the
+    /// first display area and line offsets of any sequence, drawn in the stream's colors as the
+    /// last command left them, so that the subpicture still has an image to read.
+    private mutating func setImage(_ image: SequenceImage) {
+        if let area = image.area, let offsets = image.offsets, area.width > 0, area.height > 1 {
+            subtitle.imageXOffset = area.x
+            subtitle.imageYOffset = area.y
+            subtitle.imageWidth = area.width
+            subtitle.imageHeight = area.height
+            subtitle.evenOffset = offsets.even
+            subtitle.oddOffset = offsets.odd
+            subtitle.imagePalette = colors.colormap
+            subtitle.imageAlpha = colors.alpha
+            return
+        }
+        if let area = image.area, subtitle.imageXOffset == nil, subtitle.imageYOffset == nil {
+            subtitle.imageXOffset = area.x
+            subtitle.imageYOffset = area.y
+            subtitle.imageWidth = area.width
+            subtitle.imageHeight = area.height
+        }
+        if let offsets = image.offsets, subtitle.evenOffset == nil, subtitle.oddOffset == nil {
+            subtitle.evenOffset = offsets.even
+            subtitle.oddOffset = offsets.odd
         }
     }
 
     /// Turn the four idx palette indices and alphas the subpicture selects into RGBA colors.
     ///
-    /// A subpicture without a set color or set contrast command uses the stream's colors from the
-    /// subpictures before it, as FFmpeg does.
+    /// These are the colors in effect at the end of the control sequence the image is taken from,
+    /// which, as in FFmpeg, include those the subpictures before it in the stream left.
     ///
     /// With an idx palette each color is the entry its index selects, as in FFmpeg; an entry past
     /// the end of a short palette is black. Without one the colors are the grays `layeredGrays`
