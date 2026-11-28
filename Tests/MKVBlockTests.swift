@@ -160,6 +160,59 @@ func pgsSegmentOfLargestSizeIsCutAtTheBlockEnd() throws {
     #expect(Array(data.suffix(3)) == [0x80, 0xFF, 0xFF])
 }
 
+// MARK: - BlockGroups
+
+/// A BlockDuration and a ReferenceBlock, children a BlockGroup may hold before its Block.
+private let blockGroupExtras = element([0x9B], [0x10]) + element([0xFB], [0x00])
+/// The unknown size, written eight bytes wide.
+private let unknownSize: UInt64 = (1 << 56) - 1
+
+@Test(.timeLimit(.minutes(1)))
+func blockGroupWithoutBlockIsSkipped() throws {
+    // The blocks after the empty group are read for themselves, not searched for its Block.
+    let empty = element([0xA0], blockGroupExtras)
+    try expectSameAsWithoutBlock(mkv(cluster(time: 1, blocksBefore, empty, blocksAfter)))
+}
+
+@Test(.timeLimit(.minutes(1)))
+func blockOutsideAnEmptyBlockGroupIsNotTaken() throws {
+    // A Block that is not in a BlockGroup does not belong to the group before it.
+    let empty = element([0xA0], blockGroupExtras)
+    let stray = element([0xA1], [0x80 | pgsTrack, 0x00, 0x32, 0x00] + pgsEnd)
+    try expectSameAsWithoutBlock(mkv(cluster(time: 1, blocksBefore, empty, stray, blocksAfter)))
+}
+
+@Test(.timeLimit(.minutes(1)))
+func blockAfterOtherChildrenOfItsGroupIsRead() throws {
+    let group = element([0xA0], blockGroupExtras, element([0xA1], [0x80 | vobSubTrack, 0x00, 100, 0x00], vobSubPayload))
+    let data = mkv(cluster(time: 1, blocksBefore, simpleBlock(pgsTrack, time: 100, pgsEnd), group))
+    try expectSameAsWithoutBlock(data)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func blockGroupOfUnknownSizeEndsAtItsLastChild() throws {
+    // The group ends at the SimpleBlock after its Block, which cannot be in a BlockGroup.
+    let block = element([0xA1], [0x80 | vobSubTrack, 0x00, 0, 0x00], vobSubPayload)
+    let group = element([0xA0], size: unknownSize, blockGroupExtras + block + blockGroupExtras)
+    let before = simpleBlock(pgsTrack, time: 0, pgsEnd) + group
+    try expectSameAsWithoutBlock(mkv(cluster(time: 1, before, blocksAfter)))
+}
+
+@Test(.timeLimit(.minutes(1)))
+func blockGroupOfUnknownSizeWithoutBlockIsSkipped() throws {
+    let empty = element([0xA0], size: unknownSize, blockGroupExtras)
+    try expectSameAsWithoutBlock(mkv(cluster(time: 1, blocksBefore, empty, blocksAfter)))
+}
+
+@Test(.timeLimit(.minutes(1)))
+func blockRunningPastItsGroupIsSkipped() throws {
+    // The Block claims more than is left of its group, though not of its Cluster, which ends in a Void
+    // element. The group is skipped and the blocks after it read.
+    let long = element([0xA0], element([0xA1], size: 64, [0x80 | pgsTrack, 0x00, 0x32, 0x00]))
+    let void = element([0xEC], [UInt8](repeating: 0, count: 64))
+    try expectSameAsWithoutBlock(mkv(cluster(time: 1, blocksBefore, long, blocksAfter, void)))
+}
+
 // MARK: - sintel.mks
 
 @Test(.timeLimit(.minutes(1)))
