@@ -21,7 +21,7 @@ struct macSubtitleOCR: AsyncParsableCommand {
         commandName: "macSubtitleOCR",
         abstract: "macSubtitleOCR - Convert bitmap subtitles into SubRip format using the macOS Vision framework")
 
-    @Argument(help: "Input subtitle file (supported formats: .sup, .sub, .idx, .mkv)")
+    @Argument(help: "Input subtitle file (supported formats: .sup, .sub, .idx, .mkv, .mks)")
     var input: String
 
     @Argument(help: "Directory to save the output files")
@@ -79,10 +79,9 @@ struct macSubtitleOCR: AsyncParsableCommand {
     private func processInternalDecoder(writingTo fileHandler: macSubtitleOCRFileHandler) async throws -> [Int] {
         var failedTracks: [Int] = []
 
-        if input.hasSuffix(".sub") || input.hasSuffix(".idx") {
-            let sub = try VobSub(
-                URL(fileURLWithPath: input.replacingOccurrences(of: ".idx", with: ".sub")),
-                URL(fileURLWithPath: input.replacingOccurrences(of: ".sub", with: ".idx")))
+        switch try macSubtitleOCRInput(path: input, hint: Self.ffmpegHint) {
+        case let .vobSub(subURL, idxURL):
+            let sub = try VobSub(subURL, idxURL)
             // Each stream of the idx, usually one per language, is its own track, numbered by its index.
             for track in sub.tracks {
                 await processTrack(track.index, languages: languages(adding: track.language),
@@ -93,8 +92,8 @@ struct macSubtitleOCR: AsyncParsableCommand {
                     return track.subtitles
                 }
             }
-        } else if input.hasSuffix(".mkv") || input.hasSuffix(".mks") {
-            let mkvStream = try MKVSubtitleExtractor(filePath: input)
+        case let .matroska(url):
+            let mkvStream = try MKVSubtitleExtractor(filePath: url.path)
             try mkvStream.parseTracks(for: ["S_HDMV/PGS", "S_VOBSUB"])
             if mkvStream.tracks.isEmpty {
                 let found = mkvStream.skippedSubtitleCodecs
@@ -119,14 +118,11 @@ struct macSubtitleOCR: AsyncParsableCommand {
                     }
                 }
             }
-        } else if input.hasSuffix(".sup") {
+        case let .pgs(url):
             // Open the PGS data stream
-            let PGS = try PGS(URL(fileURLWithPath: input))
+            let PGS = try PGS(url)
             await processTrack(0, languages: options.languages, writingTo: fileHandler,
                                failedTracks: &failedTracks) { PGS.subtitles }
-        } else {
-            throw macSubtitleOCRError.invalidInputFile(
-                "Invalid input file type \((input as NSString).pathExtension)\(Self.ffmpegHint)")
         }
 
         return failedTracks
@@ -147,11 +143,9 @@ struct macSubtitleOCR: AsyncParsableCommand {
         // A bare VobSub .sub is a plain MPEG-PS stream: FFmpeg only gets the palette and frame size when
         // it opens the .idx, and without them it guesses a palette that turns filled glyphs hollow.
         var ffmpegInput = input
-        if input.hasSuffix(".sub") {
-            let idx = String(input.dropLast(".sub".count)) + ".idx"
-            if FileManager.default.fileExists(atPath: idx) {
-                ffmpegInput = idx
-            }
+        let inputURL = URL(fileURLWithPath: input)
+        if inputURL.pathExtension.lowercased() == "sub", let idx = macSubtitleOCRInput.vobSubIndex(for: inputURL) {
+            ffmpegInput = idx.path
         }
         let ffmpeg = try FFmpeg(ffmpegInput)
 
