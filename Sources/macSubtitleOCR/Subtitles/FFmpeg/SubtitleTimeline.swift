@@ -31,6 +31,10 @@ struct DecodedSubtitleFrame {
     /// `unknownEnd` that the stream gives no real end time.
     var startDisplayTime: UInt32 = 0
     var endDisplayTime: UInt32 = .max
+    /// How long the container says to show the frame, in milliseconds from `presentationTime`, such as a
+    /// Matroska BlockDuration, or `nil` if it gives no duration. It is the frame's end only when the
+    /// stream's end is `unknownEnd`.
+    var packetDuration: UInt32?
     /// Every bitmap on screen at once. Empty clears the screen.
     var rects: [Rect]
 }
@@ -77,7 +81,8 @@ enum SubtitleTimeline {
             image.index = subtitles.count + 1
             image.startTimestamp = start
             subtitles.append(image)
-            showing = (image, frame.timeout, frame.endDisplayTime == DecodedSubtitleFrame.unknownEnd)
+            let timeout = frame.timeout
+            showing = (image, timeout, timeout == nil && frame.endDisplayTime == DecodedSubtitleFrame.unknownEnd)
         }
 
         // The last caption has nothing after it to end it, so only its own timeout can.
@@ -140,7 +145,15 @@ private extension DecodedSubtitleFrame {
     }
 
     /// When the frame comes down on its own, or nil when it stays until replaced or its end is unknown.
+    ///
+    /// An end the stream leaves unknown is taken from the container's duration, if it gives one, as the
+    /// internal decoder takes a Matroska BlockDuration. FFmpeg itself already does this for a subtitle its
+    /// decoder gives an end of zero.
     var timeout: TimeInterval? {
+        var endDisplayTime = endDisplayTime
+        if endDisplayTime == Self.unknownEnd, let packetDuration {
+            endDisplayTime = packetDuration
+        }
         guard endDisplayTime != .max, endDisplayTime != Self.unknownEnd,
               endDisplayTime > startDisplayTime else { return nil }
         return presentationTime + TimeInterval(endDisplayTime) / 1000

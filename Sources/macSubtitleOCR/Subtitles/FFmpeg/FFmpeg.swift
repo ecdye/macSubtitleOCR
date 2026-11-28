@@ -125,10 +125,19 @@ struct FFmpeg {
                 rects.append(rect)
             }
         }
+        // The container's display duration, such as a Matroska BlockDuration. FFmpeg makes it the end time of a
+        // subtitle its decoder gives none; the timeline also uses it when the stream's end is unknown.
+        var packetDuration: UInt32?
+        if packet.pointee.data != nil, packet.pointee.duration > 0 {
+            let milliseconds = av_rescale_q(packet.pointee.duration, stream.timeBase, AVRational(num: 1, den: 1000))
+            packetDuration = milliseconds > 0 ? UInt32(clamping: milliseconds) : nil
+        }
+
         logger.debug("Track \(streamNumber) - \(presentationTime): \(rects.count) rects")
         return DecodedSubtitleFrame(presentationTime: presentationTime,
                                     startDisplayTime: subtitle.start_display_time,
                                     endDisplayTime: subtitle.end_display_time,
+                                    packetDuration: packetDuration,
                                     rects: rects)
     }
 

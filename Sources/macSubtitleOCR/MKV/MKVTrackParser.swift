@@ -15,6 +15,8 @@ class MKVTrackParser: MKVFileHandler {
     private(set) var tracks: [MKVTrack] = []
     private var codecPrivate = [Int: String]()
     private var languages = [Int: String]()
+    /// The time and BlockDuration of each block read, by track.
+    private var blockTimes = [Int: [MKVBlockTime]]()
     /// Nanoseconds per Cluster and Block timestamp tick, from the Segment Info.
     private(set) var timestampScale = defaultTimestampScale
     /// Codec IDs of the subtitle tracks that were passed over because they are not ones asked for.
@@ -61,7 +63,8 @@ class MKVTrackParser: MKVFileHandler {
                 codecID: subtitleTracks[trackNumber]!,
                 trackData: data,
                 idxData: codecPrivate[trackNumber],
-                language: languages[trackNumber]))
+                language: languages[trackNumber],
+                blockTimes: blockTimes[trackNumber] ?? []))
         }
     }
 
@@ -81,6 +84,7 @@ class MKVTrackParser: MKVFileHandler {
         fileHandle.seek(toFileOffset: segmentDataOffset)
 
         var trackData = [Int: Data]()
+        blockTimes = [:]
 
         // Step 2: Parse Clusters within the Segment
         while fileHandle.offsetInFile < segmentEndOffset {
@@ -391,8 +395,9 @@ class MKVTrackParser: MKVFileHandler {
             // swiftformat:disable:next redundantSelf
             logger.debug("Looking for Block at Offset: \(self.fileHandle.offsetInFile)/\(clusterEndOffset)")
 
-            guard let (blockSize, blockStartOffset, groupEndOffset) = findBlockTypeAndSize(until: endOffset)
-            else { break }
+            guard let found = findBlockTypeAndSize(until: endOffset) else { break }
+            let (blockSize, blockStartOffset, groupEndOffset) = (found.blockSize, found.blockStartOffset,
+                                                                 found.groupEndOffset)
 
             // A Block must also end within its BlockGroup, when the end of the group is known.
             let blockLimit = groupEndOffset ?? endOffset
@@ -413,18 +418,37 @@ class MKVTrackParser: MKVFileHandler {
                 continue
             }
 
+            let start: TimeInterval
             if tracks[blockTrackNumber] == "S_HDMV/PGS" {
-                handlePGSBlock(for: blockTrackNumber, with: blockTimestamp, payloadSize, clusterTimestamp, &trackData)
+                let pts = handlePGSBlock(for: blockTrackNumber, with: blockTimestamp, payloadSize, clusterTimestamp,
+                                         &trackData)
+                // The decoder reads the PTS back from the 32 bits a PGS header holds.
+                start = TimeInterval(UInt32(truncatingIfNeeded: pts)) / 90000
             } else if tracks[blockTrackNumber] == "S_VOBSUB" {
-                handleVobSubBlock(for: blockTrackNumber, with: blockTimestamp, payloadSize, clusterTimestamp, &trackData)
+                let pts = handleVobSubBlock(for: blockTrackNumber, with: blockTimestamp, payloadSize,
+                                            clusterTimestamp, &trackData)
+                // The decoder reads the PTS back from the 33 bits a PES header holds.
+                start = TimeInterval(pts & 0x1_FFFF_FFFF) / 90000
+            } else {
+                fileHandle.seek(toFileOffset: groupEndOffset ?? blockEndOffset)
+                continue
             }
+            // BlockDuration may come before or after the Block in its group.
+            var durationTicks = found.duration
+            if found.inGroup, durationTicks == nil {
+                fileHandle.seek(toFileOffset: blockEndOffset)
+                durationTicks = readBlockDuration(until: blockLimit, stopAtNonChild: groupEndOffset == nil)
+            }
+            blockTimes[blockTrackNumber, default: []].append(MKVBlockTime(start: start,
+                                                                          duration: seconds(of: durationTicks)))
             // Skip the rest of the block, all of it if it is for a different track, and the rest of its group.
             fileHandle.seek(toFileOffset: groupEndOffset ?? blockEndOffset)
         }
     }
 
+    /// Appends the block to the track's PGS stream and returns its 90 kHz presentation timestamp.
     private func handlePGSBlock(for trackNumber: Int, with blockTimestamp: Int16, _ payloadSize: Int,
-                                _ clusterTimestamp: UInt64, _ trackData: inout [Int: Data]) {
+                                _ clusterTimestamp: UInt64, _ trackData: inout [Int: Data]) -> UInt64 {
         let absPTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp, timestampScale: timestampScale)
         let pgsPTS = encodePTSForPGS(absPTS)
         let pgsHeader = Data([0x50, 0x47] + pgsPTS + [0x00, 0x00, 0x00, 0x00])
@@ -444,10 +468,12 @@ class MKVTrackParser: MKVFileHandler {
         }
 
         trackData[trackNumber, default: Data()].append(blockData)
+        return absPTS
     }
 
+    /// Appends the block to the track's VobSub stream and index and returns its 90 kHz presentation timestamp.
     private func handleVobSubBlock(for trackNumber: Int, with blockTimestamp: Int16, _ payloadSize: Int,
-                                   _ clusterTimestamp: UInt64, _ trackData: inout [Int: Data]) {
+                                   _ clusterTimestamp: UInt64, _ trackData: inout [Int: Data]) -> UInt64 {
         let absolutePTS = calculateAbsolutePTS(clusterTimestamp, blockTimestamp, timestampScale: timestampScale)
         let vobSubPTS = encodePTSForVobSub(from: absolutePTS)
 
@@ -464,6 +490,7 @@ class MKVTrackParser: MKVFileHandler {
 
         let offset = String(format: "%09X", trackData[trackNumber, default: Data()].count - buffer.count)
         codecPrivate[trackNumber]?.append("\ntimestamp: \(formatTime(absolutePTS)), filepos: \(offset)")
+        return absolutePTS
     }
 
     // swiftformat:disable all
@@ -503,28 +530,31 @@ class MKVTrackParser: MKVFileHandler {
     // swiftformat:enable all
 
     /// Finds the next SimpleBlock, or the Block of the next BlockGroup, before `endOffset`, leaving the file at
-    /// the start of the block's data. Returns the block's size and data offset, and the end of its BlockGroup
-    /// when it is in one whose end is known.
+    /// the start of the block's data. Returns the block's size and data offset, whether it is in a BlockGroup,
+    /// the end of the group when it is known, and the group's BlockDuration if it comes before the Block.
     ///
     /// A BlockGroup with no Block is skipped. The Block is searched for only within its group, which ends at
     /// its size or at `endOffset`, whichever is first. A group of unknown size, or one whose size runs to or
     /// past the end of the file, has no known end, so it also ends at the first element that cannot be in a
     /// BlockGroup, and the search goes on from that element.
     ///
-    /// BlockDuration is passed over, as are the group's other children.
-    private func findBlockTypeAndSize(until endOffset: UInt64)
-        -> (blockSize: UInt64, blockStartOffset: UInt64, groupEndOffset: UInt64?)? {
+    /// The group's other children are passed over.
+    private func findBlockTypeAndSize(until endOffset: UInt64) -> FoundBlock? {
         while fileHandle.offsetInFile < endOffset {
             guard case let (elementSize?, elementID?) = findElement(withID: EBML.simpleBlock, EBML.blockGroup)
             else { return nil }
             let dataOffset = fileHandle.offsetInFile
-            guard elementID == EBML.blockGroup else { return (elementSize, dataOffset, nil) }
+            guard elementID == EBML.blockGroup else {
+                return FoundBlock(blockSize: elementSize, blockStartOffset: dataOffset)
+            }
 
             // tryParseElement cuts an unknown size, or one past the end of the file, at the end of the file.
             let hasKnownEnd = dataOffset + elementSize < endOfFile
             let groupEndOffset = max(min(dataOffset + elementSize, endOffset), dataOffset)
-            if let blockSize = findBlock(until: groupEndOffset, stopAtNonChild: !hasKnownEnd) {
-                return (blockSize, fileHandle.offsetInFile, hasKnownEnd ? groupEndOffset : nil)
+            if let (blockSize, duration) = findBlock(until: groupEndOffset, stopAtNonChild: !hasKnownEnd) {
+                return FoundBlock(blockSize: blockSize, blockStartOffset: fileHandle.offsetInFile,
+                                  groupEndOffset: hasKnownEnd ? groupEndOffset : nil, inGroup: true,
+                                  duration: duration)
             }
             logger.debug("BlockGroup at \(dataOffset) has no Block, skipping")
             if hasKnownEnd {
@@ -534,23 +564,51 @@ class MKVTrackParser: MKVFileHandler {
         return nil
     }
 
-    /// Reads the children of a BlockGroup up to `groupEndOffset` and returns the size of its Block, leaving the
-    /// file at the start of the Block's data, or returns `nil` if there is no Block. If `stopAtNonChild`, the
-    /// group ends before the first element that cannot be in a BlockGroup, and the file is left there.
-    private func findBlock(until groupEndOffset: UInt64, stopAtNonChild: Bool) -> UInt64? {
+    /// Reads the children of a BlockGroup up to `groupEndOffset` and returns the size of its Block and the
+    /// BlockDuration before it, if any, leaving the file at the start of the Block's data, or returns `nil` if
+    /// there is no Block. If `stopAtNonChild`, the group ends before the first element that cannot be in a
+    /// BlockGroup, and the file is left there.
+    private func findBlock(until groupEndOffset: UInt64, stopAtNonChild: Bool) -> (UInt64, UInt64?)? {
+        var duration: UInt64?
         while fileHandle.offsetInFile < groupEndOffset {
             let childOffset = fileHandle.offsetInFile
             guard let (childID, childSize) = tryParseElement() else { return nil }
+            let childDataOffset = fileHandle.offsetInFile
             if childID == EBML.block {
-                return childSize
+                return (childSize, duration)
             }
             if stopAtNonChild, !EBML.blockGroupChildren.contains(childID) {
                 fileHandle.seek(toFileOffset: childOffset)
                 return nil
             }
-            fileHandle.seek(toFileOffset: fileHandle.offsetInFile + childSize)
+            if childID == EBML.blockDuration {
+                duration = readUnsignedInteger(ofSize: childSize)
+            }
+            fileHandle.seek(toFileOffset: childDataOffset + childSize)
         }
         return nil
+    }
+
+    /// Reads the children of a BlockGroup after its Block, up to `groupEndOffset`, and returns its
+    /// BlockDuration, or `nil` if there is none. If `stopAtNonChild`, the group ends at the first element that
+    /// cannot be in a BlockGroup. The file is left wherever the reading stopped.
+    private func readBlockDuration(until groupEndOffset: UInt64, stopAtNonChild: Bool) -> UInt64? {
+        while fileHandle.offsetInFile < groupEndOffset {
+            guard let (childID, childSize) = tryParseElement(),
+                  !stopAtNonChild || EBML.blockGroupChildren.contains(childID) else { return nil }
+            let childDataOffset = fileHandle.offsetInFile
+            if childID == EBML.blockDuration {
+                return readUnsignedInteger(ofSize: childSize)
+            }
+            fileHandle.seek(toFileOffset: childDataOffset + childSize)
+        }
+        return nil
+    }
+
+    /// A BlockDuration of `ticks` TimestampScale units in seconds, or `nil` if there is none or it is zero.
+    private func seconds(of ticks: UInt64?) -> TimeInterval? {
+        guard let ticks, ticks > 0 else { return nil }
+        return TimeInterval(ticks) * TimeInterval(timestampScale) / 1000000000
     }
 
     /// Reads the track number and timestamp from a Block or SimpleBlock header, leaving the file at the end of
@@ -570,4 +628,15 @@ class MKVTrackParser: MKVFileHandler {
         logger.debug("Track number: \(trackNumber), Timestamp: \(timestamp), Lacing type: \(lacingFlag)")
         return (trackNumber, timestamp)
     }
+}
+
+/// A block found in a Cluster: where its data is, and the BlockGroup it is in, if any.
+private struct FoundBlock {
+    var blockSize: UInt64
+    var blockStartOffset: UInt64
+    /// The end of the block's BlockGroup, when it is in one whose end is known.
+    var groupEndOffset: UInt64?
+    var inGroup = false
+    /// The group's BlockDuration, in TimestampScale units, when it comes before the Block.
+    var duration: UInt64?
 }
