@@ -110,7 +110,8 @@ struct FFmpeg {
         guard gotSubtitle != 0 else { return nil }
         defer { avsubtitle_free(&subtitle) }
 
-        // The decoder rescales the packet's timestamp to AV_TIME_BASE; the packet's own is the fallback,
+        // The decoder rescales the packet's timestamp to AV_TIME_BASE, using the time base FFStream gives
+        // it. A packet with none leaves the subtitle without one too, so the packet's own is the fallback,
         // or the last packet's for the empty one that flushes the decoder.
         let packetPTS = packet.pointee.data == nil ? stream.lastPacketPTS : packet.pointee.pts
         let presentationTime = subtitle.pts != Int64.min

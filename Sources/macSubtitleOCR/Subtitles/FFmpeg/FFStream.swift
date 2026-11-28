@@ -48,6 +48,9 @@ final class FFStream {
         guard result >= 0 else {
             throw SetupError(description: "could not configure the \(name) decoder: \(Self.errorString(result))")
         }
+        // Packets are timed in the stream's time base. Without it, the decoder cannot rescale their
+        // timestamps into AVSubtitle.pts, nor turn packet durations into end times.
+        context.pointee.pkt_timebase = timeBase
         result = avcodec_open2(context, codec, nil)
         guard result >= 0 else {
             throw SetupError(description: "could not open the \(name) decoder: \(Self.errorString(result))")
