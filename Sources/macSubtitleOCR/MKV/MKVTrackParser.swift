@@ -94,6 +94,8 @@ class MKVTrackParser: MKVFileHandler {
 
             guard let clusterSize = locateCluster() else { break }
             let clusterEndOffset = fileHandle.offsetInFile + clusterSize
+            // Whatever stops the reading of the Cluster, go on from its end, or from the next Cluster.
+            defer { resumeAfterCluster(endingAt: clusterEndOffset, before: min(segmentEndOffset, endOfFile)) }
 
             // Step 3: Extract the cluster timestamp
             guard let clusterTimestamp = extractClusterTimestamp() else {
@@ -109,6 +111,56 @@ class MKVTrackParser: MKVFileHandler {
     }
 
     // MARK: - Methods
+
+    /// Leaves the file at the end of a Cluster whose reading has stopped, for whatever reason, so that the
+    /// elements after it are read from their start.
+    ///
+    /// A Cluster whose size is known ends at that size. One of unknown size, or one whose size runs to or past
+    /// the end of the file, ends at the next Cluster: if the file is not already at one, the Cluster was cut
+    /// short by damage, and the next Cluster ID before `endOffset` is searched for byte by byte.
+    private func resumeAfterCluster(endingAt clusterEndOffset: UInt64, before endOffset: UInt64) {
+        // tryParseElement cuts an unknown size, or one past the end of the file, at the end of the file.
+        guard clusterEndOffset >= endOfFile else {
+            fileHandle.seek(toFileOffset: clusterEndOffset)
+            return
+        }
+
+        let offset = fileHandle.offsetInFile
+        guard offset < endOffset else { return }
+        if tryParseElement()?.elementID == EBML.cluster {
+            fileHandle.seek(toFileOffset: offset)
+            return
+        }
+        logger.debug("Cluster of unknown size stopped at \(offset), searching for the next Cluster")
+        fileHandle.seek(toFileOffset: findNextCluster(from: offset + 1, before: endOffset) ?? endOffset)
+    }
+
+    /// Returns the offset of the first well-formed Cluster header whose ID lies between `startOffset` and
+    /// `endOffset`, found by its ID at any byte offset, or `nil` if there is none.
+    private func findNextCluster(from startOffset: UInt64, before endOffset: UInt64) -> UInt64? {
+        let clusterID = withUnsafeBytes(of: EBML.cluster.bigEndian) { Data($0) }
+        let chunkSize: UInt64 = 1 << 16
+        var chunkOffset = startOffset
+        while chunkOffset < endOffset {
+            fileHandle.seek(toFileOffset: chunkOffset)
+            let chunk = fileHandle.readData(ofLength: Int(min(chunkSize, endOffset - chunkOffset)))
+            guard chunk.count >= clusterID.count else { return nil }
+
+            var searchStart = chunk.startIndex
+            while let match = chunk.range(of: clusterID, in: searchStart ..< chunk.endIndex) {
+                let candidate = chunkOffset + UInt64(match.lowerBound - chunk.startIndex)
+                fileHandle.seek(toFileOffset: candidate)
+                if tryParseElement() != nil {
+                    logger.debug("Found Cluster at \(candidate)")
+                    return candidate
+                }
+                searchStart = match.lowerBound + 1
+            }
+            // Keep the last bytes of the chunk, as an ID may start in them.
+            chunkOffset += UInt64(chunk.count - (clusterID.count - 1))
+        }
+        return nil
+    }
 
     /// Reads every child of a TrackEntry, which may come in any order, and records the track's language and
     /// VobSub index once the whole entry is read.

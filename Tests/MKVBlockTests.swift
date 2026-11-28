@@ -213,6 +213,85 @@ func blockRunningPastItsGroupIsSkipped() throws {
     try expectSameAsWithoutBlock(mkv(cluster(time: 1, blocksBefore, long, blocksAfter, void)))
 }
 
+// MARK: - Damaged Clusters
+
+/// The Cluster ID.
+private let clusterID: [UInt8] = [0x1F, 0x43, 0xB6, 0x75]
+
+/// One PGS and one VobSub block at relative time `time`.
+private func blocks(time: UInt8) -> [UInt8] {
+    simpleBlock(pgsTrack, time: time, pgsEnd) + blockGroup(vobSubTrack, time: time, vobSubPayload)
+}
+
+/// Bytes that stop the reading of a Cluster partway through.
+private let clusterDamage: [String: [UInt8]] = [
+    // A SimpleBlock header whose size starts with a zero byte, then more zero bytes.
+    "zero byte in a header": [0xA3, 0x00, 0x00, 0x00],
+    // An element of unknown size, which runs to the end of the file.
+    "garbage": [UInt8](repeating: 0xFF, count: 8),
+    // A Cluster ID with a malformed size, which the search for the next Cluster passes over.
+    "malformed Cluster header": [0xA3, 0x00] + clusterID + [0x00, 0x00]
+]
+
+/// Checks that `data` extracts to what `expected` does.
+private func expectSameTracks(_ data: Data, as expected: Data, _ comment: String,
+                              sourceLocation: SourceLocation = #_sourceLocation) throws {
+    let expectedTracks = try extract(expected)
+    let tracks = try extract(data)
+    #expect(tracks.count == 2, "\(comment)", sourceLocation: sourceLocation)
+    for track in [Int(pgsTrack), Int(vobSubTrack)] {
+        #expect(tracks[track]?.data == expectedTracks[track]?.data, "\(comment): track \(track)",
+                sourceLocation: sourceLocation)
+        #expect(tracks[track]?.idx == expectedTracks[track]?.idx, "\(comment): track \(track)",
+                sourceLocation: sourceLocation)
+    }
+}
+
+@Test(.timeLimit(.minutes(1)), arguments: clusterDamage.keys.sorted())
+func damagedClusterIsLeftAtItsEnd(damage: String) throws {
+    let damageBytes = try #require(clusterDamage[damage])
+    // The blocks of the damaged Cluster before the damage are read, and the next Cluster after it.
+    let damaged = cluster(time: 2, blocks(time: 10), damageBytes, blocks(time: 20))
+    let data = mkv(cluster(time: 1, blocks(time: 0)), damaged, cluster(time: 3, blocks(time: 30)))
+    let expected = mkv(cluster(time: 1, blocks(time: 0)), cluster(time: 2, blocks(time: 10)),
+                       cluster(time: 3, blocks(time: 30)))
+    try expectSameTracks(data, as: expected, damage)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func clusterWithMalformedTimestampIsLeftAtItsEnd() throws {
+    // The Timestamp size starts with a zero byte, so none of the Cluster's blocks can be timed.
+    let damaged = element(clusterID, [0xE7, 0x00, 0x00] + blocks(time: 10))
+    let data = mkv(cluster(time: 1, blocks(time: 0)), damaged, cluster(time: 3, blocks(time: 30)))
+    let expected = mkv(cluster(time: 1, blocks(time: 0)), cluster(time: 3, blocks(time: 30)))
+    try expectSameTracks(data, as: expected, "malformed Timestamp")
+}
+
+/// The damage that stops a Cluster where it is. Garbage that reads as an element running to the end of the
+/// file leaves nothing to search, as no end is known for a Cluster of unknown size to go back to.
+private let malformedHeaderDamage = clusterDamage.keys.sorted().filter { $0 != "garbage" }
+
+@Test(.timeLimit(.minutes(1)), arguments: malformedHeaderDamage)
+func damagedClusterOfUnknownSizeIsFollowedByTheNextCluster(damage: String) throws {
+    let damageBytes = try #require(clusterDamage[damage])
+    // A Cluster of unknown size has no end to go to, so the next Cluster is searched for.
+    let payload = element([0xE7], [2]) + blocks(time: 10) + damageBytes + blocks(time: 20)
+    let damaged = element(clusterID, size: unknownSize, payload)
+    let data = mkv(cluster(time: 1, blocks(time: 0)), damaged, cluster(time: 3, blocks(time: 30)))
+    let expected = mkv(cluster(time: 1, blocks(time: 0)), cluster(time: 2, blocks(time: 10)),
+                       cluster(time: 3, blocks(time: 30)))
+    try expectSameTracks(data, as: expected, damage)
+}
+
+@Test(.timeLimit(.minutes(1)), arguments: clusterDamage.keys.sorted())
+func damagedLastClusterOfUnknownSizeEndsExtraction(damage: String) throws {
+    let damageBytes = try #require(clusterDamage[damage])
+    let payload = element([0xE7], [2]) + blocks(time: 10) + damageBytes + blocks(time: 20)
+    let data = mkv(cluster(time: 1, blocks(time: 0)), element(clusterID, size: unknownSize, payload))
+    let expected = mkv(cluster(time: 1, blocks(time: 0)), cluster(time: 2, blocks(time: 10)))
+    try expectSameTracks(data, as: expected, damage)
+}
+
 // MARK: - sintel.mks
 
 @Test(.timeLimit(.minutes(1)))
