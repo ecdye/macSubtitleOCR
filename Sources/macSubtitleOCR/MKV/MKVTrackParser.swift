@@ -92,7 +92,7 @@ class MKVTrackParser: MKVFileHandler {
                 }
             }
 
-            guard let clusterSize = locateCluster() else { break }
+            guard let clusterSize = locateNextCluster(before: min(segmentEndOffset, endOfFile)) else { break }
             let clusterEndOffset = fileHandle.offsetInFile + clusterSize
             // Whatever stops the reading of the Cluster, go on from its end, or from the next Cluster.
             defer { resumeAfterCluster(endingAt: clusterEndOffset, before: min(segmentEndOffset, endOfFile)) }
@@ -111,6 +111,38 @@ class MKVTrackParser: MKVFileHandler {
     }
 
     // MARK: - Methods
+
+    /// Moves to the data of the next Cluster before `endOffset` and returns its size, or returns `nil` if there
+    /// is none.
+    ///
+    /// The top-level elements before it are skipped by their sizes. One that cannot be read, has an ID that is
+    /// not a Segment child, or does not end within the Segment, is taken as damage: the next well-formed
+    /// Cluster header after its start is searched for byte by byte, and the elements are skipped from there.
+    /// As in `tryParseElement`, a Cluster size that is unknown or runs past the end of the file is cut there.
+    private func locateNextCluster(before endOffset: UInt64) -> UInt64? {
+        while fileHandle.offsetInFile < endOffset {
+            let offset = fileHandle.offsetInFile
+            if let (elementID, elementSize) = ebmlParser.readEBMLElement() {
+                let dataOffset = fileHandle.offsetInFile
+                if elementID == EBML.cluster {
+                    guard dataOffset < endOfFile else { return nil }
+                    let remaining = endOfFile - dataOffset
+                    return min(elementSize ?? remaining, remaining)
+                }
+                if EBML.segmentChildren.contains(elementID), let elementSize,
+                   case let (elementEndOffset, false) = dataOffset.addingReportingOverflow(elementSize),
+                   elementEndOffset <= endOffset {
+                    fileHandle.seek(toFileOffset: elementEndOffset)
+                    continue
+                }
+            }
+            logger.debug("Damaged top-level element at \(offset), searching for the next Cluster")
+            // The search starts past the damage, so each pass moves forward.
+            guard let clusterOffset = findNextCluster(from: offset + 1, before: endOffset) else { return nil }
+            fileHandle.seek(toFileOffset: clusterOffset)
+        }
+        return nil
+    }
 
     /// Leaves the file at the end of a Cluster whose reading has stopped, for whatever reason, so that the
     /// elements after it are read from their start.

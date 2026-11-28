@@ -27,6 +27,11 @@ enum EBML {
     static let seekPosition: UInt32 = 0x53AC
     static let segmentID: UInt32 = 0x1853_8067
     static let segmentInfo: UInt32 = 0x1549_A966
+    /// The IDs a Segment may hold: SeekHead, Info, Tracks, Cluster, Cues, Attachments, Chapters and Tags, and
+    /// the Void and CRC-32 elements allowed anywhere.
+    static let segmentChildren: Set<UInt32> = [
+        seekHead, segmentInfo, tracksID, cluster, 0x1C53_BB6B, 0x1941_A469, chapters, 0x1254_C367, 0xEC, 0xBF
+    ]
     static let simpleBlock: UInt32 = 0xA3
     static let timestamp: UInt32 = 0xE7
     static let timestampScale: UInt32 = 0x2AD7B1

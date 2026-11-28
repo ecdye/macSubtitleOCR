@@ -292,6 +292,57 @@ func damagedLastClusterOfUnknownSizeEndsExtraction(damage: String) throws {
     try expectSameTracks(data, as: expected, damage)
 }
 
+// MARK: - Damage between Clusters
+
+/// Bytes that stop the reading of the top-level elements of a Segment, outside any Cluster.
+private let topLevelDamage: [String: [UInt8]] = [
+    "zero byte": [0x00],
+    // An element with an ID that is not a Segment child, and of unknown size, which runs to the end of the file.
+    "garbage": [UInt8](repeating: 0xFF, count: 8),
+    // A Cluster ID with a malformed size, which the search for the next Cluster passes over.
+    "malformed Cluster header": clusterID + [0x00, 0x00],
+    // A Cues element whose size runs past the end of the Segment.
+    "Cues running past the Segment": [0x1C, 0x53, 0xBB, 0x6B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+]
+
+/// Three Clusters, each with one PGS and one VobSub block.
+private let threeClusters = [
+    cluster(time: 1, blocks(time: 0)), cluster(time: 2, blocks(time: 10)), cluster(time: 3, blocks(time: 20))
+]
+
+@Test(.timeLimit(.minutes(1)), arguments: topLevelDamage.keys.sorted())
+func damageBetweenClustersIsPassedOver(damage: String) throws {
+    let damageBytes = try #require(topLevelDamage[damage])
+    let data = mkv(threeClusters[0], damageBytes, threeClusters[1], damageBytes, threeClusters[2])
+    try expectSameTracks(data, as: mkv(threeClusters[0], threeClusters[1], threeClusters[2]), damage)
+}
+
+@Test(.timeLimit(.minutes(1)), arguments: topLevelDamage.keys.sorted())
+func damageBeforeTheFirstClusterIsPassedOver(damage: String) throws {
+    let damageBytes = try #require(topLevelDamage[damage])
+    // Tags and Cues before the first Cluster, then the damage.
+    let tags = element([0x12, 0x54, 0xC3, 0x67], element([0x73, 0x73], element([0x63, 0xC0], [])))
+    let cues = element([0x1C, 0x53, 0xBB, 0x6B], element([0xBB], element([0xB3], [0x01])))
+    let data = mkv(tags, cues, damageBytes, threeClusters[0], threeClusters[1])
+    try expectSameTracks(data, as: mkv(threeClusters[0], threeClusters[1]), damage)
+}
+
+@Test(.timeLimit(.minutes(1)), arguments: topLevelDamage.keys.sorted())
+func damageAfterTheLastClusterEndsExtraction(damage: String) throws {
+    let damageBytes = try #require(topLevelDamage[damage])
+    let data = mkv(threeClusters[0], threeClusters[1], damageBytes)
+    try expectSameTracks(data, as: mkv(threeClusters[0], threeClusters[1]), damage)
+}
+
+@Test(.timeLimit(.minutes(1)))
+func clusterInsideAnElementBeforeDamageIsNotTaken() throws {
+    // A Void element before the damage holds a well-formed Cluster, which is not searched for, as the
+    // search starts past the last element read.
+    let void = element([0xEC], cluster(time: 9, blocks(time: 90)))
+    let data = mkv(threeClusters[0], void, [0x00], threeClusters[1])
+    try expectSameTracks(data, as: mkv(threeClusters[0], threeClusters[1]), "Cluster in a Void element")
+}
+
 // MARK: - sintel.mks
 
 @Test(.timeLimit(.minutes(1)))
