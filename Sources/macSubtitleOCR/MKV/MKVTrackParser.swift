@@ -470,16 +470,16 @@ class MKVTrackParser: MKVFileHandler {
     }
 
     /// Reads the track number and timestamp from a Block or SimpleBlock header, leaving the file at the end of
-    /// the header, or returns `nil` if the file ends first or the track number is too large.
+    /// the header, or returns `nil` if the file ends first or the track number is malformed.
     ///
     /// The lacing bits of the flags are logged but not acted on: a laced block, which holds several frames, is
     /// read as one frame. Subtitle tracks are not laced in practice.
     private func readTrackNumber(from fileHandle: FileHandle) -> (trackNumber: Int, timestamp: Int16)? {
-        let trackNumber = ebmlParser.readVINT(elementSize: true)
-        // The timestamp is a signed 16-bit offset from the cluster timestamp.
-        guard let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2).map(Int16.init(truncatingIfNeeded:)),
-              let flags = fileHandle.readData(ofLength: 1).first,
-              let trackNumber = Int(exactly: trackNumber)
+        // A VINT is at most eight bytes, so its value, less the length marker, always fits in Int.
+        guard let trackNumber = ebmlParser.readVINT(elementSize: true).map(Int.init),
+              // The timestamp is a signed 16-bit offset from the cluster timestamp.
+              let timestamp = readFixedLengthNumber(fileHandle: fileHandle, length: 2).map(Int16.init(truncatingIfNeeded:)),
+              let flags = fileHandle.readData(ofLength: 1).first
         else { return nil }
 
         let lacingFlag = (flags >> 1) & 0x03 // Bits 1 and 2 are the lacing type
