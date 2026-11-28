@@ -10,9 +10,23 @@ import Foundation
 import os
 
 struct VobSubParser {
+    /// The color map and alpha a stream's subpictures select, as the set color (0x03) and set
+    /// contrast (0x04) commands last set them.
+    ///
+    /// Like FFmpeg's `dvdsubdec`, which keeps them in its decoder context, they carry over from one
+    /// subpicture of a stream to the next, so a subpicture without either command is drawn with the
+    /// ones before it. Before any subpicture sets them they are all zero, as in FFmpeg: every color
+    /// is the first of the idx palette and fully transparent.
+    struct Colors {
+        var colormap = [UInt8](repeating: 0, count: 4)
+        var alpha = [UInt8](repeating: 0, count: 4)
+    }
+
     // MARK: - Properties
 
     let subtitle: Subtitle
+    /// The stream's colors after this subpicture, for the next one to start from.
+    private(set) var colors: Colors
     /// The idx palette's 16 RGB colors, or nil when the idx has no palette.
     private let masterPalette: [UInt8]?
     private let substream: Int?
@@ -29,20 +43,23 @@ struct VobSubParser {
     ///     checks it. DVD subpictures use IDs `0x20 + n`, and VobSub tracks extracted from an MKV
     ///     are written with `0x00` for stream 0, which this also accepts.
     ///   - delay: The idx `delay:` in seconds, added to the presentation timestamp of the packet.
+    ///   - colors: The stream's colors as the subpictures before this one left them.
     init(index: Int, buffer: UnsafeRawBufferPointer, timestamp: TimeInterval, offset: UInt64,
-         nextOffset: UInt64, idxPalette: [UInt8]?, substream: Int? = nil, delay: TimeInterval = 0) throws {
+         nextOffset: UInt64, idxPalette: [UInt8]?, substream: Int? = nil, delay: TimeInterval = 0,
+         colors: Colors = Colors()) throws {
         subtitle = Subtitle(index: index, startTimestamp: timestamp, imageData: .init(), numberOfColors: 16)
         masterPalette = idxPalette
         self.substream = substream
         self.delay = delay
+        self.colors = colors
         try readSubFrame(buffer: buffer, offset: offset, nextOffset: nextOffset)
         try decodeImage()
-        try decodePalette()
+        decodePalette()
     }
 
     // MARK: - Methods
 
-    func readSubFrame(buffer: UnsafeRawBufferPointer, offset: UInt64, nextOffset: UInt64) throws {
+    mutating func readSubFrame(buffer: UnsafeRawBufferPointer, offset: UInt64, nextOffset: UInt64) throws {
         var firstPacketFound = false
         var controlOffset: Int?
         var controlSize: Int?
@@ -235,7 +252,7 @@ struct VobSubParser {
     /// the last sequence points at itself. `header` holds the bytes from `controlStart`, the
     /// offset of the first sequence within the subpicture. The start and stop display commands
     /// usually sit in different sequences, so reading only the first loses the end time.
-    private func parseControlSequences(_ header: Data, offset controlStart: Int) {
+    private mutating func parseControlSequences(_ header: Data, offset controlStart: Int) {
         let presented = subtitle.startTimestamp!
         var sequence = controlStart
         while true {
@@ -264,13 +281,14 @@ struct VobSubParser {
     /// Apply one control sequence's commands, which take effect at `time`.
     ///
     /// The image is taken from the first sequence that describes it, since a later one
-    /// only repeats it or changes its contrast to fade it.
+    /// only repeats it or changes its contrast to fade it. The stream's colors, though, are left as
+    /// the last command set them, as FFmpeg leaves them for the next subpicture.
     ///
     /// `openEnded` marks a sequence with the largest delay, 0xFFFF, about 745.6 s. Authoring
     /// tools give the stop command that delay to mean the subpicture stays until the next one
     /// replaces it, so its stop sets no end time and the SRT writer times it. Only that exact value
     /// is taken this way; any smaller delay is a real, if long, display time.
-    private func parseCommands(_ header: Data, from start: Int, at time: TimeInterval, openEnded: Bool) {
+    private mutating func parseCommands(_ header: Data, from start: Int, at time: TimeInterval, openEnded: Bool) {
         var index = start
         while index < header.count {
             let command = header[index]
@@ -287,23 +305,14 @@ struct VobSubParser {
                 subtitle.startTimestamp = time
             case 0x02:
                 subtitle.endTimestamp = openEnded ? nil : time
-            case 0x03:
-                if subtitle.imagePalette == nil {
-                    subtitle.imagePalette = [
-                        header[index + 1] & 0x0F,
-                        header[index + 1] >> 4,
-                        header[index] & 0x0F,
-                        header[index] >> 4
-                    ]
-                }
-            case 0x04:
-                if subtitle.imageAlpha == nil {
-                    subtitle.imageAlpha = [
-                        header[index + 1] & 0x0F,
-                        header[index + 1] >> 4,
-                        header[index] & 0x0F,
-                        header[index] >> 4
-                    ]
+            case 0x03, 0x04:
+                let values = [header[index + 1] & 0x0F, header[index + 1] >> 4, header[index] & 0x0F, header[index] >> 4]
+                if command == 0x03 {
+                    colors.colormap = values
+                    subtitle.imagePalette = subtitle.imagePalette ?? values
+                } else {
+                    colors.alpha = values
+                    subtitle.imageAlpha = subtitle.imageAlpha ?? values
                 }
             case 0x05:
                 if subtitle.imageXOffset == nil, subtitle.imageYOffset == nil {
@@ -328,14 +337,16 @@ struct VobSubParser {
 
     /// Turn the four idx palette indices and alphas the subpicture selects into RGBA colors.
     ///
+    /// A subpicture without a set color or set contrast command uses the stream's colors from the
+    /// subpictures before it, as FFmpeg does.
+    ///
     /// With an idx palette each color is the entry its index selects, as in FFmpeg; an entry past
     /// the end of a short palette is black. Without one the colors are the grays `layeredGrays`
     /// picks for OCR.
-    private func decodePalette() throws {
-        guard let colormap = subtitle.imagePalette, let alpha = subtitle.imageAlpha else {
-            throw macSubtitleOCRError.invalidVobSubSubpicture(
-                "VobSub subtitle \(subtitle.index) lacks a palette (0x03) or alpha (0x04) command")
-        }
+    private func decodePalette() {
+        let colormap = subtitle.imagePalette ?? colors.colormap
+        let alpha = subtitle.imageAlpha ?? colors.alpha
+        subtitle.imageAlpha = alpha
 
         let grays = masterPalette == nil
             ? Self.layeredGrays(image: subtitle.imageData ?? Data(), width: subtitle.imageWidth ?? 0, alpha: alpha)
