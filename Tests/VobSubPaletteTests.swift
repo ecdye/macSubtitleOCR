@@ -66,20 +66,21 @@ private func palettes(_ subtitles: [Subtitle]) -> [[UInt8]?] {
 
 // MARK: - Decoding with the idx palette
 
-@Test func vobSubWithoutPaletteDecodesWithGuessedGrays() throws {
+@Test func vobSubWithoutPaletteDecodesWithLayeredGrays() throws {
     let subtitles = try decodeSintel(palette: nil)
+    let colored = try sintelSub.withUnsafeBytes { try VobSub($0, sintelIDX).subtitles }
     #expect(subtitles.count == 26)
-    for subtitle in subtitles {
+    for (subtitle, original) in zip(subtitles, colored) {
         let palette = try #require(subtitle.imagePalette)
         let alpha = try #require(subtitle.imageAlpha)
         #expect(palette.count == 16)
         for i in 0 ..< 4 {
             #expect(palette[4 * i] == palette[4 * i + 1] && palette[4 * i] == palette[4 * i + 2])
-            #expect([0, 84, 127, 169, 254].contains(palette[4 * i]))
             #expect(palette[4 * i + 3] == alpha[i] * 0x11)
         }
-        // The last distinct visible color is always white.
-        #expect(alpha.allSatisfy { $0 == 0 } || palette.contains(254))
+        // Sintel's text is white inside a black outline, and the grays draw it the same way.
+        #expect(palette[4] == 0xFF && original.imagePalette?[4 ..< 7] == [0xFF, 0xFF, 0xFF])
+        #expect(palette[8] == 0 && original.imagePalette?[8 ..< 11] == [0, 0, 0])
     }
 }
 
@@ -99,20 +100,35 @@ private func palettes(_ subtitles: [Subtitle]) -> [[UInt8]?] {
     #expect(palettes(garbled) == palettes(black))
 }
 
-// MARK: - Guessing grays as FFmpeg does
+// MARK: - Choosing grays without a palette
 
+/// Issue #156: without an idx palette FFmpeg's guessed grays made the text body black, which the
+/// inverted image turns into hollow glyphs. The grays now follow how the colors are layered.
 @Test(arguments: [
-    // colormap, alpha, grays
-    ([0, 1, 2, 3], [0, 0, 0, 0], [0, 0, 0, 0]),
-    ([0, 1, 2, 3], [0, 15, 0, 0], [0, 254, 0, 0]),
-    ([0, 1, 2, 3], [0, 15, 15, 15], [0, 0, 127, 254]),
-    ([0, 1, 2, 3], [15, 15, 15, 15], [0, 84, 169, 254]),
-    ([0, 1, 1, 3], [0, 15, 8, 15], [0, 0, 0, 254]),
-    ([5, 5, 5, 5], [15, 15, 15, 15], [254, 254, 254, 254]),
-    ([2, 7, 2, 9], [15, 4, 15, 0], [0, 254, 0, 0])
-] as [([UInt8], [UInt8], [UInt8])])
-func vobSubGuessedGraysMatchFFmpeg(colormap: [UInt8], alpha: [UInt8], grays: [UInt8]) {
-    #expect(VobSubParser.guessedGrays(colormap: colormap, alpha: alpha) == grays)
+    // rows of the image, one digit per pixel, alpha, grays
+    (["0110"], [0, 15, 15, 15], [0, 255, 0, 0]),
+    (["0000000", "0222220", "0211120", "0222220", "0000000"], [0, 15, 15, 15], [0, 255, 0, 0]),
+    // The body may be any of the colors.
+    (["0000000", "0111110", "0133310", "0111110", "0000000"], [0, 15, 15, 15], [0, 0, 0, 255]),
+    // An anti-aliasing color between body and outline takes the middle gray.
+    (["000000000", "033333330", "032222230", "032111230", "032222230", "033333330", "000000000"],
+     [0, 15, 15, 15], [0, 255, 127, 0]),
+    // The alphas, not the color numbers, say what is transparent, and the image edge counts as outside.
+    (["22222", "21112", "22222"], [15, 15, 15, 0], [0, 255, 0, 0]),
+    (["3333", "3113", "3333"], [15, 15, 15, 0], [0, 255, 0, 0]),
+    // Of two colors lying as deep, the lower is taken as inner; unused and transparent ones are black.
+    (["12"], [0, 15, 15, 15], [0, 255, 0, 0]),
+    (["0000"], [0, 15, 15, 15], [0, 0, 0, 0]),
+    (["0123"], [0, 0, 0, 0], [0, 0, 0, 0])
+] as [([String], [UInt8], [UInt8])])
+func vobSubLayeredGrays(rows: [String], alpha: [UInt8], grays: [UInt8]) {
+    let image = Data(rows.joined().map { UInt8(String($0))! })
+    #expect(VobSubParser.layeredGrays(image: image, width: rows[0].count, alpha: alpha) == grays)
+}
+
+@Test func vobSubLayeredGraysWithoutAnImage() {
+    #expect(VobSubParser.layeredGrays(image: Data(), width: 0, alpha: [15, 15, 15, 15]) == [0, 0, 0, 0])
+    #expect(VobSubParser.layeredGrays(image: Data([1, 2]), width: 0, alpha: [15, 15, 15, 15]) == [0, 0, 0, 0])
 }
 
 // MARK: - Missing palette or alpha commands
@@ -208,7 +224,14 @@ func vobSubPaletteMatchesFFmpegDecoder(palette: String?) throws {
     for (mine, theirs) in zip(ours, ffmpeg) {
         let pixels = try visiblePixels(mine)
         #expect(!pixels.isEmpty)
-        #expect(try pixels == visiblePixels(theirs), "subtitle \(mine.index)")
+        if palette == nil {
+            // Without a palette the grays are chosen for OCR rather than as FFmpeg guesses them, but
+            // the same pixels show, in the same alphas.
+            #expect(try pixels.mapValues { $0[3] } == visiblePixels(theirs).mapValues { $0[3] },
+                    "subtitle \(mine.index)")
+        } else {
+            #expect(try pixels == visiblePixels(theirs), "subtitle \(mine.index)")
+        }
     }
 }
 #endif
