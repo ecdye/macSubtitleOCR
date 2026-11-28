@@ -46,13 +46,6 @@ class MKVFileHandler {
         return nil
     }
 
-    func locateCluster() -> UInt64? {
-        if let (clusterSize, _) = findElement(withID: EBML.cluster, avoidCluster: false) as? (UInt64, UInt32) {
-            return clusterSize
-        }
-        return nil
-    }
-
     /// Find EBML element by ID, avoiding Cluster header
     func findElement(withID targetID: UInt32, _ tgtID2: UInt32? = nil, avoidCluster: Bool = true) -> (UInt64?, UInt32?) {
         var previousOffset = fileHandle.offsetInFile
